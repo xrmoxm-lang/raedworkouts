@@ -124,6 +124,21 @@ function attemptVariantChange(newVariant) {
   }
 }
 
+// ---- Video visibility helpers --------------------------------
+function isVideoHidden(exerciseId, key) {
+  const list = state.video_hidden?.[exerciseId];
+  return Array.isArray(list) && list.includes(key);
+}
+function toggleVideoVisibility(exerciseId, key) {
+  state.video_hidden = state.video_hidden || {};
+  const list = state.video_hidden[exerciseId] = state.video_hidden[exerciseId] || [];
+  const idx = list.indexOf(key);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(key);
+  if (list.length === 0) delete state.video_hidden[exerciseId];
+  saveLocal();
+}
+
 // ---- Custom JN URL helpers -----------------------------------
 function getJNUrl(exerciseId) {
   const ex = RW.EXERCISES.find(e => e.id === exerciseId);
@@ -203,6 +218,7 @@ const defaultState = () => ({
   bodyweight_log: [],          // [{ date, kg }]
   custom_videos: {},           // { exercise_id: [url, url, ...] }  — extra videos user adds
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
+  video_hidden: {},            // { exercise_id: ['mohannad_0','jn','custom_2'] } — hidden video keys
   programme_overrides: null,   // optional: replace default PROGRAMME entirely
   prs: {},                     // { exercise_id: { kg, reps, date, score } } — best ever per exercise
   msg_index: 0,                // rotates through MOTIVATIONAL_MESSAGES
@@ -846,10 +862,10 @@ function renderHome() {
     sess.exercises.forEach((p, i) => {
       const ex = RW.EXERCISES.find(e => e.id === p.exercise_id);
       const sug = suggestNextWeight(p.exercise_id, p);
-      const thumbUrl = ex?.mohannad?.[0] ? RW.thumb(ex.mohannad[0]) : '';
+      const bodyUrl = (ex && RW.bodyImg) ? RW.bodyImg(ex.primary) : '';
       root.appendChild(h('div', { class: 'ex' },
         h('div', { class: 'ex-head' },
-          h('div', { class: 'ex-thumb', style: thumbUrl ? `background-image:url('${thumbUrl}')` : '' }),
+          h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
           h('div', { class: 'ex-info' },
             h('h4', {}, `${i+1}. ${ex?.name || p.exercise_id}`),
             h('div', { class: 'meta' },
@@ -911,23 +927,27 @@ function renderExerciseCard(ex_id, exState) {
   // Cue
   if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, '💡 Cue: '), ex.cue));
 
-  // Videos
+  // Videos — Library controls which are visible via state.video_hidden
   const customVids = state.custom_videos[actualId] || [];
   const jnUrl = getJNUrl(actualId);
   const jnId = ytIdFromUrl(jnUrl);
   const allVideos = [
-    ...(ex.mohannad || []).map(id => ({ url: 'https://www.youtube.com/shorts/' + id, thumb: RW.thumb(id), label: 'Mohannad' })),
+    ...(ex.mohannad || []).map((id, i) => ({
+      key: 'mohannad_' + i,
+      url: 'https://www.youtube.com/shorts/' + id, thumb: RW.thumb(id), label: 'Mohannad'
+    })),
     ...(jnUrl ? [{
+      key: 'jn',
       url: jnUrl,
       thumb: jnId ? RW.thumb(jnId) : '',
       label: jnHasCustomOverride(actualId) ? 'JN (custom)' : 'Jeff Nippard',
       nippard: true
     }] : []),
-    ...customVids.map(url => {
+    ...customVids.map((url, i) => {
       const id = ytIdFromUrl(url);
-      return { url, thumb: id ? RW.thumb(id) : '', label: 'Custom' };
+      return { key: 'custom_' + i, url, thumb: id ? RW.thumb(id) : '', label: 'Custom' };
     })
-  ];
+  ].filter(v => !isVideoHidden(actualId, v.key));
   if (allVideos.length) {
     const videoRow = h('div', { class: 'video-row' },
       allVideos.map(v => h('a', {
@@ -938,13 +958,7 @@ function renderExerciseCard(ex_id, exState) {
       }))
     );
     body.appendChild(videoRow);
-    // Inline edit-JN button under the video row
-    body.appendChild(h('div', { style: 'display:flex; justify-content:flex-end; margin-top:6px;' },
-      h('button', {
-        class: 'btn tiny ghost',
-        onClick: () => editJNUrlPrompt(actualId)
-      }, jnHasCustomOverride(actualId) ? '✏️ Edit JN URL (custom)' : '✏️ Edit JN URL'),
-    ));
+    // Note: video selection + JN URL editing live in Library, not here.
   }
 
   // Sets table
@@ -1030,13 +1044,13 @@ function showAltModal(ex_id, exState) {
   ex.alternatives.forEach(altId => {
     const alt = RW.EXERCISES.find(e => e.id === altId);
     if (!alt) return;
-    const thumbUrl = alt.mohannad?.[0] ? RW.thumb(alt.mohannad[0]) : '';
+    const bodyUrl = RW.bodyImg ? RW.bodyImg(alt.primary) : '';
     m.appendChild(h('div', { class: 'ex', style: 'cursor:pointer; margin-bottom:8px;', onClick: () => {
       swapExercise(ex_id, altId);
       $('#modal-overlay').classList.remove('show');
     }},
       h('div', { class: 'ex-head' },
-        h('div', { class: 'ex-thumb', style: thumbUrl ? `background-image:url('${thumbUrl}')` : '' }),
+        h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
         h('div', { class: 'ex-info' },
           h('h4', {}, alt.name),
           h('div', { class: 'meta' }, alt.primary.map(p => RW.MUSCLES[p]?.en).join(', ')),
@@ -1087,10 +1101,10 @@ function renderLibrary() {
     grid.appendChild(h('div', { class: 'empty' }, h('div', { class: 'big' }, '🤷'), 'No exercises match.'));
   }
   filtered.forEach(ex => {
-    const thumbUrl = ex.mohannad?.[0] ? RW.thumb(ex.mohannad[0]) : '';
+    const bodyUrl = RW.bodyImg ? RW.bodyImg(ex.primary) : '';
     const card = h('div', { class: 'ex' });
     const head = h('div', { class: 'ex-head', onClick: () => card.classList.toggle('expanded') },
-      h('div', { class: 'ex-thumb', style: thumbUrl ? `background-image:url('${thumbUrl}')` : '' }),
+      h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
       h('div', { class: 'ex-info' },
         h('h4', {}, ex.name),
         h('div', { class: 'meta' },
@@ -1106,21 +1120,43 @@ function renderLibrary() {
     const jnUrl = getJNUrl(ex.id);
     const jnId = ytIdFromUrl(jnUrl);
     const allVideos = [
-      ...(ex.mohannad || []).map(id => ({ url: 'https://www.youtube.com/shorts/' + id, thumb: RW.thumb(id), label: 'M' })),
-      ...(jnUrl ? [{ url: jnUrl, thumb: jnId ? RW.thumb(jnId) : '', label: 'JN', nippard: true }] : []),
-      ...customVids.map(url => {
+      ...(ex.mohannad || []).map((id, i) => ({
+        key: 'mohannad_' + i,
+        url: 'https://www.youtube.com/shorts/' + id, thumb: RW.thumb(id), label: 'M' + (i+1)
+      })),
+      ...(jnUrl ? [{ key: 'jn', url: jnUrl, thumb: jnId ? RW.thumb(jnId) : '', label: 'JN', nippard: true }] : []),
+      ...customVids.map((url, i) => {
         const id = ytIdFromUrl(url);
-        return { url, thumb: id ? RW.thumb(id) : '', label: '+', custom: true };
+        return { key: 'custom_' + i, url, thumb: id ? RW.thumb(id) : '', label: '+', custom: true };
       })
     ];
     if (allVideos.length) {
+      body.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:10px; margin-bottom:4px;' },
+        'Tap to open. Tap the ⊘ corner toggle to hide it from the session view.'));
       body.appendChild(h('div', { class: 'video-row' },
-        allVideos.map(v => h('a', {
-          href: v.url, target: '_blank', rel: 'noopener',
-          class: 'video-thumb' + (v.nippard ? ' nippard' : ''),
-          style: v.thumb ? `background-image:url('${v.thumb}')` : 'background:var(--bg-elev);',
-          title: v.label,
-        }))
+        allVideos.map(v => {
+          const hidden = isVideoHidden(ex.id, v.key);
+          const wrap = h('div', {
+            class: 'video-thumb-wrap' + (hidden ? ' hidden-video' : ''),
+            style: 'position:relative;',
+          });
+          const link = h('a', {
+            href: v.url, target: '_blank', rel: 'noopener',
+            class: 'video-thumb' + (v.nippard ? ' nippard' : ''),
+            style: v.thumb ? `background-image:url('${v.thumb}')` : 'background:var(--bg-elev);',
+            title: v.label,
+          });
+          // Toggle button overlay
+          const toggle = h('button', {
+            type: 'button',
+            class: 'video-toggle' + (hidden ? ' off' : ' on'),
+            title: hidden ? 'Hidden from session — tap to show' : 'Showing — tap to hide from session',
+            onClick: (e) => { e.preventDefault(); e.stopPropagation(); toggleVideoVisibility(ex.id, v.key); renderLibrary(); }
+          }, hidden ? '⊘' : '✓');
+          wrap.appendChild(link);
+          wrap.appendChild(toggle);
+          return wrap;
+        })
       ));
     }
     body.appendChild(h('div', { class: 'spacer-12' }));

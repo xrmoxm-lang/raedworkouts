@@ -743,6 +743,33 @@ main { padding: 12px 16px 24px; }
 }
 .platform-picker .opt .icon { font-size: 18px; display: block; margin-bottom: 2px; }
 
+/* ===== Video toggle in Library ===== */
+.video-thumb-wrap {
+  display: inline-block;
+  position: relative;
+}
+.video-thumb-wrap.hidden-video .video-thumb {
+  opacity: 0.35;
+  filter: grayscale(0.7);
+}
+.video-toggle {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+  padding: 0;
+  color: var(--text);
+}
+.video-toggle.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.video-toggle.off { background: var(--bg-card); color: var(--text-muted); }
+.video-toggle:active { transform: scale(0.92); }
+
 /* ===== Accent color picker (5-swatch row) ===== */
 .color-picker {
   display: flex; gap: 8px; align-items: center;
