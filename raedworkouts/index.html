@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Raedworkouts</title>
+  <meta name="description" content="Personal training app for Raed. Full-body 2x/week. Calibration block." />
+  <meta id="theme-color-light" name="theme-color" content="#0f766e" media="(prefers-color-scheme: light)" />
+  <meta id="theme-color-dark" name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Raedworkouts" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Ctext x='50%25' y='58%25' font-size='38' text-anchor='middle' fill='white' font-family='-apple-system,system-ui,sans-serif' font-weight='700'%3E%F0%9F%8F%8B%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230f766e'/%3E%3Ctext x='50%25' y='62%25' font-size='110' text-anchor='middle' fill='white' font-family='-apple-system,system-ui,sans-serif'%3E%F0%9F%8F%8B%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="app-title">
+      <span class="dot"></span>
+      <span>Raedworkouts</span>
+    </div>
+    <button id="theme-toggle" class="theme-toggle">🌓 Auto</button>
+  </header>
+
+  <main>
+    <section class="page" id="page-home"></section>
+    <section class="page" id="page-library"></section>
+    <section class="page" id="page-history"></section>
+    <section class="page" id="page-settings"></section>
+    <section class="page" id="page-help"></section>
+    <section class="page" id="page-end"></section>
+  </main>
+
+  <nav class="tab-bar">
+    <button class="tab" data-route="home"><span class="icon">🏠</span><span class="label">Home</span></button>
+    <button class="tab" data-route="library"><span class="icon">📚</span><span class="label">Library</span></button>
+    <button class="tab" data-route="history"><span class="icon">📈</span><span class="label">History</span></button>
+    <button class="tab" data-route="settings"><span class="icon">⚙️</span><span class="label">Settings</span></button>
+    <button class="tab" data-route="help"><span class="icon">📖</span><span class="label">Help</span></button>
+  </nav>
+
+  <!-- Floating rest timer -->
+  <div id="rest-timer" style="display:none; position:fixed; right:16px; bottom:calc(88px + env(safe-area-inset-bottom,0)); background:var(--accent); color:var(--accent-fg); padding:12px 16px; border-radius:999px; font-weight:700; font-size:18px; align-items:center; gap:10px; box-shadow:0 6px 20px rgba(0,0,0,0.25); z-index:50;">
+    <span>⏱</span>
+    <span id="rest-timer-text" style="font-variant-numeric: tabular-nums;">2:00</span>
+    <button id="rest-cancel" style="background:rgba(255,255,255,0.2); color:inherit; border:none; border-radius:999px; width:24px; height:24px; cursor:pointer; font-size:14px;">✕</button>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div id="modal" class="modal"></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="./data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
