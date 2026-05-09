@@ -324,6 +324,7 @@ const defaultState = () => ({
   prs: {},                     // { exercise_id: { kg, reps, date, score } } — best ever per exercise
   msg_index: 0,                // rotates through MOTIVATIONAL_MESSAGES
   last_sync: null,
+  forced_next_session: null,   // session id override when user missed a day
 });
 
 const defaultSettings = () => ({
@@ -385,26 +386,25 @@ async function supaFetch(path, opts = {}) {
 }
 
 async function syncToCloud() {
-  if (!settings.supabase_url || !settings.supabase_key) return;
-  const userId = settings.user_id || 'raed';
+  if (!settings.supabase_url || !settings.supabase_key || !settings.user_id) return;
   const payload = {
-    user_id: userId,
+    user_id: settings.user_id,
     state_json: state,
     settings_json: settings,
     updated_at: new Date().toISOString(),
   };
-  // upsert
   await supaFetch(`/rest/v1/raedworkouts?on_conflict=user_id`, {
     method: 'POST',
     headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify(payload),
   });
   setSyncStatus('ok', 'Synced ' + fmtTime(Date.now()));
+  saveLocal._toastShown = false;  // reset so next failure is visible again
 }
 
 async function pullFromCloud() {
-  if (!settings.supabase_url || !settings.supabase_key) return;
-  const userId = settings.user_id || 'raed';
+  if (!settings.supabase_url || !settings.supabase_key || !settings.user_id) return;
+  const userId = settings.user_id;
   const rows = await supaFetch(`/rest/v1/raedworkouts?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`);
   if (rows && rows.length) {
     const remote = rows[0];
@@ -445,6 +445,7 @@ function showNameModal() {
   const overlay = $('#modal-overlay');
   const m = $('#modal');
   m.innerHTML = '';
+  overlay.dataset.required = 'true';  // blocks outside-click dismiss
   const nameInput = h('input', {
     type: 'text',
     placeholder: 'e.g. Raed, Ahmed...',
@@ -454,6 +455,7 @@ function showNameModal() {
     const name = nameInput.value.trim();
     if (!name) { toast('Enter your name.'); return; }
     settings.user_id = name.toLowerCase().replace(/\s+/g, '_');
+    delete overlay.dataset.required;
     saveLocal();
     overlay.classList.remove('show');
     toast('Welcome, ' + name + '!');
@@ -518,8 +520,11 @@ function getActiveVariant() {
 // ---- Today's session resolver -------------------------------
 function getTodayPlannedSession() {
   const prog = getActiveProgramme();
+  // Manual override — user forced a specific session (e.g. missed a day)
+  if (state.forced_next_session) {
+    return prog.sessions.find(s => s.id === state.forced_next_session) || null;
+  }
   if (getActiveVariant() === 'ppl_3x') {
-    // PPL: pick next session in cycle from history (Push → Pull → Legs → Push…)
     return resolveNextPPLSession(prog).today;
   }
   // Full-body: Tuesday = 2, Saturday = 6
@@ -684,6 +689,7 @@ function endSession() {
   const finishedSession = { ...a, ended_at: new Date().toISOString(), prs: sessionPRs, stats };
   state.history.push(finishedSession);
   state.active_session = null;
+  state.forced_next_session = null;  // clear override after session ends
   state.msg_index = (state.msg_index + 1) % (RW.MOTIVATIONAL_MESSAGES?.length || 20);
   saveLocal();
   // Show end-of-session screen instead of jumping to history
@@ -1824,6 +1830,39 @@ function renderSettings() {
     }, settings.show_pr_summary ? 'On' : 'Off'),
   ));
 
+  // Force next session (missed a day override)
+  const activeProg = getActiveProgramme();
+  const sessionKeys = activeProg ? activeProg.sessions.map(s => s.id) : [];
+  const fmtSessionKey = k => k.replace('session_', '').replace('ppl_', '').toUpperCase();
+  adv.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' },
+      h('div', { class: 'name' }, 'Force next session'),
+      h('div', { class: 'desc' },
+        state.forced_next_session
+          ? `Forced: ${fmtSessionKey(state.forced_next_session)} — will clear after that session ends.`
+          : 'Missed a day? Override which session starts next. Auto-resets after the session.'
+      ),
+    ),
+    h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
+      sessionKeys.map(key =>
+        h('button', {
+          class: 'btn tiny' + (state.forced_next_session === key ? ' primary' : ''),
+          onClick: () => {
+            state.forced_next_session = state.forced_next_session === key ? null : key;
+            saveLocal();
+            renderSettings();
+            toast(state.forced_next_session
+              ? 'Next session forced to ' + fmtSessionKey(key) + '.'
+              : 'Session override cleared.');
+          }
+        }, fmtSessionKey(key))
+      ),
+      state.forced_next_session
+        ? h('button', { class: 'btn tiny', onClick: () => { state.forced_next_session = null; saveLocal(); renderSettings(); toast('Cleared.'); } }, '✕ Clear')
+        : null,
+    ),
+  ));
+
   // Gym launcher override
   adv.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
@@ -1980,7 +2019,8 @@ function init() {
   const gymBtn = $('#gym-launch');
   if (gymBtn) gymBtn.addEventListener('click', launchGymApp);
   $('#modal-overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'modal-overlay') $('#modal-overlay').classList.remove('show');
+    if (e.target.id === 'modal-overlay' && !e.target.dataset.required)
+      $('#modal-overlay').classList.remove('show');
   });
   $('#rest-cancel').addEventListener('click', cancelRest);
 
@@ -1990,10 +2030,10 @@ function init() {
   render();
 
   // Show name screen on first launch (no user_id set yet)
-  if (!settings.user_id) showNameModal();
-
-  // Pull from cloud on load — re-render on success, show error on failure
-  if (settings.supabase_url && settings.supabase_key) {
+  if (!settings.user_id) {
+    showNameModal();
+  } else if (settings.supabase_url && settings.supabase_key) {
+    // Pull from cloud on load — only when user_id is known
     toast('Syncing…', 1200);
     pullFromCloud()
       .then(ok => { if (ok) render(); })

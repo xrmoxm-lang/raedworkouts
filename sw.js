@@ -2,7 +2,7 @@
  * Cache the app shell so the app works fully offline once loaded.
  * YouTube thumbnails (img.youtube.com) are cached as they're requested.
  */
-const CACHE = 'raedworkouts-v5';
+const CACHE = 'raedworkouts-v6';
 const SHELL = [
   './',
   './index.html',
