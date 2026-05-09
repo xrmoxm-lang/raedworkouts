@@ -3,6 +3,11 @@
    Vanilla JS PWA. Pure-frontend logic + optional Supabase sync.
    ============================================================ */
 
+// Pre-configure Supabase so brothers never need to enter credentials.
+// The anon key is safe to commit — it's designed to be public.
+const DEFAULT_SUPABASE_URL = '';
+const DEFAULT_SUPABASE_KEY = '';
+
 // ---- Tiny utility helpers -----------------------------------
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -337,8 +342,8 @@ const defaultSettings = () => ({
   gym_launch_scheme: 'scope.bit://',                                  // bundle ID-based scheme attempt
   gym_launch_fallback: 'https://apps.apple.com/sa/app/in2-fitness/id1536137282', // App Store fallback
   gym_launch_override: '',     // user-set custom URL (e.g. shortcuts://run-shortcut?name=Open%20IN2)
-  supabase_url: '',
-  supabase_key: '',
+  supabase_url: DEFAULT_SUPABASE_URL,
+  supabase_key: DEFAULT_SUPABASE_KEY,
   user_id: '',
 });
 
@@ -353,8 +358,15 @@ function saveLocal() {
   state.last_sync = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  // fire and forget cloud sync
-  if (settings.supabase_url && settings.supabase_key) syncToCloud().catch(() => {});
+  if (settings.supabase_url && settings.supabase_key) {
+    syncToCloud().catch(err => {
+      setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
+      if (!saveLocal._toastShown) {
+        saveLocal._toastShown = true;
+        toast('Cloud sync failed — check Settings → Cloud sync.', 3500);
+      }
+    });
+  }
 }
 
 // ---- Supabase sync (optional) ------------------------------
@@ -411,6 +423,52 @@ function setSyncStatus(kind, text) {
   if (!el) return;
   el.className = 'sync-status ' + kind;
   el.textContent = text;
+}
+
+async function testCloudConnection() {
+  if (!settings.supabase_url || !settings.supabase_key) {
+    toast('Configure Supabase URL and key first.');
+    return;
+  }
+  toast('Testing…');
+  try {
+    await supaFetch('/rest/v1/raedworkouts?limit=1');
+    setSyncStatus('ok', 'Connected ✓');
+    toast('Connection OK.');
+  } catch (e) {
+    setSyncStatus('err', 'Failed: ' + (e.message || 'unknown'));
+    toast('Connection failed: ' + (e.message || 'unknown'), 3500);
+  }
+}
+
+function showNameModal() {
+  const overlay = $('#modal-overlay');
+  const m = $('#modal');
+  m.innerHTML = '';
+  const nameInput = h('input', {
+    type: 'text',
+    placeholder: 'e.g. Raed, Ahmed...',
+    style: 'width:100%;margin:12px 0;font-size:1.1rem;',
+  });
+  const submit = () => {
+    const name = nameInput.value.trim();
+    if (!name) { toast('Enter your name.'); return; }
+    settings.user_id = name.toLowerCase().replace(/\s+/g, '_');
+    saveLocal();
+    overlay.classList.remove('show');
+    toast('Welcome, ' + name + '!');
+    if (settings.supabase_url && settings.supabase_key) {
+      pullFromCloud().then(ok => { if (ok) render(); }).catch(() => {});
+    }
+  };
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  m.appendChild(h('h3', { style: 'margin-bottom:8px;' }, '👋 Welcome'));
+  m.appendChild(h('p', { class: 'muted', style: 'margin-bottom:4px;' },
+    'What\'s your name? Keeps your workout data separate from others using this app.'));
+  m.appendChild(nameInput);
+  m.appendChild(h('button', { class: 'btn primary', style: 'width:100%;', onClick: submit }, 'Start →'));
+  overlay.classList.add('show');
+  setTimeout(() => nameInput.focus(), 150);
 }
 
 // ---- Theme --------------------------------------------------
@@ -1690,7 +1748,7 @@ function renderSettings() {
     ),
     h('input', { type: 'text', placeholder: 'raed', value: settings.user_id, onInput: (e) => { settings.user_id = e.target.value.trim(); saveLocal(); } }),
   ));
-  cloudCard.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:8px;' },
+  cloudCard.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;' },
     h('button', { class: 'btn primary', onClick: async () => {
       try { await syncToCloud(); toast('Pushed to cloud.'); }
       catch (e) { setSyncStatus('err', e.message); toast('Sync error.'); }
@@ -1702,6 +1760,7 @@ function renderSettings() {
         render();
       } catch (e) { setSyncStatus('err', e.message); toast('Pull error.'); }
     }}, '⬇ Pull now'),
+    h('button', { class: 'btn', onClick: () => testCloudConnection() }, '🔌 Test'),
   ));
   root.appendChild(card);
   root.appendChild(musicCard);
@@ -1930,9 +1989,18 @@ function init() {
   if (!window.location.hash) window.location.hash = 'home';
   render();
 
-  // Try silent cloud pull on load
+  // Show name screen on first launch (no user_id set yet)
+  if (!settings.user_id) showNameModal();
+
+  // Pull from cloud on load — re-render on success, show error on failure
   if (settings.supabase_url && settings.supabase_key) {
-    pullFromCloud().catch(() => {});
+    toast('Syncing…', 1200);
+    pullFromCloud()
+      .then(ok => { if (ok) render(); })
+      .catch(err => {
+        setSyncStatus('err', 'Pull failed: ' + (err.message || 'unknown'));
+        toast('Sync failed — working offline.', 3000);
+      });
   }
 
   // Register service worker (offline)
