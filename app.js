@@ -3,10 +3,9 @@
    Vanilla JS PWA. Pure-frontend logic + optional Supabase sync.
    ============================================================ */
 
-// Pre-configure Supabase so brothers never need to enter credentials.
-// The anon key is safe to commit — it's designed to be public.
-const DEFAULT_SUPABASE_URL = '';
-const DEFAULT_SUPABASE_KEY = '';
+// Pre-configured Supabase — anon key is safe to commit (designed to be public).
+const DEFAULT_SUPABASE_URL = 'https://ujcrewuikmjrhdjbjlrm.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_2_m7AXyYXc4KlZjHkxT-Pw_U0geTslv';
 
 // ---- Tiny utility helpers -----------------------------------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -27,6 +26,51 @@ const h = (tag, attrs = {}, ...children) => {
   }
   return el;
 };
+// ---- i18n ---------------------------------------------------
+const STRINGS = {
+  en: {
+    start_session: 'Start Session', finish_session: '✓ Finish & save session',
+    rest_day: '🛋️ Rest day', gym_day: '🏋️ Today is', session_done: 'Session done.',
+    next: 'Next:', streak: 'STREAK', this_week: 'THIS WEEK', tonnage: 'TONNAGE',
+    settings: 'Settings', history: 'History', library: 'Library', home: 'Home', help: 'Help',
+    save: 'Save', cancel: 'Cancel', wipe_data: 'Wipe all data',
+    theme: 'Theme', language: 'Language', music: 'Music',
+    force_session: 'Force next session', missed_day: 'Missed a day? Override which session starts next.',
+    working_sets: 'working sets', last_time: '📊 Last time', today_target: '🎯 Today:',
+    warmup: 'Warm-up', add_set: '+ Set', swap: '⇄ Swap', done: 'Done',
+    sessions_4wk: 'sessions / 4 wks', kg_this_week: 'kg this week',
+    foundation: 'foundation', strength: 'strength', peak: 'peak',
+    block: 'Block', week: 'Week', of: 'of',
+    auto_color: 'Auto color (by block)', syncing: 'Syncing…', sync_ok: 'Synced',
+    welcome: '👋 Welcome', welcome_desc: "What's your name? Keeps your workout data separate.",
+    start_arrow: 'Start →', enter_name: 'Enter your name.',
+  },
+  ar: {
+    start_session: 'ابدأ التمرين', finish_session: '✓ حفظ وإنهاء التمرين',
+    rest_day: '🛋️ يوم راحة', gym_day: '🏋️ اليوم هو', session_done: 'انتهى التمرين.',
+    next: 'التالي:', streak: 'السلسلة', this_week: 'هذا الأسبوع', tonnage: 'الحمولة',
+    settings: 'الإعدادات', history: 'السجل', library: 'المكتبة', home: 'الرئيسية', help: 'مساعدة',
+    save: 'حفظ', cancel: 'إلغاء', wipe_data: 'مسح كل البيانات',
+    theme: 'المظهر', language: 'اللغة', music: 'الموسيقى',
+    force_session: 'تحديد الجلسة التالية', missed_day: 'غبت يوم؟ اختر الجلسة التالية يدوياً.',
+    working_sets: 'سيت', last_time: '📊 آخر مرة', today_target: '🎯 اليوم:',
+    warmup: 'إحماء', add_set: '+ سيت', swap: '⇄ بديل', done: 'تم',
+    sessions_4wk: 'جلسات / 4 أسابيع', kg_this_week: 'كغ هذا الأسبوع',
+    foundation: 'التأسيس', strength: 'القوة', peak: 'الذروة',
+    block: 'بلوك', week: 'أسبوع', of: 'من',
+    auto_color: 'لون تلقائي (حسب البلوك)', syncing: 'جارٍ المزامنة…', sync_ok: 'تمت المزامنة',
+    welcome: '👋 أهلاً', welcome_desc: 'ما اسمك؟ يحفظ بياناتك منفصلة عن الآخرين.',
+    start_arrow: 'ابدأ ←', enter_name: 'أدخل اسمك.',
+  },
+};
+const t = (key) => STRINGS[settings?.lang || 'en']?.[key] ?? STRINGS.en[key] ?? key;
+
+function applyLang() {
+  const lang = settings.lang || 'en';
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+}
+
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const fmtTime = (d) => new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -346,6 +390,8 @@ const defaultSettings = () => ({
   supabase_url: DEFAULT_SUPABASE_URL,
   supabase_key: DEFAULT_SUPABASE_KEY,
   user_id: '',
+  block_auto_color: true,
+  lang: 'en',
 });
 
 let state = defaultState();
@@ -354,6 +400,9 @@ let settings = defaultSettings();
 function loadLocal() {
   try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch (e) {}
   try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) {}
+  // Always use the baked-in credentials — no manual setup needed
+  settings.supabase_url = DEFAULT_SUPABASE_URL;
+  settings.supabase_key = DEFAULT_SUPABASE_KEY;
 }
 function saveLocal() {
   state.last_sync = new Date().toISOString();
@@ -464,11 +513,10 @@ function showNameModal() {
     }
   };
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
-  m.appendChild(h('h3', { style: 'margin-bottom:8px;' }, '👋 Welcome'));
-  m.appendChild(h('p', { class: 'muted', style: 'margin-bottom:4px;' },
-    'What\'s your name? Keeps your workout data separate from others using this app.'));
+  m.appendChild(h('h3', { style: 'margin-bottom:8px;' }, t('welcome')));
+  m.appendChild(h('p', { class: 'muted', style: 'margin-bottom:4px;' }, t('welcome_desc')));
   m.appendChild(nameInput);
-  m.appendChild(h('button', { class: 'btn primary', style: 'width:100%;', onClick: submit }, 'Start →'));
+  m.appendChild(h('button', { class: 'btn primary', style: 'width:100%;', onClick: submit }, t('start_arrow')));
   overlay.classList.add('show');
   setTimeout(() => nameInput.focus(), 150);
 }
@@ -481,12 +529,19 @@ const COLOR_THEMES = {
   red:    { label: 'Red',    sw_light: '#dc2626', sw_dark: '#ef4444' },
   amber:  { label: 'Amber',  sw_light: '#d97706', sw_dark: '#f59e0b' },
 };
+const BLOCK_COLORS = { 1: 'teal', 2: 'amber', 3: 'red' };
+
+function getAutoColor() {
+  const block = Math.min(state.current_block || 1, 3);
+  return BLOCK_COLORS[block] || 'teal';
+}
+
 function applyTheme() {
   const t = settings.theme || 'auto';
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
-  // Apply color
-  const c = settings.color_theme || 'teal';
+  // Apply color — auto derives from training block, manual overrides
+  const c = settings.block_auto_color !== false ? getAutoColor() : (settings.color_theme || 'teal');
   if (c === 'teal') document.documentElement.removeAttribute('data-color');
   else document.documentElement.setAttribute('data-color', c);
   // Update meta theme-color (status bar)
@@ -666,6 +721,15 @@ function startSession(session) {
     started_at: new Date().toISOString(),
     exercises,
   };
+  // Block transition detection — toast on first session of a new block
+  const prevBlock = state._last_toasted_block;
+  const curBlock = state.current_block || 1;
+  if (prevBlock && prevBlock !== curBlock) {
+    const blockNames = { 1: 'foundation', 2: 'strength', 3: 'peak intensity' };
+    setTimeout(() => toast(`Block ${curBlock} — ${blockNames[curBlock] || 'new block'} phase begins.`, 4000), 800);
+    applyTheme();
+  }
+  state._last_toasted_block = curBlock;
   saveLocal();
   router('home');
   toast('Session started — let\'s go.');
@@ -780,10 +844,14 @@ function renderSessionEnd() {
     h('div', { class: 'reminder' }, msg),
 
     h('div', { class: 'next-up' },
+      h('div', { class: 'tiny muted', style: 'margin-bottom:4px;' },
+        `Block ${state.current_block || 1}, Week ${state.current_week || 1} of 12 — ` +
+        (['foundation', 'strength', 'peak'][Math.min((state.current_block||1)-1, 2)]) + ' phase'
+      ),
       h('strong', {}, 'Next: '),
       (() => {
         const next = getNextPlannedSession();
-        return next ? next.name : 'Block complete — see Settings to advance.';
+        return next ? (next.session ? next.session.name : next.name) : 'Block complete.';
       })()
     ),
 
@@ -1064,7 +1132,7 @@ function renderExerciseCard(ex_id, exState) {
   }},
     h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
     h('div', { class: 'ex-info' },
-      h('h4', {}, ex.name),
+      h('h4', {}, settings.lang === 'ar' && ex.name_ar ? ex.name_ar : ex.name),
       h('div', { class: 'meta' },
         ex.primary.map(m => h('span', { class: 'muscle-tag' }, RW.MUSCLES[m]?.en || m)),
         ` ${planned.sets} × ${planned.reps} · RPE ${planned.rpe}`,
@@ -1724,50 +1792,14 @@ function renderSettings() {
     )
   ));
 
-  // Supabase
-  const cloudCard = h('div', { class: 'card' });
-  cloudCard.appendChild(h('h3', {}, '☁️ Cloud sync (Supabase)'));
-  cloudCard.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' },
-    'Optional. Keeps your data in sync across devices. Setup steps in the Help tab.',
-    ' ',
-    h('span', { id: 'sync-status', class: 'sync-status ' + (settings.supabase_url ? 'ok' : 'off') },
-      settings.supabase_url ? 'Connected' : 'Not connected'),
-  ));
-  cloudCard.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Project URL'),
-      h('div', { class: 'desc' }, 'Like https://abcd.supabase.co'),
+  // Sync status — minimal, hidden from users, just a status line
+  const cloudCard = h('div', { class: 'card', style: 'padding:10px 14px;' },
+    h('div', { style: 'display:flex; justify-content:space-between; align-items:center;' },
+      h('div', { class: 'tiny muted' }, '☁️ Cloud sync'),
+      h('span', { id: 'sync-status', class: 'sync-status ' + (settings.supabase_url ? 'ok' : 'off') },
+        settings.supabase_url ? 'Connected' : 'Not connected'),
     ),
-    h('input', { type: 'text', placeholder: 'https://...supabase.co', value: settings.supabase_url, onInput: (e) => { settings.supabase_url = e.target.value.trim(); saveLocal(); } }),
-  ));
-  cloudCard.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Anon key'),
-      h('div', { class: 'desc' }, 'The public anon key from Supabase API settings.'),
-    ),
-    h('input', { type: 'password', placeholder: 'eyJhbGciOi...', value: settings.supabase_key, onInput: (e) => { settings.supabase_key = e.target.value.trim(); saveLocal(); } }),
-  ));
-  cloudCard.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'User ID'),
-      h('div', { class: 'desc' }, 'Any string. Use the same value on every device.'),
-    ),
-    h('input', { type: 'text', placeholder: 'raed', value: settings.user_id, onInput: (e) => { settings.user_id = e.target.value.trim(); saveLocal(); } }),
-  ));
-  cloudCard.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;' },
-    h('button', { class: 'btn primary', onClick: async () => {
-      try { await syncToCloud(); toast('Pushed to cloud.'); }
-      catch (e) { setSyncStatus('err', e.message); toast('Sync error.'); }
-    }}, '⬆ Push now'),
-    h('button', { class: 'btn', onClick: async () => {
-      try {
-        const ok = await pullFromCloud();
-        toast(ok ? 'Pulled from cloud.' : 'No cloud data found.');
-        render();
-      } catch (e) { setSyncStatus('err', e.message); toast('Pull error.'); }
-    }}, '⬇ Pull now'),
-    h('button', { class: 'btn', onClick: () => testCloudConnection() }, '🔌 Test'),
-  ));
+  );
   root.appendChild(card);
   root.appendChild(musicCard);
   root.appendChild(cloudCard);
@@ -1944,6 +1976,26 @@ function renderSettings() {
     ));
   });
   root.appendChild(profile);
+
+  // Language toggle — bottom of settings
+  const langCard = h('div', { class: 'card' },
+    h('div', { class: 'setting-row' },
+      h('div', { class: 'label' },
+        h('div', { class: 'name' }, t('language') + ' / اللغة'),
+      ),
+      h('div', { style: 'display:flex; gap:8px;' },
+        h('button', {
+          class: 'btn tiny' + (settings.lang !== 'ar' ? ' primary' : ''),
+          onClick: () => { settings.lang = 'en'; saveLocal(); applyLang(); render(); }
+        }, 'English'),
+        h('button', {
+          class: 'btn tiny' + (settings.lang === 'ar' ? ' primary' : ''),
+          onClick: () => { settings.lang = 'ar'; saveLocal(); applyLang(); render(); }
+        }, 'العربية'),
+      ),
+    ),
+  );
+  root.appendChild(langCard);
 }
 
 function renderHelp() {
@@ -2009,6 +2061,16 @@ create policy "anon all" on raedworkouts for all using (true) with check (true);
 // ---- Boot ---------------------------------------------------
 function init() {
   loadLocal();
+  applyLang();
+
+  // ?user=ahmed — shareable link pre-fills name
+  // Write directly to localStorage (no syncToCloud) — pull happens next to avoid overwriting cloud data
+  const urlUser = new URLSearchParams(window.location.search).get('user');
+  if (urlUser && !settings.user_id) {
+    settings.user_id = urlUser.toLowerCase().replace(/\s+/g, '_');
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
   applyTheme();
 
   // Wire tab bar
@@ -2036,7 +2098,7 @@ function init() {
     // Pull from cloud on load — only when user_id is known
     toast('Syncing…', 1200);
     pullFromCloud()
-      .then(ok => { if (ok) render(); })
+      .then(ok => { if (ok) { applyTheme(); render(); } })
       .catch(err => {
         setSyncStatus('err', 'Pull failed: ' + (err.message || 'unknown'));
         toast('Sync failed — working offline.', 3000);

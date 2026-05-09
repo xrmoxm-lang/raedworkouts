@@ -698,7 +698,7 @@ When something material changes:
 3. Bump the date below.
 4. Tell Raed what changed in a single line — no ceremony.
 
-**Last updated:** 2026-04-25 — comprehensive rewrite + PPL variant + 5-color picker + JN URL editor + deployment guide.
+**Last updated:** 2026-05-09 — v7: Supabase hardcoded (no user setup needed), first-launch name screen, shareable ?user= links, block-based auto-color (Block 1=teal/Block 2=amber/Block 3=red), Arabic/English language toggle (RTL + exercise names), sync errors now visible, Force next session override in Settings, session end shows block context, SW cache v7.
 
 ---
 
