@@ -124,6 +124,101 @@ function attemptVariantChange(newVariant) {
   }
 }
 
+// ---- Gym launcher (IN2 Fitness) ------------------------------
+// Tries the user's override first, then a URL scheme. If the scheme
+// doesn't open the app within ~1.2s (page still focused), falls back
+// to the App Store URL so they can tap "Open" there.
+function launchGymApp() {
+  const override = (settings.gym_launch_override || '').trim();
+  if (override) {
+    // User has set a custom URL (Shortcut, different scheme, etc.) — use it directly.
+    window.location.href = override;
+    return;
+  }
+  const scheme = settings.gym_launch_scheme || 'scope.bit://';
+  const fallback = settings.gym_launch_fallback || 'https://apps.apple.com/sa/app/in2-fitness/id1536137282';
+
+  // Heuristic: try the scheme; if the page is still visible after a moment, open fallback.
+  const before = Date.now();
+  let opened = false;
+  const onVisChange = () => { if (document.visibilityState === 'hidden') opened = true; };
+  document.addEventListener('visibilitychange', onVisChange, { once: true });
+
+  // Attempt the scheme
+  try { window.location.href = scheme; } catch (_) {}
+
+  // Fallback after 1.2s if we're still here
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', onVisChange);
+    if (opened) return;
+    if (Date.now() - before < 800) return;  // animation lag
+    if (document.visibilityState === 'visible') {
+      // Scheme didn't open the app → open App Store
+      window.location.href = fallback;
+    }
+  }, 1200);
+}
+
+// ---- Library hierarchy + custom exercises --------------------
+const LIB_HIERARCHY = [
+  { id: 'upper', label: 'Upper Body', icon: '🫀', muscles: ['chest', 'upper_chest', 'back', 'upper_back', 'abs'].filter(m => m !== 'abs'), submuscles: {
+      chest:    { en: 'Chest',     ar: 'صدر',    keys: ['chest', 'upper_chest'] },
+      back:     { en: 'Back',      ar: 'ظهر',    keys: ['back', 'upper_back'] },
+  } },
+  { id: 'arms',  label: 'Arms',  icon: '💪', submuscles: {
+      shoulders: { en: 'Shoulders', ar: 'أكتاف', keys: ['shoulders', 'side_delts', 'rear_delts'] },
+      biceps:    { en: 'Biceps',    ar: 'باي',    keys: ['biceps'] },
+      triceps:   { en: 'Triceps',   ar: 'تراي',   keys: ['triceps'] },
+      forearms:  { en: 'Forearms',  ar: 'ساعد',   keys: ['forearms'] },
+  } },
+  { id: 'lower', label: 'Lower Body', icon: '🦵', submuscles: {
+      quads:      { en: 'Quads',      ar: 'مقدمة الفخذ', keys: ['quads'] },
+      hamstrings: { en: 'Hamstrings', ar: 'خلف الفخذ',  keys: ['hamstrings'] },
+      glutes:     { en: 'Glutes',     ar: 'أرداف',       keys: ['glutes'] },
+      calves:     { en: 'Calves',     ar: 'سمانة',       keys: ['calves'] },
+  } },
+  { id: 'core',  label: 'Core',  icon: '🔥', submuscles: {
+      abs: { en: 'Abs', ar: 'بطن', keys: ['abs'] },
+  } },
+];
+function getAllExercises() {
+  // Merge static EXERCISES with user's custom exercises
+  return [...(RW.EXERCISES || []), ...(state.custom_exercises || [])];
+}
+function exerciseInGroup(ex, groupKeys) {
+  return ex.primary?.some(m => groupKeys.includes(m));
+}
+function addCustomExercise({ name, name_ar, primary, jeff_nippard, mohannad_url }) {
+  const slug = (name || 'custom').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const id = 'custom_' + slug + '_' + Date.now().toString(36);
+  const mohannadIds = [];
+  if (mohannad_url) {
+    const m = ytIdFromUrl(mohannad_url);
+    if (m) mohannadIds.push(m);
+  }
+  const ex = {
+    id,
+    name: name.trim(),
+    name_ar: (name_ar || '').trim(),
+    primary: [primary],
+    secondary: [],
+    pattern: 'custom',
+    mohannad: mohannadIds,
+    jeff_nippard: jeff_nippard ? jeff_nippard.trim() : '',
+    alternatives: [],
+    cue: '',
+    is_custom: true,
+  };
+  state.custom_exercises = state.custom_exercises || [];
+  state.custom_exercises.push(ex);
+  saveLocal();
+  return ex;
+}
+function deleteCustomExercise(id) {
+  state.custom_exercises = (state.custom_exercises || []).filter(e => e.id !== id);
+  saveLocal();
+}
+
 // ---- Video visibility helpers --------------------------------
 function isVideoHidden(exerciseId, key) {
   const list = state.video_hidden?.[exerciseId];
@@ -141,7 +236,7 @@ function toggleVideoVisibility(exerciseId, key) {
 
 // ---- Custom JN URL helpers -----------------------------------
 function getJNUrl(exerciseId) {
-  const ex = RW.EXERCISES.find(e => e.id === exerciseId);
+  const ex = getAllExercises().find(e => e.id === exerciseId);
   return state.custom_jn_urls?.[exerciseId] || ex?.jeff_nippard || '';
 }
 function jnHasCustomOverride(exerciseId) {
@@ -162,7 +257,7 @@ function ytIdFromUrl(url) {
   return m ? m[1] : '';
 }
 function editJNUrlPrompt(exerciseId) {
-  const ex = RW.EXERCISES.find(e => e.id === exerciseId);
+  const ex = getAllExercises().find(e => e.id === exerciseId);
   if (!ex) return;
   const current = getJNUrl(exerciseId);
   const next = prompt(
@@ -219,6 +314,7 @@ const defaultState = () => ({
   custom_videos: {},           // { exercise_id: [url, url, ...] }  — extra videos user adds
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
   video_hidden: {},            // { exercise_id: ['mohannad_0','jn','custom_2'] } — hidden video keys
+  custom_exercises: [],        // [{ id, name, name_ar, primary, secondary, jeff_nippard, mohannad, ... }]
   programme_overrides: null,   // optional: replace default PROGRAMME entirely
   prs: {},                     // { exercise_id: { kg, reps, date, score } } — best ever per exercise
   msg_index: 0,                // rotates through MOTIVATIONAL_MESSAGES
@@ -237,6 +333,10 @@ const defaultSettings = () => ({
   programme_variant: 'fullbody_2x',  // fullbody_2x | ppl_3x  (PPL queued, applies at next block boundary)
   pending_variant: null,       // queued variant change waiting for block boundary
   show_pr_summary: true,       // show end-of-session PR review
+  // Gym launcher: tries scheme first, falls back to App Store URL
+  gym_launch_scheme: 'scope.bit://',                                  // bundle ID-based scheme attempt
+  gym_launch_fallback: 'https://apps.apple.com/sa/app/in2-fitness/id1536137282', // App Store fallback
+  gym_launch_override: '',     // user-set custom URL (e.g. shortcuts://run-shortcut?name=Open%20IN2)
   supabase_url: '',
   supabase_key: '',
   user_id: '',
@@ -418,7 +518,7 @@ function getLastTwoPerformances(exercise_id) {
 function suggestNextWeight(exercise_id, planned) {
   // Returns { weight, note } — based on last 2 sessions
   const last2 = getLastTwoPerformances(exercise_id);
-  const ex = RW.EXERCISES.find(e => e.id === exercise_id);
+  const ex = getAllExercises().find(e => e.id === exercise_id);
   if (!ex) return { weight: planned.start_kg, note: 'First time — start light, find your RPE 7.' };
   if (!last2.length) return { weight: planned.start_kg, note: '⚡ First session — calibrate. Start with ' + planned.start_kg + ' kg.' };
   const latest = last2[0];
@@ -605,7 +705,7 @@ function renderSessionEnd() {
     prs.length ? h('div', { class: 'pr-card' },
       h('h3', {}, '🏆 Personal Records'),
       prs.map(pr => {
-        const ex = RW.EXERCISES.find(e => e.id === pr.exercise_id);
+        const ex = getAllExercises().find(e => e.id === pr.exercise_id);
         return h('div', { class: 'pr-line' },
           h('span', {}, ex ? ex.name : pr.exercise_id),
           h('span', {}, `${pr.kg} kg × ${pr.reps}`),
@@ -642,7 +742,7 @@ function swapExercise(exercise_id, alt_id) {
   ex.sets.forEach(s => { if (!s.completed && !s.is_warmup) s.weight = sug.weight; });
   saveLocal();
   render();
-  toast('Swapped to ' + (RW.EXERCISES.find(e => e.id === alt_id)?.name || alt_id));
+  toast('Swapped to ' + (getAllExercises().find(e => e.id === alt_id)?.name || alt_id));
 }
 
 // ---- Rest timer --------------------------------------------
@@ -860,7 +960,7 @@ function renderHome() {
     root.appendChild(h('div', { class: 'spacer-24' }));
     root.appendChild(h('h3', { style: 'margin:8px 0 12px; font-size:15px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;' }, planned ? 'Today\'s plan' : 'Next session preview'));
     sess.exercises.forEach((p, i) => {
-      const ex = RW.EXERCISES.find(e => e.id === p.exercise_id);
+      const ex = getAllExercises().find(e => e.id === p.exercise_id);
       const sug = suggestNextWeight(p.exercise_id, p);
       const bodyUrl = (ex && RW.bodyImg) ? RW.bodyImg(ex.primary) : '';
       root.appendChild(h('div', { class: 'ex' },
@@ -883,7 +983,7 @@ function renderHome() {
 function renderExerciseCard(ex_id, exState) {
   const planned = exState.planned;
   const actualId = exState.swapped_to || ex_id;
-  const ex = RW.EXERCISES.find(e => e.id === actualId);
+  const ex = getAllExercises().find(e => e.id === actualId);
   if (!ex) return h('div', {}, 'Unknown exercise: ' + actualId);
   const sug = suggestNextWeight(actualId, planned);
   const last = getLastPerformance(actualId);
@@ -976,13 +1076,17 @@ function renderExerciseCard(ex_id, exState) {
     const row = h('div', { class: 'set-grid', style: isWarm ? 'opacity:0.7;' : '' },
       h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
       h('input', {
-        type: 'number', step: '0.5', inputmode: 'decimal', placeholder: '0',
+        type: 'number', step: '0.5', inputmode: 'decimal',
+        placeholder: String(sug.weight),
         value: set.weight ?? '',
+        onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onInput: (e) => { set.weight = e.target.value === '' ? '' : parseFloat(e.target.value); saveLocal(); }
       }),
       h('input', {
-        type: 'number', step: '1', inputmode: 'numeric', placeholder: planned.reps,
+        type: 'number', step: '1', inputmode: 'numeric',
+        placeholder: String(planned.reps),
         value: set.reps ?? '',
+        onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onInput: (e) => { set.reps = e.target.value === '' ? '' : parseInt(e.target.value, 10); saveLocal(); }
       }),
       isWarm
@@ -1024,10 +1128,10 @@ function renderExerciseCard(ex_id, exState) {
       saveLocal(); render();
     }}, '+ Set'),
     h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, '⏱ Rest ' + settings.rest_seconds + 's'),
-    ex.alternatives && ex.alternatives.length ? h('button', {
+    h('button', {
       class: 'btn tiny',
       onClick: () => showAltModal(ex_id, exState)
-    }, '⇄ Swap') : null,
+    }, '⇄ Swap'),
   );
   body.appendChild(actions);
 
@@ -1036,42 +1140,110 @@ function renderExerciseCard(ex_id, exState) {
 }
 
 function showAltModal(ex_id, exState) {
-  const ex = RW.EXERCISES.find(e => e.id === (exState.swapped_to || ex_id));
+  const allEx = getAllExercises();
+  const ex = allEx.find(e => e.id === (exState.swapped_to || ex_id));
   const m = $('#modal');
   m.innerHTML = '';
-  m.appendChild(h('h3', {}, 'Swap exercise'));
-  m.appendChild(h('p', { class: 'muted', style: 'margin:0 0 12px;' }, 'Machine busy? Pick an alternative that hits the same muscle.'));
-  ex.alternatives.forEach(altId => {
-    const alt = RW.EXERCISES.find(e => e.id === altId);
-    if (!alt) return;
+
+  // Section header helper
+  const sectionHead = (title, sub) => h('div', { style: 'margin: 14px 0 6px;' },
+    h('div', { style: 'font-size:13px; font-weight:600; color:var(--text);' }, title),
+    sub ? h('div', { class: 'tiny muted', style: 'margin-top:2px;' }, sub) : null,
+  );
+  const altCard = (alt, onClick) => {
     const bodyUrl = RW.bodyImg ? RW.bodyImg(alt.primary) : '';
-    m.appendChild(h('div', { class: 'ex', style: 'cursor:pointer; margin-bottom:8px;', onClick: () => {
-      swapExercise(ex_id, altId);
-      $('#modal-overlay').classList.remove('show');
-    }},
+    return h('div', { class: 'ex', style: 'cursor:pointer; margin-bottom:6px;', onClick },
       h('div', { class: 'ex-head' },
         h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
         h('div', { class: 'ex-info' },
           h('h4', {}, alt.name),
-          h('div', { class: 'meta' }, alt.primary.map(p => RW.MUSCLES[p]?.en).join(', ')),
+          h('div', { class: 'meta' }, (alt.primary || []).map(p => RW.MUSCLES[p]?.en).join(', ')),
         ),
       ),
-    ));
+    );
+  };
+
+  m.appendChild(h('h3', {}, '⇄ Swap'));
+
+  // ===== SECTION 1: Replace =====
+  const validAlts = (ex?.alternatives || []).map(id => allEx.find(e => e.id === id)).filter(Boolean);
+  if (validAlts.length) {
+    m.appendChild(sectionHead('Replace with…', 'Same muscle, different machine. Auto-recalculates the suggested weight.'));
+    validAlts.forEach(alt => m.appendChild(altCard(alt, () => {
+      swapExercise(ex_id, alt.id);
+      $('#modal-overlay').classList.remove('show');
+    })));
+  }
+
+  // ===== SECTION 2: Add another exercise =====
+  m.appendChild(sectionHead('Add another exercise to today', 'Appends to the end of this session. Doesn\'t modify the original programme.'));
+
+  const searchInput = h('input', {
+    type: 'search', class: 'search-input',
+    placeholder: '🔍 Search any exercise…',
+    style: 'margin-bottom:8px;',
+    onInput: (e) => {
+      const q = e.target.value.toLowerCase();
+      list.innerHTML = '';
+      const matched = allEx
+        .filter(x => !state.active_session?.exercises?.[x.id])  // not already in session
+        .filter(x => (x.name + ' ' + (x.name_ar || '')).toLowerCase().includes(q))
+        .slice(0, 30);
+      matched.forEach(x => list.appendChild(altCard(x, () => {
+        addExerciseToSession(x.id);
+        $('#modal-overlay').classList.remove('show');
+        toast('Added "' + x.name + '" to today.');
+      })));
+      if (!matched.length) {
+        list.appendChild(h('div', { class: 'tiny muted', style: 'padding:8px; text-align:center;' }, 'No matches.'));
+      }
+    }
   });
-  m.appendChild(h('button', { class: 'btn ghost full', onClick: () => $('#modal-overlay').classList.remove('show') }, 'Cancel'));
+  m.appendChild(searchInput);
+  const list = h('div');
+  m.appendChild(list);
+
+  m.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:14px;',
+    onClick: () => $('#modal-overlay').classList.remove('show')
+  }, 'Cancel'));
+
   $('#modal-overlay').classList.add('show');
+  // Trigger initial empty render so user sees "type to search"
+  setTimeout(() => searchInput.focus(), 100);
+}
+
+// Append an exercise to the active session. Doesn't touch PROGRAMME.
+function addExerciseToSession(exercise_id) {
+  if (!state.active_session) return;
+  const allEx = getAllExercises();
+  const ex = allEx.find(e => e.id === exercise_id);
+  if (!ex) return;
+  // Default planned spec for an ad-hoc add
+  const planned = {
+    exercise_id, sets: 3, reps: '10', start_kg: 0, rpe: '8',
+    is_first_of_muscle: false,
+  };
+  const sug = suggestNextWeight(exercise_id, planned);
+  const sets = [];
+  for (let i = 0; i < planned.sets; i++) {
+    sets.push({ is_warmup: false, weight: sug.weight, reps: '', rpe: '', completed: false });
+  }
+  state.active_session.exercises[exercise_id] = { planned, sets };
+  saveLocal();
+  render();
 }
 
 function renderLibrary() {
   const root = $('#page-library');
   root.innerHTML = '';
+  const allEx = getAllExercises();
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'Exercise library'),
-    h('div', { class: 'sub' }, RW.EXERCISES.length + ' exercises · tap any to expand'),
+    h('div', { class: 'sub' }, allEx.length + ' exercises · tap any group to expand'),
   ));
 
-  let filterMuscle = window._libFilter || 'all';
   let search = window._libSearch || '';
+  const searching = search.trim().length > 0;
 
   const searchInput = h('input', {
     type: 'search', class: 'search-input',
@@ -1081,26 +1253,70 @@ function renderLibrary() {
   });
   root.appendChild(h('div', { class: 'search-row' }, searchInput));
 
-  // Muscle filter chips
-  const muscleGroups = ['all', ...new Set(Object.keys(RW.MUSCLES))];
-  root.appendChild(h('div', { class: 'filter-chips' },
-    muscleGroups.map(m => h('button', {
-      class: 'chip' + (filterMuscle === m ? ' active' : ''),
-      onClick: () => { window._libFilter = m; renderLibrary(); }
-    }, m === 'all' ? 'All' : RW.MUSCLES[m].en))
-  ));
+  // + Add Custom Exercise button
+  root.appendChild(h('button', {
+    class: 'btn primary full', style: 'margin-bottom:14px;',
+    onClick: () => openAddCustomExerciseModal(),
+  }, '➕ Add Custom Exercise'));
 
-  const filtered = RW.EXERCISES.filter(ex => {
-    if (filterMuscle !== 'all' && !ex.primary.includes(filterMuscle) && !ex.secondary.includes(filterMuscle)) return false;
-    if (search && !(ex.name + ' ' + ex.name_ar).toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  // Filter exercises by search (applied globally, then re-grouped)
+  const matchesSearch = (ex) => {
+    if (!searching) return true;
+    const q = search.toLowerCase();
+    return (ex.name + ' ' + (ex.name_ar || '') + ' ' + (ex.primary || []).join(' ')).toLowerCase().includes(q);
+  };
 
-  const grid = h('div', { class: 'lib-grid' });
-  if (!filtered.length) {
-    grid.appendChild(h('div', { class: 'empty' }, h('div', { class: 'big' }, '🤷'), 'No exercises match.'));
+  const filteredEx = allEx.filter(matchesSearch);
+
+  if (!filteredEx.length) {
+    root.appendChild(h('div', { class: 'empty' }, h('div', { class: 'big' }, '🤷'), 'No exercises match.'));
+    return;
   }
-  filtered.forEach(ex => {
+
+  // Render hierarchy
+  for (const group of LIB_HIERARCHY) {
+    const groupExercises = [];
+    const groupSections = [];
+    for (const [subKey, subInfo] of Object.entries(group.submuscles)) {
+      const subExercises = filteredEx.filter(ex => exerciseInGroup(ex, subInfo.keys));
+      if (subExercises.length === 0) continue;
+      groupExercises.push(...subExercises);
+      groupSections.push({ key: subKey, info: subInfo, exercises: subExercises });
+    }
+    if (groupExercises.length === 0) continue;
+
+    const groupCount = groupExercises.length;
+    const groupOpen = searching || group.id === 'upper'; // open Upper by default; open all when searching
+    const groupDetails = h('details', {
+      class: 'lib-group',
+      ...(groupOpen ? { open: '' } : {}),
+    });
+    groupDetails.appendChild(h('summary', { class: 'lib-group-summary' },
+      h('span', { class: 'icon' }, group.icon),
+      h('span', { class: 'label' }, group.label),
+      h('span', { class: 'count' }, groupCount + ''),
+    ));
+
+    for (const section of groupSections) {
+      const subDetails = h('details', {
+        class: 'lib-sub',
+        ...(searching ? { open: '' } : {}),
+      });
+      subDetails.appendChild(h('summary', { class: 'lib-sub-summary' },
+        h('span', { class: 'label' }, section.info.en),
+        h('span', { class: 'count' }, section.exercises.length + ''),
+      ));
+      const grid = h('div', { class: 'lib-grid' });
+      section.exercises.forEach(ex => grid.appendChild(renderLibExerciseCard(ex)));
+      subDetails.appendChild(grid);
+      groupDetails.appendChild(subDetails);
+    }
+    root.appendChild(groupDetails);
+  }
+}
+
+// Per-exercise card builder, shared between Library renders
+function renderLibExerciseCard(ex) {
     const bodyUrl = RW.bodyImg ? RW.bodyImg(ex.primary) : '';
     const card = h('div', { class: 'ex' });
     const head = h('div', { class: 'ex-head', onClick: () => card.classList.toggle('expanded') },
@@ -1185,16 +1401,100 @@ function renderLibrary() {
       body.appendChild(h('div', { class: 'alt-row' },
         h('span', { class: 'tiny muted' }, 'Alternatives: '),
         ex.alternatives.map(altId => {
-          const alt = RW.EXERCISES.find(e => e.id === altId);
+          const alt = getAllExercises().find(e => e.id === altId);
           return alt ? h('a', { class: 'chip', onClick: (e) => { e.preventDefault(); router('library'); }, href: '#library' }, alt.name) : null;
         })
       ));
     }
+    // Custom-exercise: allow delete
+    if (ex.is_custom) {
+      body.appendChild(h('div', { class: 'spacer-12' }));
+      body.appendChild(h('button', {
+        class: 'btn tiny danger ghost',
+        onClick: () => {
+          if (confirm(`Delete custom exercise "${ex.name}"? This cannot be undone.`)) {
+            deleteCustomExercise(ex.id);
+            renderLibrary();
+            toast('Deleted.');
+          }
+        }
+      }, '🗑 Delete this custom exercise'));
+    }
     card.appendChild(head);
     card.appendChild(body);
-    grid.appendChild(card);
-  });
-  root.appendChild(grid);
+    return card;
+}
+
+// ---- Add custom exercise modal -------------------------------
+function openAddCustomExerciseModal() {
+  const m = $('#modal');
+  m.innerHTML = '';
+  // Form state captured locally
+  const form = { name: '', name_ar: '', primary: 'chest', jeff_nippard: '', mohannad_url: '' };
+  const muscleOptions = Object.entries(RW.MUSCLES).map(([k, v]) =>
+    h('option', { value: k, ...(form.primary === k ? { selected: '' } : {}) }, v.en + ' (' + v.ar + ')')
+  );
+  m.appendChild(h('h3', {}, '➕ Add Custom Exercise'));
+  m.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:12px;' },
+    'Adds a new exercise to your library. Saved permanently. You can delete it anytime.'));
+
+  const nameRow = h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Name (English)'),
+      h('div', { class: 'desc' }, 'Required.')),
+    h('input', { type: 'text', placeholder: 'e.g. Cable Pec Crossover',
+      onInput: (e) => { form.name = e.target.value; }
+    }),
+  );
+  const nameArRow = h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'الاسم بالعربي'),
+      h('div', { class: 'desc' }, 'Optional.')),
+    h('input', { type: 'text', placeholder: 'تفتيح كيبل عرضي',
+      onInput: (e) => { form.name_ar = e.target.value; }
+    }),
+  );
+  const muscleRow = h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Primary muscle'),
+      h('div', { class: 'desc' }, 'Used to put it in the right Library section.')),
+    h('select', {
+      style: 'min-height:44px; background:var(--bg-elev); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:8px;',
+      onChange: (e) => { form.primary = e.target.value; }
+    }, muscleOptions),
+  );
+  const jnRow = h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Jeff Nippard URL'),
+      h('div', { class: 'desc' }, 'Optional. Form video. Paste any YouTube link.')),
+    h('input', { type: 'text', placeholder: 'https://youtube.com/...',
+      onInput: (e) => { form.jeff_nippard = e.target.value; }
+    }),
+  );
+  const mohRow = h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Demo video URL'),
+      h('div', { class: 'desc' }, 'Optional. Any short / video showing the movement.')),
+    h('input', { type: 'text', placeholder: 'https://youtube.com/shorts/...',
+      onInput: (e) => { form.mohannad_url = e.target.value; }
+    }),
+  );
+  m.appendChild(nameRow);
+  m.appendChild(nameArRow);
+  m.appendChild(muscleRow);
+  m.appendChild(jnRow);
+  m.appendChild(mohRow);
+
+  m.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:14px;' },
+    h('button', { class: 'btn ghost', style: 'flex:1;',
+      onClick: () => $('#modal-overlay').classList.remove('show')
+    }, 'Cancel'),
+    h('button', { class: 'btn primary', style: 'flex:1;',
+      onClick: () => {
+        if (!form.name || !form.name.trim()) { toast('Name required.'); return; }
+        addCustomExercise(form);
+        $('#modal-overlay').classList.remove('show');
+        renderLibrary();
+        toast('Added "' + form.name + '" to your library.');
+      }
+    }, 'Save'),
+  ));
+  $('#modal-overlay').classList.add('show');
 }
 
 function renderHistory() {
@@ -1243,7 +1543,7 @@ function renderHistory() {
     const expanded = h('div', { style: 'display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;' });
     Object.entries(sess.exercises).forEach(([ex_id, exData]) => {
       const actualId = exData.swapped_to || ex_id;
-      const ex = RW.EXERCISES.find(e => e.id === actualId);
+      const ex = getAllExercises().find(e => e.id === actualId);
       const ws = exData.sets.filter(s => !s.is_warmup && s.completed);
       if (!ws.length) return;
       // Was this session's PR set logged for this exercise?
@@ -1264,7 +1564,7 @@ function renderHistory() {
       h('h3', { style: 'margin:4px 0;' }, totalSets + ' sets · ' + Math.round(totalKg).toLocaleString() + ' kg total'),
       h('div', { class: 'summary' },
         Object.keys(sess.exercises).slice(0, 5).map(ex_id => {
-          const ex = RW.EXERCISES.find(e => e.id === ex_id);
+          const ex = getAllExercises().find(e => e.id === ex_id);
           return h('span', { class: 'ex-pill' }, ex?.name?.split(' ')[0] || ex_id);
         }),
       ),
@@ -1465,6 +1765,23 @@ function renderSettings() {
     }, settings.show_pr_summary ? 'On' : 'Off'),
   ));
 
+  // Gym launcher override
+  adv.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' },
+      h('div', { class: 'name' }, 'Gym launcher (🏟 button) URL'),
+      h('div', { class: 'desc' },
+        'Default opens IN2 Fitness via scope.bit:// scheme, falls back to App Store. ',
+        'If that doesn\'t work, create an iOS Shortcut named "Open IN2" and paste: ',
+        h('code', {}, 'shortcuts://run-shortcut?name=Open%20IN2')
+      ),
+    ),
+    h('input', {
+      type: 'text', placeholder: '(default behavior)',
+      value: settings.gym_launch_override || '',
+      onInput: (e) => { settings.gym_launch_override = e.target.value.trim(); saveLocal(); }
+    }),
+  ));
+
   // Reset PRs
   adv.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
@@ -1601,6 +1918,8 @@ function init() {
     t.addEventListener('click', () => router(t.dataset.route));
   });
   $('#theme-toggle').addEventListener('click', cycleTheme);
+  const gymBtn = $('#gym-launch');
+  if (gymBtn) gymBtn.addEventListener('click', launchGymApp);
   $('#modal-overlay').addEventListener('click', (e) => {
     if (e.target.id === 'modal-overlay') $('#modal-overlay').classList.remove('show');
   });
