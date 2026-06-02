@@ -890,3 +890,69 @@ main { padding: 16px 16px 28px; }
   .page.active, .ex.expanded .ex-body, .session-end, .session-end .hero,
   .modal-overlay.show, .modal-overlay.show .modal, .rest-timer, .rpe-popover.open { animation: none !important; }
 }
+
+/* ============================================================
+   BOLDER PASS (v10) — product-bolder: confident athletic type,
+   stronger hierarchy + weight contrast, sharper accent, more
+   dramatic dark "gym" mode. No gradient/glass/neon slop.
+   (Self-contained block — delete to revert to v9.)
+   ============================================================ */
+
+/* Heavier, tighter display type — numbers & titles become the heroes */
+.app-title { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; }
+.page-header h1 { font-size: 30px; font-weight: 820; letter-spacing: -0.035em; }
+.section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--text-dim); }
+
+/* Today header — command-center presence */
+.today-banner { padding: 20px 18px 18px; }
+.today-banner::before { height: 4px; }
+.today-banner .tb-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
+.today-banner h2 { font-size: 27px; font-weight: 830; letter-spacing: -0.04em; line-height: 1.05; }
+.today-banner p { font-size: 15px; }
+.today-banner.active { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 30%, var(--bg-card)), var(--bg-card) 55%); }
+
+/* Progress meter — thicker, with a big confident % */
+.progress-track { height: 13px; border-radius: 999px; }
+.progress-label { margin-top: 11px; font-size: 13px; font-weight: 700; align-items: baseline; }
+.progress-label .pct { font-size: 26px; font-weight: 850; letter-spacing: -0.04em; line-height: 1; }
+
+/* Stat tiles — bigger, heavier numerals, smaller quieter caps (weight contrast) */
+.stat-tile { padding: 16px 8px 13px; }
+.stat-tile .stat-num { font-size: 31px; font-weight: 830; letter-spacing: -0.045em; }
+.stat-tile .stat-cap { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
+.stat-tile .stat-sub { font-size: 10.5px; }
+
+/* In-session: the data you touch is big and confident */
+.ex-info h4 { font-size: 16.5px; font-weight: 730; }
+.set-grid input { font-size: 20px; font-weight: 720; min-height: 48px; }
+.set-grid .set-num { font-size: 14px; font-weight: 800; }
+.set-check { width: 48px; height: 48px; font-size: 21px; border-width: 2px; }
+.today-target { font-size: 14.5px; }
+.today-target strong { font-weight: 800; }
+
+/* Primary CTA — punchier */
+.btn { font-weight: 650; }
+.btn.primary { font-weight: 750; letter-spacing: 0.01em; }
+.btn.primary.full { min-height: 52px; font-size: 16px; }
+
+/* Session-end — bigger celebratory numerals */
+.session-end h2 { font-size: 27px; font-weight: 840; letter-spacing: -0.035em; }
+.session-end .hero { font-size: 64px; }
+.session-end .stat .num { font-size: 28px; font-weight: 840; letter-spacing: -0.04em; }
+
+/* Active tab — stronger indicator */
+.tab.active::before { width: 30px; height: 3.5px; }
+.tab.active .icon { transform: translateY(-1px) scale(1.1); }
+
+/* More dramatic DARK "gym" mode — deeper bg, teal that glows on state */
+[data-theme="dark"] { --bg: #07090b; --bg-card: #11161b; --bg-elev: #1a2127; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #07090b; --bg-card: #11161b; --bg-elev: #1a2127; }
+}
+[data-theme="dark"] .set-check.checked,
+[data-theme="dark"] .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--accent-glow); }
+[data-theme="dark"] .btn.primary { box-shadow: 0 8px 22px -8px var(--accent-glow); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .set-check.checked,
+  :root:not([data-theme="light"]) .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--accent-glow); }
+}
