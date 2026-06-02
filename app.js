@@ -549,10 +549,18 @@ function applyTheme() {
   const metaLight = document.getElementById('theme-color-light');
   const metaDark = document.getElementById('theme-color-dark');
   if (metaLight) metaLight.setAttribute('content', cInfo.sw_light);
-  if (metaDark) metaDark.setAttribute('content', '#0b0d10');  // dark bg stays the same
-  // Toggle label
+  if (metaDark) metaDark.setAttribute('content', '#0a0d10');  // matches --bg dark
+  // Toggle label — inline SVG icon (consistent line-icon set) + word
   const tt = $('#theme-toggle');
-  if (tt) tt.textContent = t === 'auto' ? '🌓 Auto' : (t === 'dark' ? '🌙 Dark' : '☀️ Light');
+  if (tt) {
+    const S = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">';
+    const icons = {
+      auto: S + '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>',
+      dark: S + '<path d="M20 13.2A7.5 7.5 0 1 1 10.8 4a6 6 0 0 0 9.2 9.2z"/></svg>',
+      light: S + '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>',
+    };
+    tt.innerHTML = (icons[t] || icons.auto) + '<span>' + (t === 'auto' ? 'Auto' : (t === 'dark' ? 'Dark' : 'Light')) + '</span>';
+  }
 }
 function cycleTheme() {
   const order = ['auto', 'light', 'dark'];
@@ -931,46 +939,58 @@ function renderHome() {
   const vol = getWeeklyVolume();
   const dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
-  // Banner
+  // Header — structured (accent carries state via the progress meter / top rule)
   if (state.active_session) {
     const a = state.active_session;
     const totalSets = Object.values(a.exercises).reduce((s,ex) => s + ex.sets.filter(set => !set.is_warmup).length, 0);
     const doneSets = Object.values(a.exercises).reduce((s,ex) => s + ex.sets.filter(set => !set.is_warmup && set.completed).length, 0);
-    root.appendChild(h('div', { class: 'today-banner' },
-      h('h2', {}, '🏋️ In progress: ' + a.session_name.split(' — ')[0]),
-      h('p', {}, `${doneSets} / ${totalSets} working sets done`),
-      h('span', { class: 'pill' }, 'Started ' + fmtTime(a.started_at)),
+    const pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
+    const parts = a.session_name.split(' — ');
+    root.appendChild(h('div', { class: 'today-banner active' },
+      h('div', { class: 'tb-kicker' }, 'In progress · started ' + fmtTime(a.started_at)),
+      h('h2', {}, parts[0]),
+      h('p', {}, parts[1] || 'Log every set as you go.'),
+      h('div', { class: 'progress-meter' },
+        h('div', { class: 'progress-track' }, h('div', { class: 'progress-fill', style: `width:${pct}%` })),
+        h('div', { class: 'progress-label' },
+          h('span', {}, `${doneSets} / ${totalSets} working sets`),
+          h('span', { class: 'pct' }, pct + '%'),
+        ),
+      ),
     ));
   } else if (planned) {
+    const parts = planned.name.split(' — ');
     root.appendChild(h('div', { class: 'today-banner' },
-      h('h2', {}, '🔥 Today is ' + dow + ' — gym day'),
-      h('p', {}, planned.name),
-      h('span', { class: 'pill' }, planned.exercises.length + ' exercises · ~70 min'),
+      h('div', { class: 'tb-kicker' }, dow + ' · Gym day'),
+      h('h2', {}, parts[0]),
+      h('p', {}, parts[1] || planned.name),
+      h('div', { class: 'tb-meta' }, planned.exercises.length + ' exercises · ~70 min'),
     ));
   } else {
-    root.appendChild(h('div', { class: 'today-banner' },
-      h('h2', {}, '🛋️ Rest day'),
-      h('p', {}, `Next: ${next.session.day} (${next.in_days} day${next.in_days===1?'':'s'}) — ${next.session.name.split(' — ')[0]}`),
-      h('span', { class: 'pill' }, 'Eat 130–160g protein. Sleep 7+ hours.'),
+    root.appendChild(h('div', { class: 'today-banner rest' },
+      h('div', { class: 'tb-kicker' }, 'Rest day'),
+      h('h2', {}, 'Next: ' + next.session.name.split(' — ')[0]),
+      h('p', {}, `${next.session.day} · in ${next.in_days} day${next.in_days===1?'':'s'}`),
+      h('div', { class: 'tb-meta' }, 'Eat 130–160g protein · Sleep 7+ hrs'),
     ));
   }
 
   // Stats row
-  root.appendChild(h('div', { class: 'card-row', style: 'margin-bottom:14px;' },
-    h('div', { class: 'card compact', style: 'flex:1; text-align:center;' },
-      h('div', { class: 'tiny muted' }, 'STREAK'),
-      h('div', { style: 'font-size:24px; font-weight:700;' }, String(streak)),
-      h('div', { class: 'tiny muted' }, 'sessions / 4 wks'),
+  root.appendChild(h('div', { class: 'stat-row' },
+    h('div', { class: 'stat-tile' },
+      h('div', { class: 'stat-num' }, String(streak)),
+      h('div', { class: 'stat-cap' }, 'Streak'),
+      h('div', { class: 'stat-sub' }, 'sessions / 4 wks'),
     ),
-    h('div', { class: 'card compact', style: 'flex:1; text-align:center;' },
-      h('div', { class: 'tiny muted' }, 'THIS WEEK'),
-      h('div', { style: 'font-size:24px; font-weight:700;' }, String(vol.totalSets)),
-      h('div', { class: 'tiny muted' }, 'working sets'),
+    h('div', { class: 'stat-tile' },
+      h('div', { class: 'stat-num' }, String(vol.totalSets)),
+      h('div', { class: 'stat-cap' }, 'This week'),
+      h('div', { class: 'stat-sub' }, 'working sets'),
     ),
-    h('div', { class: 'card compact', style: 'flex:1; text-align:center;' },
-      h('div', { class: 'tiny muted' }, 'TONNAGE'),
-      h('div', { style: 'font-size:20px; font-weight:700;' }, vol.totalKg.toLocaleString()),
-      h('div', { class: 'tiny muted' }, 'kg this week'),
+    h('div', { class: 'stat-tile' },
+      h('div', { class: 'stat-num' }, vol.totalKg.toLocaleString()),
+      h('div', { class: 'stat-cap' }, 'Tonnage'),
+      h('div', { class: 'stat-sub' }, 'kg this week'),
     ),
   ));
 
@@ -1077,7 +1097,7 @@ function renderHome() {
     root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
       h('h3', {}, '📝 Session notes'),
       h('textarea', {
-        style: 'width:100%; min-height:60px; background:var(--bg-elev); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:8px; font-family:inherit; font-size:14px;',
+        class: 'notes-input',
         placeholder: 'How did it feel? Sleep? Energy?',
         onInput: (e) => { a.notes = e.target.value; saveLocal(); }
       }, a.notes || ''),
@@ -1090,7 +1110,7 @@ function renderHome() {
     // Show today's planned exercises preview
     const sess = planned || next.session;
     root.appendChild(h('div', { class: 'spacer-24' }));
-    root.appendChild(h('h3', { style: 'margin:8px 0 12px; font-size:15px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;' }, planned ? 'Today\'s plan' : 'Next session preview'));
+    root.appendChild(h('h3', { class: 'section-label' }, planned ? 'Today\'s plan' : 'Next session preview'));
     sess.exercises.forEach((p, i) => {
       const ex = getAllExercises().find(e => e.id === p.exercise_id);
       const sug = suggestNextWeight(p.exercise_id, p);
@@ -1148,16 +1168,16 @@ function renderExerciseCard(ex_id, exState) {
     const ws = (last.sets || []).filter(s => !s.is_warmup && s.completed);
     if (ws.length) {
       body.appendChild(h('div', { class: 'last-time' },
-        h('strong', {}, '📊 Last time'), ` (${fmtDate(last.date)}): `,
+        h('strong', {}, 'Last time'), ` (${fmtDate(last.date)}): `,
         ws.map(s => `${s.weight}×${s.reps}`).join(', ')
       ));
     }
   }
-  // Suggestion note
-  body.appendChild(h('div', { class: 'last-time' }, h('strong', {}, '🎯 Today: '), sug.note));
+  // Today's target — the one highlight
+  body.appendChild(h('div', { class: 'today-target' }, h('strong', {}, 'Today: '), sug.note));
 
-  // Cue
-  if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, '💡 Cue: '), ex.cue));
+  // Cue — subtle tip
+  if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, 'Cue: '), ex.cue));
 
   // Videos — Library controls which are visible via state.video_hidden
   const customVids = state.custom_videos[actualId] || [];
@@ -1205,7 +1225,7 @@ function renderExerciseCard(ex_id, exState) {
   exState.sets.forEach((set, idx) => {
     const isWarm = set.is_warmup;
     const setNum = isWarm ? `W${idx+1}` : `${idx - exState.sets.filter(s => s.is_warmup).length + 1}`;
-    const row = h('div', { class: 'set-grid', style: isWarm ? 'opacity:0.7;' : '' },
+    const row = h('div', { class: 'set-grid' + (set.completed && !isWarm ? ' done' : ''), style: isWarm ? 'opacity:0.7;' : '' },
       h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
       h('input', {
         type: 'number', step: '0.5', inputmode: 'decimal',
@@ -1249,7 +1269,7 @@ function renderExerciseCard(ex_id, exState) {
   // Action row: alternatives + add set + warmup helper
   if (planned.warmup) {
     body.appendChild(h('div', { class: 'warmup-block' },
-      h('strong', {}, '🔥 Warmup: '), planned.warmup
+      h('strong', {}, 'Warm-up: '), planned.warmup
     ));
   }
 
@@ -1792,17 +1812,26 @@ function renderSettings() {
     )
   ));
 
-  // Sync status — minimal, hidden from users, just a status line
+  // Sync status — reflects ACTUAL reachability, not just "is a URL configured".
+  const configured = !!(settings.supabase_url && settings.supabase_key);
   const cloudCard = h('div', { class: 'card', style: 'padding:10px 14px;' },
     h('div', { style: 'display:flex; justify-content:space-between; align-items:center;' },
       h('div', { class: 'tiny muted' }, '☁️ Cloud sync'),
-      h('span', { id: 'sync-status', class: 'sync-status ' + (settings.supabase_url ? 'ok' : 'off') },
-        settings.supabase_url ? 'Connected' : 'Not connected'),
+      h('span', { id: 'sync-status', class: 'sync-status off' },
+        configured ? 'Checking…' : 'Not connected'),
     ),
   );
   root.appendChild(card);
   root.appendChild(musicCard);
   root.appendChild(cloudCard);
+
+  // Silent reachability probe — so the badge tells the truth even when the
+  // backend is paused/unreachable (no toast; updates only the badge).
+  if (configured) {
+    supaFetch('/rest/v1/raedworkouts?select=user_id&limit=1')
+      .then(() => setSyncStatus('ok', 'Connected'))
+      .catch(() => setSyncStatus('err', 'Offline — tap Test below'));
+  }
 
   // Advanced settings (collapsed by default)
   const adv = h('details', { class: 'card advanced-settings' },
@@ -1898,7 +1927,7 @@ function renderSettings() {
   // Gym launcher override
   adv.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Gym launcher (🏟 button) URL'),
+      h('div', { class: 'name' }, 'Gym launcher button URL'),
       h('div', { class: 'desc' },
         'Default opens IN2 Fitness via scope.bit:// scheme, falls back to App Store. ',
         'If that doesn\'t work, create an iOS Shortcut named "Open IN2" and paste: ',
@@ -2105,9 +2134,37 @@ function init() {
       });
   }
 
-  // Register service worker (offline)
+  // Register service worker (offline) + auto-apply updates.
+  // No more "force refresh" — a new deploy installs in the background and the
+  // app reloads itself to show it (deferred if you're mid-set, so nothing is yanked).
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    let _reloading = false;
+    const hadController = !!navigator.serviceWorker.controller;
+    const applyUpdateWhenSafe = () => {
+      if (_reloading) return;
+      const doReload = () => { _reloading = true; window.location.reload(); };
+      // Mid-session + screen visible → wait until you switch away (state is already
+      // saved on every keystroke, so the reload never loses data).
+      if (state.active_session && !document.hidden) {
+        toast('New version ready — updating when you switch away.', 3000);
+        const onHide = () => {
+          if (document.hidden) { document.removeEventListener('visibilitychange', onHide); doReload(); }
+        };
+        document.addEventListener('visibilitychange', onHide);
+      } else {
+        doReload();
+      }
+    };
+    // Fires when a freshly-installed SW takes control (genuine update only).
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) applyUpdateWhenSafe();
+    });
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+      reg.update().catch(() => {});
+      // Re-check for updates when the app regains focus, and hourly.
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+      setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+    }).catch(() => {});
   }
 
   // Auto-hide bottom nav on scroll-down, show on scroll-up

@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="color-scheme" content="light dark" />
   <title>Raedworkouts</title>
   <meta name="description" content="Personal training app for Raed. Full-body 2x/week. Calibration block." />
   <meta id="theme-color-light" name="theme-color" content="#0f766e" media="(prefers-color-scheme: light)" />
-  <meta id="theme-color-dark" name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)" />
+  <meta id="theme-color-dark" name="theme-color" content="#0a0d10" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Raedworkouts" />
@@ -23,8 +24,10 @@
       <span>Raedworkouts</span>
     </div>
     <div class="header-actions">
-      <button id="gym-launch" class="header-btn" title="Open IN2 Fitness">🏟</button>
-      <button id="theme-toggle" class="theme-toggle">🌓 Auto</button>
+      <button id="gym-launch" class="header-btn" title="Open IN2 Fitness" aria-label="Open IN2 Fitness">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"/><path d="M21 21l-1-1"/><path d="M3 3l1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></svg>
+      </button>
+      <button id="theme-toggle" class="theme-toggle">Auto</button>
     </div>
   </header>
 
@@ -38,18 +41,18 @@
   </main>
 
   <nav class="tab-bar">
-    <button class="tab" data-route="home"><span class="icon">🏠</span><span class="label">Home</span></button>
-    <button class="tab" data-route="library"><span class="icon">📚</span><span class="label">Library</span></button>
-    <button class="tab" data-route="history"><span class="icon">📈</span><span class="label">History</span></button>
-    <button class="tab" data-route="settings"><span class="icon">⚙️</span><span class="label">Settings</span></button>
-    <button class="tab" data-route="help"><span class="icon">📖</span><span class="label">Help</span></button>
+    <button class="tab" data-route="home" aria-label="Home"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9.3V20h13V9.3"/><path d="M9.5 20v-5.5h5V20"/></svg></span><span class="label">Home</span></button>
+    <button class="tab" data-route="library" aria-label="Library"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.2A2.2 2.2 0 0 1 6.2 17H20"/><path d="M6.2 2H20v20H6.2A2.2 2.2 0 0 1 4 19.8V4.2A2.2 2.2 0 0 1 6.2 2z"/></svg></span><span class="label">Library</span></button>
+    <button class="tab" data-route="history" aria-label="History"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/></svg></span><span class="label">History</span></button>
+    <button class="tab" data-route="settings" aria-label="Settings"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label">Settings</span></button>
+    <button class="tab" data-route="help" aria-label="Help"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span><span class="label">Help</span></button>
   </nav>
 
   <!-- Floating rest timer -->
-  <div id="rest-timer" style="display:none; position:fixed; right:16px; bottom:calc(88px + env(safe-area-inset-bottom,0)); background:var(--accent); color:var(--accent-fg); padding:12px 16px; border-radius:999px; font-weight:700; font-size:18px; align-items:center; gap:10px; box-shadow:0 6px 20px rgba(0,0,0,0.25); z-index:50;">
-    <span>⏱</span>
-    <span id="rest-timer-text" style="font-variant-numeric: tabular-nums;">2:00</span>
-    <button id="rest-cancel" style="background:rgba(255,255,255,0.2); color:inherit; border:none; border-radius:999px; width:24px; height:24px; cursor:pointer; font-size:14px;">✕</button>
+  <div id="rest-timer" class="rest-timer" style="display:none;">
+    <span class="rt-ico">⏱</span>
+    <span id="rest-timer-text" class="rt-time">2:00</span>
+    <button id="rest-cancel" class="rt-cancel" aria-label="Cancel rest">✕</button>
   </div>
 
   <!-- Modal -->

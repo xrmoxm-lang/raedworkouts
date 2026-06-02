@@ -700,6 +700,8 @@ When something material changes:
 
 **Last updated:** 2026-05-09 — v7: Supabase hardcoded (no user setup needed), first-launch name screen, shareable ?user= links, block-based auto-color (Block 1=teal/Block 2=amber/Block 3=red), Arabic/English language toggle (RTL + exercise names), sync errors now visible, Force next session override in Settings, session end shows block context, SW cache v7.
 
+**2026-05-30 (doc only, no app/code change):** Added Appendix A — deferred Impeccable design pass (approved direction, spec'd, not yet applied).
+
 ---
 
 ## Section 15 — Files this skill must read before answering
@@ -800,6 +802,24 @@ The hardest part is showing up. Tips:
 - **He's hurt** → pause. Rest. Refer out.
 - **He's confused by the app** → walk through the specific feature with concrete steps.
 - **He wants to add a feature** → ask "what problem does it solve?" first.
+
+---
+
+## Appendix A — ✅ APPLIED 2026-06-02: Impeccable design pass
+
+Approved 2026-05-30, **shipped 2026-06-02** (Opus-reviewed). The redesign below is live. Alongside it, the whole stylesheet was rebuilt on a tuned token system (OKLCH-ish light/dark, layered surfaces, `--shadow-sm/md/lg`, motion + z-index scales, `prefers-reduced-motion`), the side-stripe `border-left` callouts were removed, and the **service worker now auto-applies updates** (network-first navigation + stale-while-revalidate shell, `updateViaCache:'none'`, `controllerchange` reload deferred while mid-set) so no more manual force-refresh. `CACHE` bumped to `v8`.
+
+This was **surgical polish on a mature app, not a reskin.** Kept untouched: teal identity + light/dark + 5 accent themes, system-fonts-only (offline), "last time" history, `suggestNextWeight()`, RPE logging + rest timer, dual-coach videos (Mohannad + Jeff Nippard), bilingual EN/عربي, body-anatomy illustrations, swap, warm-ups, PRs.
+
+The five approved moves, as shipped:
+
+1. ✅ **Retired the gradients.** `.today-banner` and `.session-end .pr-card` are now structured cards: thin accent **top rule**, kicker + title + focus, and a real **progress meter** (working sets done / total + %) in-session. Accent carries state, not decoration. → `styles.css` + `renderHome` banner markup.
+2. ✅ **One icon set (inline SVG).** Tab bar (home/library/history/settings/help), header gym + theme toggle now use one matched line-icon set (dependency-free, offline). → `index.html` nav + header, `applyTheme()` in `app.js`, `styles.css`. *Follow-up: inline action-button emoji (+Set, Rest, Swap) not yet swapped — low priority.*
+3. ✅ **In-session hierarchy.** Focus mode (default) shows one exercise at a time + progress strip; finished exercises recede via the `.ex.done` green-tinted state. → `styles.css`.
+4. ✅ **Untangled the info blocks** by role: `.last-time` = quiet data, new `.today-target` = the one teal highlight, `.cue` = subtle tip, `.warmup-block` = warning-tinted. → `styles.css` + `renderExerciseCard`.
+5. ✅ **Set + nav state polish.** Completed set rows tint green (`.set-grid.done`, kept editable — not hard-locked, per "never delete to fix"); inputs get an accent focus ring; active tab gets an indicator bar (not colour alone). → `styles.css` + `renderExerciseCard`.
+
+**Still open (NOT decided — ask Raed):** the emoji RPE picker (💪) was left as-is. Decide later: keep, or move to a small numeric/segmented control to match the new icon set.
 
 ---
 
