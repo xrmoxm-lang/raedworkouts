@@ -1,11 +1,13 @@
 /* ============================================================
    Raedworkouts — app.js
-   Vanilla JS PWA. Pure-frontend logic + optional Supabase sync.
+   Vanilla JS PWA. Pure-frontend logic + self-hosted cloud sync.
    ============================================================ */
 
-// Pre-configured Supabase — anon key is safe to commit (designed to be public).
-const DEFAULT_SUPABASE_URL = 'https://ujcrewuikmjrhdjbjlrm.supabase.co';
-const DEFAULT_SUPABASE_KEY = 'sb_publishable_2_m7AXyYXc4KlZjHkxT-Pw_U0geTslv';
+// Self-hosted sync — always-on on Raed's HP server (Tailscale Funnel, public
+// HTTPS, secret-key gated). Replaces the sleep-prone Supabase free tier.
+// The key is a shared secret in client JS (same trust model as the old anon key).
+const SYNC_URL = 'https://raed-hp.tail53bd35.ts.net:8443';
+const SYNC_KEY = 'aa1b222bcdab4b048e7b44d85dca087946a6212314852b4b';
 
 // ---- Tiny utility helpers -----------------------------------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -387,8 +389,8 @@ const defaultSettings = () => ({
   gym_launch_scheme: 'scope.bit://',                                  // bundle ID-based scheme attempt
   gym_launch_fallback: 'https://apps.apple.com/sa/app/in2-fitness/id1536137282', // App Store fallback
   gym_launch_override: '',     // user-set custom URL (e.g. shortcuts://run-shortcut?name=Open%20IN2)
-  supabase_url: DEFAULT_SUPABASE_URL,
-  supabase_key: DEFAULT_SUPABASE_KEY,
+  sync_url: SYNC_URL,
+  sync_key: SYNC_KEY,
   user_id: '',
   block_auto_color: true,
   lang: 'en',
@@ -400,15 +402,15 @@ let settings = defaultSettings();
 function loadLocal() {
   try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch (e) {}
   try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) {}
-  // Always use the baked-in credentials — no manual setup needed
-  settings.supabase_url = DEFAULT_SUPABASE_URL;
-  settings.supabase_key = DEFAULT_SUPABASE_KEY;
+  // Always use the baked-in sync endpoint — no manual setup needed
+  settings.sync_url = SYNC_URL;
+  settings.sync_key = SYNC_KEY;
 }
 function saveLocal() {
   state.last_sync = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  if (settings.supabase_url && settings.supabase_key) {
+  if (settings.sync_url && settings.sync_key) {
     syncToCloud().catch(err => {
       setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
       if (!saveLocal._toastShown) {
@@ -419,48 +421,47 @@ function saveLocal() {
   }
 }
 
-// ---- Supabase sync (optional) ------------------------------
-async function supaFetch(path, opts = {}) {
-  const url = settings.supabase_url.replace(/\/$/, '') + path;
+// ---- Cloud sync (self-hosted on Raed's HP server) ----------
+async function syncFetch(path, opts = {}) {
+  const url = settings.sync_url.replace(/\/$/, '') + path;
   const headers = {
-    'apikey': settings.supabase_key,
-    'Authorization': 'Bearer ' + settings.supabase_key,
+    'Authorization': 'Bearer ' + settings.sync_key,
     'Content-Type': 'application/json',
-    'Prefer': 'return=representation',
     ...(opts.headers || {})
   };
   const res = await fetch(url, { ...opts, headers });
-  if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(`Sync ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
 async function syncToCloud() {
-  if (!settings.supabase_url || !settings.supabase_key || !settings.user_id) return;
-  const payload = {
-    user_id: settings.user_id,
-    state_json: state,
-    settings_json: settings,
-    updated_at: new Date().toISOString(),
-  };
-  await supaFetch(`/rest/v1/raedworkouts?on_conflict=user_id`, {
+  if (!settings.sync_url || !settings.sync_key || !settings.user_id) return;
+  await syncFetch('/state', {
     method: 'POST',
-    headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      user_id: settings.user_id,
+      state_json: state,
+      settings_json: settings,
+      updated_at: new Date().toISOString(),
+    }),
   });
   setSyncStatus('ok', 'Synced ' + fmtTime(Date.now()));
   saveLocal._toastShown = false;  // reset so next failure is visible again
 }
 
 async function pullFromCloud() {
-  if (!settings.supabase_url || !settings.supabase_key || !settings.user_id) return;
-  const userId = settings.user_id;
-  const rows = await supaFetch(`/rest/v1/raedworkouts?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`);
-  if (rows && rows.length) {
-    const remote = rows[0];
-    if (remote.state_json) {
-      state = { ...defaultState(), ...remote.state_json };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
+  if (!settings.sync_url || !settings.sync_key || !settings.user_id) return false;
+  let remote;
+  try {
+    remote = await syncFetch('/state?user=' + encodeURIComponent(settings.user_id));
+  } catch (e) {
+    // 404 = no row yet (first run / fresh user) — not an error, nothing to pull.
+    if (/Sync 404/.test(e.message || '')) return false;
+    throw e;
+  }
+  if (remote && remote.state_json) {
+    state = { ...defaultState(), ...remote.state_json };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     setSyncStatus('ok', 'Pulled from cloud');
     return true;
   }
@@ -475,13 +476,13 @@ function setSyncStatus(kind, text) {
 }
 
 async function testCloudConnection() {
-  if (!settings.supabase_url || !settings.supabase_key) {
-    toast('Configure Supabase URL and key first.');
+  if (!settings.sync_url || !settings.sync_key) {
+    toast('Sync is not configured.');
     return;
   }
   toast('Testing…');
   try {
-    await supaFetch('/rest/v1/raedworkouts?limit=1');
+    await syncFetch('/health');
     setSyncStatus('ok', 'Connected ✓');
     toast('Connection OK.');
   } catch (e) {
@@ -508,7 +509,7 @@ function showNameModal() {
     saveLocal();
     overlay.classList.remove('show');
     toast('Welcome, ' + name + '!');
-    if (settings.supabase_url && settings.supabase_key) {
+    if (settings.sync_url && settings.sync_key) {
       pullFromCloud().then(ok => { if (ok) render(); }).catch(() => {});
     }
   };
@@ -1813,7 +1814,7 @@ function renderSettings() {
   ));
 
   // Sync status — reflects ACTUAL reachability, not just "is a URL configured".
-  const configured = !!(settings.supabase_url && settings.supabase_key);
+  const configured = !!(settings.sync_url && settings.sync_key);
   const cloudCard = h('div', { class: 'card', style: 'padding:10px 14px;' },
     h('div', { style: 'display:flex; justify-content:space-between; align-items:center;' },
       h('div', { class: 'tiny muted' }, '☁️ Cloud sync'),
@@ -1828,7 +1829,7 @@ function renderSettings() {
   // Silent reachability probe — so the badge tells the truth even when the
   // backend is paused/unreachable (no toast; updates only the badge).
   if (configured) {
-    supaFetch('/rest/v1/raedworkouts?select=user_id&limit=1')
+    syncFetch('/health')
       .then(() => setSyncStatus('ok', 'Connected'))
       .catch(() => setSyncStatus('err', 'Offline — tap Test below'));
   }
@@ -2061,22 +2062,8 @@ function renderHelp() {
     <h2>Library</h2>
     <p>30 exercises. Each has Mohannad's short clips (the small thumbnails) and one Jeff Nippard form video (the teal-bordered one labeled JN). You can paste your own YouTube links per exercise. They're saved permanently.</p>
 
-    <h2>Cloud sync (Supabase)</h2>
-    <p>Optional. By default, your data lives only in this browser. To sync across phones/laptops:</p>
-    <ol>
-      <li>Make a free account at <code>supabase.com</code>.</li>
-      <li>New project. Copy the <strong>Project URL</strong> and <strong>anon key</strong> from Project Settings → API.</li>
-      <li>Run this SQL in the Supabase SQL editor:</li>
-    </ol>
-    <pre style="background:var(--bg-elev); padding:10px; border-radius:8px; font-size:11px; overflow-x:auto;"><code>create table raedworkouts (
-  user_id text primary key,
-  state_json jsonb not null,
-  settings_json jsonb,
-  updated_at timestamptz default now()
-);
-alter table raedworkouts enable row level security;
-create policy "anon all" on raedworkouts for all using (true) with check (true);</code></pre>
-    <p>Then paste URL + anon key in Settings. Use <strong>Push</strong> to upload, <strong>Pull</strong> on a new device to download.</p>
+    <h2>Cloud sync</h2>
+    <p>Your data always lives on this device first, so the app works fully offline and nothing is ever lost if you're disconnected. On top of that, it backs up automatically to your own always-on home server (no setup, no accounts, nothing that expires). It pushes after every change and pulls when the app opens, so your history follows you across devices. Settings → Cloud sync shows the live status; if it ever reads "Offline", you're just temporarily unreachable and it resumes on its own.</p>
 
     <h2>Add to home screen</h2>
     <p><strong>iPhone Safari:</strong> Share button → "Add to Home Screen". Now it opens like a native app.</p>
@@ -2123,7 +2110,7 @@ function init() {
   // Show name screen on first launch (no user_id set yet)
   if (!settings.user_id) {
     showNameModal();
-  } else if (settings.supabase_url && settings.supabase_key) {
+  } else if (settings.sync_url && settings.sync_key) {
     // Pull from cloud on load — only when user_id is known
     toast('Syncing…', 1200);
     pullFromCloud()
