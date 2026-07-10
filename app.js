@@ -142,37 +142,18 @@ function rpePicker(set, onChange) {
 
 // ---- Programme variants --------------------------------------
 const VARIANTS = {
-  fullbody_2x: { label: 'Full-body 2×', desc: 'Tuesday + Saturday. Active.' },
-  ppl_3x:      { label: 'Push/Pull/Legs 3×', desc: '3 days/week. Activates at block boundary.' },
+  fullbody_2x: { label: 'Full-body 2×', desc: 'Tuesday + Saturday' },
+  ppl_3x:      { label: 'Push/Pull/Legs 3×', desc: 'Push · Pull · Legs — any 3 days you choose' },
 };
-function isAtBlockBoundary() {
-  // Boundary if we're starting a new block (week 1, 5, 9) or week 12 deload complete.
-  const w = state.current_week || 1;
-  return w === 1 || w === 5 || w === 9 || w >= 12;
-}
-function attemptVariantChange(newVariant) {
-  if ((settings.programme_variant || 'fullbody_2x') === newVariant) {
-    settings.pending_variant = null;
-    saveLocal(); renderSettings();
-    return;
-  }
-  if (isAtBlockBoundary()) {
-    settings.programme_variant = newVariant;
-    settings.pending_variant = null;
-    saveLocal();
-    toast('Programme switched to ' + VARIANTS[newVariant].label + '.');
-    renderSettings();
-  } else {
-    if (confirm(
-      `You're mid-block (week ${state.current_week}). Switching now destroys calibration data.\n\n` +
-      `Queue the switch for the next block boundary instead?`
-    )) {
-      settings.pending_variant = newVariant;
-      saveLocal();
-      toast('Switch queued for next block.');
-      renderSettings();
-    }
-  }
+function switchVariant(key) {
+  if (!VARIANTS[key]) return;
+  if ((settings.programme_variant || 'ppl_3x') === key) return;
+  settings.programme_variant = key;
+  settings.pending_variant = null;
+  state.forced_next_session = null;
+  saveLocal();
+  toast('Programme: ' + VARIANTS[key].label);
+  render();
 }
 
 // ---- Gym launcher (IN2 Fitness) ------------------------------
@@ -303,9 +284,106 @@ function setJNUrl(exerciseId, url) {
   saveLocal();
 }
 function ytIdFromUrl(url) {
-  if (!url) return '';
+  if (!url) return null;
   const m = String(url).match(/(?:shorts\/|v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : '';
+  return m ? m[1] : null;
+}
+function youtubeThumbUrl(id, file) {
+  return `https://img.youtube.com/vi/${id}/${file}`;
+}
+function buildExerciseVideos(exerciseId, ex, opts = {}) {
+  const customVids = state.custom_videos[exerciseId] || [];
+  const jnUrl = getJNUrl(exerciseId);
+  const videos = [
+    ...(ex.mohannad || []).map((id, i) => ({
+      key: 'mohannad_' + i,
+      id,
+      url: 'https://www.youtube.com/shorts/' + id,
+      label: 'M' + (i + 1),
+      title: 'Mohannad — video ' + (i + 1),
+    })),
+    ...(jnUrl ? [{
+      key: 'jn',
+      id: ytIdFromUrl(jnUrl),
+      url: jnUrl,
+      label: 'JN',
+      title: jnHasCustomOverride(exerciseId) ? 'JN (custom)' : 'Jeff Nippard',
+      nippard: true,
+    }] : []),
+    ...customVids.map((url, i) => {
+      const isShort = String(url || '').includes('/shorts/');
+      return {
+        key: 'custom_' + i,
+        id: ytIdFromUrl(url),
+        url,
+        label: isShort ? 'C' + (i + 1) : 'Custom',
+        title: 'Custom — video ' + (i + 1),
+        custom: true,
+      };
+    })
+  ];
+  return opts.includeHidden ? videos : videos.filter(v => !isVideoHidden(exerciseId, v.key));
+}
+function buildVideoTile(v, opts = {}) {
+  const id = v.id || ytIdFromUrl(v.url);
+  const isShort = String(v.url || '').includes('/shorts/');
+  const label = v.label || (v.nippard ? 'JN' : 'Custom');
+  const classes = [
+    'video-thumb',
+    isShort ? 'shorts' : 'regular',
+    v.nippard ? 'nippard' : '',
+    opts.className || '',
+  ].filter(Boolean).join(' ');
+  const link = h('a', {
+    href: v.url,
+    target: '_blank',
+    rel: 'noopener',
+    class: classes,
+    title: v.title || label,
+  });
+  const chip = h('span', { class: 'video-label-chip' }, label);
+  const showPlaceholder = () => {
+    const img = link.querySelector('img');
+    if (img) img.remove();
+    link.classList.add('video-placeholder');
+    if (!link.querySelector('.video-placeholder-content')) {
+      link.appendChild(h('span', { class: 'video-placeholder-content' },
+        h('span', { class: 'video-placeholder-title' }, v.nippard ? 'JN' : label),
+        h('span', { class: 'video-placeholder-sub' }, v.nippard ? 'Find form video ↗' : 'Open video ↗'),
+      ));
+    }
+  };
+
+  link.appendChild(chip);
+  if (!id) {
+    showPlaceholder();
+    return link;
+  }
+
+  const fallbacks = isShort
+    ? ['hqdefault.jpg', 'mqdefault.jpg']
+    : ['hqdefault.jpg', 'mqdefault.jpg', '0.jpg'];
+  let fallbackIndex = 0;
+  const advance = () => {
+    fallbackIndex += 1;
+    if (fallbackIndex < fallbacks.length) {
+      img.src = youtubeThumbUrl(id, fallbacks[fallbackIndex]);
+    } else {
+      showPlaceholder();
+    }
+  };
+  const img = h('img', {
+    src: youtubeThumbUrl(id, fallbacks[fallbackIndex]),
+    alt: '',
+    loading: 'lazy',
+    decoding: 'async',
+    onError: advance,
+    onLoad: () => {
+      if (img.naturalWidth <= 120) advance();
+    },
+  });
+  link.insertBefore(img, chip);
+  return link;
 }
 function editJNUrlPrompt(exerciseId) {
   const ex = getAllExercises().find(e => e.id === exerciseId);
@@ -382,8 +460,8 @@ const defaultSettings = () => ({
   notifications: true,         // browser notifications when rest ends (req permission)
   focus_mode: true,            // one-exercise-at-a-time during active session
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
-  programme_variant: 'fullbody_2x',  // fullbody_2x | ppl_3x  (PPL queued, applies at next block boundary)
-  pending_variant: null,       // queued variant change waiting for block boundary
+  programme_variant: 'ppl_3x',  // fullbody_2x | ppl_3x
+  pending_variant: null,       // legacy queue value; cleared on boot/switch
   show_pr_summary: true,       // show end-of-session PR review
   // Gym launcher: tries scheme first, falls back to App Store URL
   gym_launch_scheme: 'scope.bit://',                                  // bundle ID-based scheme attempt
@@ -402,9 +480,12 @@ let settings = defaultSettings();
 function loadLocal() {
   try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch (e) {}
   try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) {}
+  const hadPendingVariant = Boolean(settings.pending_variant);
+  settings.pending_variant = null;
   // Always use the baked-in sync endpoint — no manual setup needed
   settings.sync_url = SYNC_URL;
   settings.sync_key = SYNC_KEY;
+  if (hadPendingVariant) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 function saveLocal() {
   state.last_sync = new Date().toISOString();
@@ -461,6 +542,13 @@ async function pullFromCloud() {
   }
   if (remote && remote.state_json) {
     state = { ...defaultState(), ...remote.state_json };
+    if (remote.settings_json) {
+      settings = { ...defaultSettings(), ...remote.settings_json };
+      settings.pending_variant = null;
+      settings.sync_url = SYNC_URL;
+      settings.sync_key = SYNC_KEY;
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     setSyncStatus('ok', 'Pulled from cloud');
     return true;
@@ -573,12 +661,12 @@ function cycleTheme() {
 // ---- Programme resolver --------------------------------------
 function getActiveProgramme() {
   if (state.programme_overrides) return state.programme_overrides;
-  const v = settings.programme_variant || 'fullbody_2x';
+  const v = settings.programme_variant || 'ppl_3x';
   if (v === 'ppl_3x' && RW.PROGRAMME_PPL) return RW.PROGRAMME_PPL;
   return RW.PROGRAMME;
 }
 function getActiveVariant() {
-  return settings.programme_variant || 'fullbody_2x';
+  return settings.programme_variant || 'ppl_3x';
 }
 
 // ---- Today's session resolver -------------------------------
@@ -730,6 +818,7 @@ function startSession(session) {
     started_at: new Date().toISOString(),
     exercises,
   };
+  focusExerciseIdx = null;
   // Block transition detection — toast on first session of a new block
   const prevBlock = state._last_toasted_block;
   const curBlock = state.current_block || 1;
@@ -752,6 +841,8 @@ function endSession() {
   if (!anyDone) {
     if (!confirm('No sets logged. Discard this session?')) return;
     state.active_session = null;
+    state.forced_next_session = null;
+    focusExerciseIdx = null;
     saveLocal();
     router('home');
     return;
@@ -764,6 +855,7 @@ function endSession() {
   state.active_session = null;
   state.forced_next_session = null;  // clear override after session ends
   state.msg_index = (state.msg_index + 1) % (RW.MOTIVATIONAL_MESSAGES?.length || 20);
+  focusExerciseIdx = null;
   saveLocal();
   // Show end-of-session screen instead of jumping to history
   showSessionEnd(finishedSession);
@@ -915,6 +1007,8 @@ function cancelRest() {
 }
 
 // ---- Renderers ---------------------------------------------
+let focusExerciseIdx = null;
+
 function render() {
   const route = window.location.hash.replace('#', '') || 'home';
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + route));
@@ -976,6 +1070,22 @@ function renderHome() {
     ));
   }
 
+  if (!state.active_session) {
+    const variant = getActiveVariant();
+    root.appendChild(h('div', { class: 'variant-switch' },
+      h('button', {
+        type: 'button',
+        class: variant === 'fullbody_2x' ? 'active' : '',
+        onClick: () => switchVariant('fullbody_2x'),
+      }, '2-day · Full body'),
+      h('button', {
+        type: 'button',
+        class: variant === 'ppl_3x' ? 'active' : '',
+        onClick: () => switchVariant('ppl_3x'),
+      }, '3-day · PPL'),
+    ));
+  }
+
   // Stats row
   root.appendChild(h('div', { class: 'stat-row' },
     h('div', { class: 'stat-tile' },
@@ -995,6 +1105,9 @@ function renderHome() {
     ),
   ));
 
+  const shownSession = planned || next.session;
+  const shortSessionName = (session) => session.name.split(' — ')[0];
+
   // Action button
   if (state.active_session) {
     root.appendChild(h('button', { class: 'btn primary full', onClick: () => render() },
@@ -1002,12 +1115,35 @@ function renderHome() {
     ));
   } else if (planned) {
     root.appendChild(h('button', { class: 'btn primary full', onClick: () => startSession(planned) },
-      '▶ Start ' + planned.name.split(' — ')[0]
+      '▶ Start ' + shortSessionName(planned)
     ));
   } else {
-    root.appendChild(h('button', { class: 'btn ghost full', onClick: () => startSession(next.session) },
-      'Train anyway: ' + next.session.name.split(' — ')[0]
+    root.appendChild(h('button', { class: 'btn primary full', onClick: () => startSession(next.session) },
+      '▶ Start ' + shortSessionName(next.session)
     ));
+  }
+  if (!state.active_session && shownSession) {
+    let chooserOpen = false;
+    const sessions = getActiveProgramme().sessions.filter(s => s.id !== shownSession.id);
+    if (sessions.length) {
+      const row = h('div', { class: 'alt-row session-chooser-row' },
+        sessions.map(s => h('button', {
+          type: 'button',
+          class: 'chip',
+          onClick: () => startSession(s),
+        }, shortSessionName(s)))
+      );
+      const toggle = h('button', {
+        type: 'button',
+        class: 'btn tiny ghost session-chooser-toggle',
+        onClick: () => {
+          chooserOpen = !chooserOpen;
+          row.classList.toggle('open', chooserOpen);
+          toggle.textContent = chooserOpen ? 'Choose a different session ▴' : 'Choose a different session ▾';
+        },
+      }, 'Choose a different session ▾');
+      root.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
+    }
   }
 
   // Active session detail
@@ -1015,7 +1151,6 @@ function renderHome() {
     root.appendChild(h('div', { class: 'spacer-24' }));
     const a = state.active_session;
     const session = getActiveProgramme().sessions.find(s => s.id === a.session_id);
-    a._currentSession = session;
 
     // Mood + playlist row
     if (session.mood) {
@@ -1051,12 +1186,12 @@ function renderHome() {
     if (settings.focus_mode) {
       // Find the next non-complete exercise
       const findNextIdx = () => exEntries.findIndex(([id, ex]) => !ex.sets.filter(s => !s.is_warmup).every(s => s.completed));
-      let curIdx = a._focus_idx;
+      let curIdx = focusExerciseIdx;
       if (curIdx == null || curIdx >= exEntries.length) {
         const ni = findNextIdx();
         curIdx = ni >= 0 ? ni : 0;
       }
-      a._focus_idx = curIdx;
+      focusExerciseIdx = curIdx;
 
       const total = exEntries.length;
       const doneCount = exEntries.filter(([_, ex]) => ex.sets.filter(s => !s.is_warmup).every(s => s.completed)).length;
@@ -1067,7 +1202,7 @@ function renderHome() {
           const allDone = ex.sets.filter(s => !s.is_warmup).every(s => s.completed);
           return h('div', {
             style: `flex:1; height:6px; border-radius:999px; cursor:pointer; background:${allDone ? 'var(--good)' : (i === curIdx ? 'var(--accent)' : 'var(--border)')}`,
-            onClick: () => { a._focus_idx = i; render(); }
+            onClick: () => { focusExerciseIdx = i; render(); }
           });
         })
       ));
@@ -1084,9 +1219,9 @@ function renderHome() {
 
       // Prev / Next nav
       root.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
-        h('button', { class: 'btn', style: 'flex:1;', onClick: () => { a._focus_idx = Math.max(0, curIdx - 1); render(); } }, '← Previous'),
+        h('button', { class: 'btn', style: 'flex:1;', onClick: () => { focusExerciseIdx = Math.max(0, curIdx - 1); render(); } }, '← Previous'),
         curIdx < total - 1
-          ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { a._focus_idx = curIdx + 1; render(); } }, 'Next exercise →')
+          ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { focusExerciseIdx = curIdx + 1; render(); } }, 'Next exercise →')
           : h('button', { class: 'btn primary', style: 'flex:2;', onClick: endSession }, '✓ Finish session'),
       ));
     } else {
@@ -1105,7 +1240,7 @@ function renderHome() {
       h('div', { class: 'spacer-12' }),
       h('button', { class: 'btn primary full', onClick: endSession }, '✓ Finish & save session'),
       h('div', { class: 'spacer-12' }),
-      h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm('Discard this session?')) { state.active_session = null; saveLocal(); render(); } } }, 'Discard session'),
+      h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm('Discard this session?')) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, 'Discard session'),
     ));
   } else {
     // Show today's planned exercises preview
@@ -1181,34 +1316,10 @@ function renderExerciseCard(ex_id, exState) {
   if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, 'Cue: '), ex.cue));
 
   // Videos — Library controls which are visible via state.video_hidden
-  const customVids = state.custom_videos[actualId] || [];
-  const jnUrl = getJNUrl(actualId);
-  const jnId = ytIdFromUrl(jnUrl);
-  const allVideos = [
-    ...(ex.mohannad || []).map((id, i) => ({
-      key: 'mohannad_' + i,
-      url: 'https://www.youtube.com/shorts/' + id, thumb: RW.thumb(id), label: 'Mohannad'
-    })),
-    ...(jnUrl ? [{
-      key: 'jn',
-      url: jnUrl,
-      thumb: jnId ? RW.thumb(jnId) : '',
-      label: jnHasCustomOverride(actualId) ? 'JN (custom)' : 'Jeff Nippard',
-      nippard: true
-    }] : []),
-    ...customVids.map((url, i) => {
-      const id = ytIdFromUrl(url);
-      return { key: 'custom_' + i, url, thumb: id ? RW.thumb(id) : '', label: 'Custom' };
-    })
-  ].filter(v => !isVideoHidden(actualId, v.key));
+  const allVideos = buildExerciseVideos(actualId, ex);
   if (allVideos.length) {
     const videoRow = h('div', { class: 'video-row' },
-      allVideos.map(v => h('a', {
-        href: v.url, target: '_blank', rel: 'noopener',
-        class: 'video-thumb' + (v.nippard ? ' nippard' : ''),
-        style: v.thumb ? `background-image:url('${v.thumb}')` : 'background:var(--bg-elev);',
-        title: v.label,
-      }))
+      allVideos.map(v => buildVideoTile(v))
     );
     body.appendChild(videoRow);
     // Note: video selection + JN URL editing live in Library, not here.
@@ -1486,19 +1597,7 @@ function renderLibExerciseCard(ex) {
     const body = h('div', { class: 'ex-body' });
     if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, '💡 '), ex.cue));
     const customVids = state.custom_videos[ex.id] || [];
-    const jnUrl = getJNUrl(ex.id);
-    const jnId = ytIdFromUrl(jnUrl);
-    const allVideos = [
-      ...(ex.mohannad || []).map((id, i) => ({
-        key: 'mohannad_' + i,
-        url: 'https://www.youtube.com/shorts/' + id, thumb: RW.thumb(id), label: 'M' + (i+1)
-      })),
-      ...(jnUrl ? [{ key: 'jn', url: jnUrl, thumb: jnId ? RW.thumb(jnId) : '', label: 'JN', nippard: true }] : []),
-      ...customVids.map((url, i) => {
-        const id = ytIdFromUrl(url);
-        return { key: 'custom_' + i, url, thumb: id ? RW.thumb(id) : '', label: '+', custom: true };
-      })
-    ];
+    const allVideos = buildExerciseVideos(ex.id, ex, { includeHidden: true });
     if (allVideos.length) {
       body.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:10px; margin-bottom:4px;' },
         'Tap to open. Tap the ⊘ corner toggle to hide it from the session view.'));
@@ -1509,12 +1608,7 @@ function renderLibExerciseCard(ex) {
             class: 'video-thumb-wrap' + (hidden ? ' hidden-video' : ''),
             style: 'position:relative;',
           });
-          const link = h('a', {
-            href: v.url, target: '_blank', rel: 'noopener',
-            class: 'video-thumb' + (v.nippard ? ' nippard' : ''),
-            style: v.thumb ? `background-image:url('${v.thumb}')` : 'background:var(--bg-elev);',
-            title: v.label,
-          });
+          const link = buildVideoTile(v);
           // Toggle button overlay
           const toggle = h('button', {
             type: 'button',
@@ -1860,22 +1954,18 @@ function renderSettings() {
   adv.appendChild(colorRow);
 
   // Programme variant
-  const variant = settings.programme_variant || 'fullbody_2x';
-  const queued = settings.pending_variant;
+  const variant = getActiveVariant();
   adv.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
       h('div', { class: 'name' }, 'Programme variant'),
-      h('div', { class: 'desc' },
-        queued
-          ? `Queued: ${VARIANTS[queued]?.label}. Will activate at next block boundary.`
-          : 'Locked to block boundaries. Switching mid-block destroys calibration data.'
-      ),
+      h('div', { class: 'desc' }, 'Switches immediately. History and weight suggestions stay per exercise.'),
     ),
     h('div', { style: 'display:flex; gap:6px;' },
       Object.entries(VARIANTS).map(([key, v]) =>
         h('button', {
-          class: 'btn tiny' + (variant === key ? ' primary' : (queued === key ? ' primary' : '')),
-          onClick: () => attemptVariantChange(key)
+          class: 'btn tiny' + (variant === key ? ' primary' : ''),
+          title: v.desc,
+          onClick: () => switchVariant(key)
         }, v.label)
       )
     ),
