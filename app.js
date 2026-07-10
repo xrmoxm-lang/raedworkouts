@@ -87,6 +87,7 @@ const toast = (msg, ms = 1800) => {
 // ---- State / storage layer ----------------------------------
 const STORAGE_KEY = 'raedworkouts.v1';
 const SETTINGS_KEY = 'raedworkouts.settings.v1';
+const LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
 
 // ---- RPE picker -----------------------------------------------
 // Maps emoji → numeric RPE used by the progression algorithm.
@@ -477,9 +478,16 @@ const defaultSettings = () => ({
 let state = defaultState();
 let settings = defaultSettings();
 
+function hasMeaningfulLocalData() {
+  return (state.history || []).length > 0 || Boolean(state.active_session) || (state.bodyweight_log || []).length > 0;
+}
+
 function loadLocal() {
   try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch (e) {}
   try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) {}
+  if (!localStorage.getItem(LAST_WRITE_KEY) && hasMeaningfulLocalData()) {
+    localStorage.setItem(LAST_WRITE_KEY, new Date().toISOString());
+  }
   const hadPendingVariant = Boolean(settings.pending_variant);
   settings.pending_variant = null;
   // Always use the baked-in sync endpoint — no manual setup needed
@@ -488,9 +496,11 @@ function loadLocal() {
   if (hadPendingVariant) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 function saveLocal() {
-  state.last_sync = new Date().toISOString();
+  const now = new Date().toISOString();
+  state.last_sync = now;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  localStorage.setItem(LAST_WRITE_KEY, now);
   if (settings.sync_url && settings.sync_key) {
     syncToCloud().catch(err => {
       setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
@@ -540,6 +550,12 @@ async function pullFromCloud() {
     if (/Sync 404/.test(e.message || '')) return false;
     throw e;
   }
+  const localLast = localStorage.getItem(LAST_WRITE_KEY) || '';
+  if (remote && remote.updated_at && localLast && String(remote.updated_at) <= localLast) {
+    if (hasMeaningfulLocalData()) syncToCloud().catch(() => {});
+    setSyncStatus('ok', 'Local newer — pushed');
+    return false;
+  }
   if (remote && remote.state_json) {
     state = { ...defaultState(), ...remote.state_json };
     if (remote.settings_json) {
@@ -550,6 +566,7 @@ async function pullFromCloud() {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(LAST_WRITE_KEY, remote.updated_at || new Date().toISOString());
     setSyncStatus('ok', 'Pulled from cloud');
     return true;
   }
@@ -2078,6 +2095,7 @@ function renderSettings() {
       if (!confirm('Wipe ALL local data? This cannot be undone (unless you have cloud sync set up and pull again).')) return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(SETTINGS_KEY);
+      localStorage.removeItem(LAST_WRITE_KEY);
       state = defaultState(); settings = defaultSettings();
       applyTheme(); render(); toast('Wiped.');
     }}, '🗑 Wipe local data'),
