@@ -1087,21 +1087,6 @@ function renderHome() {
     ));
   }
 
-  if (!state.active_session) {
-    const variant = getActiveVariant();
-    root.appendChild(h('div', { class: 'variant-switch' },
-      h('button', {
-        type: 'button',
-        class: variant === 'fullbody_2x' ? 'active' : '',
-        onClick: () => switchVariant('fullbody_2x'),
-      }, '2-day · Full body'),
-      h('button', {
-        type: 'button',
-        class: variant === 'ppl_3x' ? 'active' : '',
-        onClick: () => switchVariant('ppl_3x'),
-      }, '3-day · PPL'),
-    ));
-  }
 
   // Stats row
   root.appendChild(h('div', { class: 'stat-row' },
@@ -1934,6 +1919,30 @@ function renderSettings() {
     ),
   );
   root.appendChild(card);
+
+  // Programme (2-day / 3-day) — its own card, easy to find
+  const progVariant = getActiveVariant();
+  root.appendChild(h('div', { class: 'card' },
+    h('div', { class: 'setting-row' },
+      h('div', { class: 'label' },
+        h('div', { class: 'name' }, 'Programme'),
+        h('div', { class: 'desc' }, 'Switches immediately. History and weight suggestions stay per exercise.'),
+      ),
+      h('div', { class: 'variant-switch', style: 'margin:0;' },
+        h('button', {
+          type: 'button',
+          class: progVariant === 'fullbody_2x' ? 'active' : '',
+          onClick: () => switchVariant('fullbody_2x'),
+        }, '2-day'),
+        h('button', {
+          type: 'button',
+          class: progVariant === 'ppl_3x' ? 'active' : '',
+          onClick: () => switchVariant('ppl_3x'),
+        }, '3-day'),
+      ),
+    ),
+  ));
+
   root.appendChild(musicCard);
   root.appendChild(cloudCard);
 
@@ -1970,23 +1979,6 @@ function renderSettings() {
   );
   adv.appendChild(colorRow);
 
-  // Programme variant
-  const variant = getActiveVariant();
-  adv.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Programme variant'),
-      h('div', { class: 'desc' }, 'Switches immediately. History and weight suggestions stay per exercise.'),
-    ),
-    h('div', { style: 'display:flex; gap:6px;' },
-      Object.entries(VARIANTS).map(([key, v]) =>
-        h('button', {
-          class: 'btn tiny' + (variant === key ? ' primary' : ''),
-          title: v.desc,
-          onClick: () => switchVariant(key)
-        }, v.label)
-      )
-    ),
-  ));
 
   // PR summary toggle
   adv.appendChild(h('div', { class: 'setting-row' },
