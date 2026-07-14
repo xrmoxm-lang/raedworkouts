@@ -1,0 +1,17 @@
+{
+  "users": {
+    "raed": {
+      "display_name": "Raed",
+      "experience": "returning",
+      "bodyweight_kg": 82
+    },
+    "bassam": {
+      "display_name": "Bassam",
+      "experience": "returning"
+    },
+    "abdullah": {
+      "display_name": "Abdullah",
+      "experience": "beginner"
+    }
+  }
+}

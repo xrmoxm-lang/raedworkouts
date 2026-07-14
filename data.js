@@ -658,6 +658,12 @@ const ATHLETE = {
   ],
 };
 
+const FAMILY_PROFILES = [
+  { user_id: 'Raed', display_name: 'Raed', experience: 'returning', bodyweight_kg: 82, allowlisted: true },
+  { user_id: 'bassam', display_name: 'Bassam', experience: 'returning', bodyweight_kg: null, allowlisted: true },
+  { user_id: 'abdullah', display_name: 'Abdullah', experience: 'beginner', bodyweight_kg: null, allowlisted: true },
+];
+
 // ---- Motivational end-of-session messages -------------------
 // Rotate one per session. Mix of recovery/nutrition/process reminders.
 const MOTIVATIONAL_MESSAGES = [
@@ -684,4 +690,4 @@ const MOTIVATIONAL_MESSAGES = [
 ];
 
 // Export to global scope for the app
-window.RW = { MUSCLES, EXERCISES, PROGRAMME, PROGRAMME_PPL, ATHLETE, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };
+window.RW = { MUSCLES, EXERCISES, PROGRAMME, PROGRAMME_PPL, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };

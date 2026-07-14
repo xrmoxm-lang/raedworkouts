@@ -4,13 +4,13 @@
  *       · navigations  → network-first (always newest HTML when online, cache offline)
  *       · css/js/json   → stale-while-revalidate (instant from cache, refreshed in bg)
  *   - Images + YouTube thumbnails → cache-first (rarely change).
- *   - Supabase API → network-first (live data, cache fallback offline).
+ *   - Sync API → network-only. API failures must reject; never return HTML.
  *
  * IMPORTANT: bump VERSION on every deploy that changes app.js / styles.css /
  * index.html. The new SW installs in the background, calls skipWaiting(), and
  * the page (see app.js) reloads itself once to apply — no manual force-refresh.
  */
-const VERSION = 'v16';
+const VERSION = 'v17';
 const CACHE = 'raedworkouts-' + VERSION;
 const SHELL = [
   './',
@@ -51,15 +51,21 @@ self.addEventListener('message', (e) => {
 function isShellAsset(url) {
   return url.origin === location.origin && /\.(css|js|json|webmanifest)$/.test(url.pathname);
 }
+function isSyncHost(url) {
+  return url.hostname.endsWith('.ts.net') || url.hostname === 'raed-hp.tail53bd35.ts.net';
+}
+function isYoutubeThumb(url) {
+  return url.hostname === 'img.youtube.com';
+}
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // 1) Supabase API → network-first, cache fallback.
-  if (url.hostname.endsWith('supabase.co') || url.hostname.endsWith('supabase.in')) {
-    e.respondWith(fetch(req).catch(() => caches.match(req)));
+  // 1) Sync API → network-only. Offline callers should receive a real failure.
+  if (isSyncHost(url)) {
+    e.respondWith(fetch(req));
     return;
   }
 
@@ -94,17 +100,40 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 4) Everything else (images, YouTube thumbnails) → cache-first.
+  // 4) YouTube thumbnails → cache-first. They are stable and need offline support.
+  if (isYoutubeThumb(url)) {
+    e.respondWith(
+      caches.match(req).then(cached => {
+        if (cached) return cached;
+        return fetch(req).then(res => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        }).catch(() => caches.match(req));
+      })
+    );
+    return;
+  }
+
+  // 5) Cross-origin non-navigation requests → network-only. Do not fallback to app HTML.
+  if (url.origin !== location.origin) {
+    e.respondWith(fetch(req));
+    return;
+  }
+
+  // 6) Everything else same-origin (images) → cache-first.
   e.respondWith(
     caches.match(req).then(cached => {
       if (cached) return cached;
       return fetch(req).then(res => {
-        if (res.ok && (url.origin === location.origin || url.hostname.endsWith('youtube.com'))) {
+        if (res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
         }
         return res;
-      }).catch(() => caches.match('./index.html'));
+      }).catch(() => caches.match(req));
     })
   );
 });

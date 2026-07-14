@@ -1,0 +1,8 @@
+[Unit]
+Description=Raedworkouts SQLite backup
+
+[Service]
+Type=oneshot
+User=raed
+WorkingDirectory=/home/raed/raedsync
+ExecStart=/home/raed/raedsync/backup.sh auto

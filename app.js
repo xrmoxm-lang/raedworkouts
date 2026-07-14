@@ -4,10 +4,11 @@
    ============================================================ */
 
 // Self-hosted sync — always-on on Raed's HP server (Tailscale Funnel, public
-// HTTPS, secret-key gated). Replaces the sleep-prone Supabase free tier.
+// HTTPS, secret-key gated). The server owns revisions, backups, and merges.
 // The key is a shared secret in client JS (same trust model as the old anon key).
 const SYNC_URL = 'https://raed-hp.tail53bd35.ts.net:8443';
 const SYNC_KEY = 'aa1b222bcdab4b048e7b44d85dca087946a6212314852b4b';
+const SYNC_OVERRIDE_KEY = 'raedworkouts_sync_override';
 
 // ---- Tiny utility helpers -----------------------------------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -76,18 +77,48 @@ function applyLang() {
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const fmtTime = (d) => new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 const todayISO = () => new Date().toISOString().slice(0,10);
-const toast = (msg, ms = 1800) => {
+const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
-  t.textContent = msg;
+  t.innerHTML = '';
+  t.appendChild(document.createTextNode(msg));
+  if (actionLabel && actionFn) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = actionLabel;
+    btn.addEventListener('click', () => { t.classList.remove('show'); actionFn(); });
+    t.appendChild(btn);
+  }
   t.classList.add('show');
   clearTimeout(toast._timer);
   toast._timer = setTimeout(() => t.classList.remove('show'), ms);
 };
 
 // ---- State / storage layer ----------------------------------
-const STORAGE_KEY = 'raedworkouts.v1';
-const SETTINGS_KEY = 'raedworkouts.settings.v1';
-const LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
+const LEGACY_STORAGE_KEY = 'raedworkouts.v1';
+const LEGACY_SETTINGS_KEY = 'raedworkouts.settings.v1';
+const LEGACY_LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
+const ACTIVE_USER_KEY = 'raedworkouts.active_user';
+const PROFILE_INDEX_KEY = 'raedworkouts.profiles.v1';
+
+function getSyncUrl() {
+  try {
+    return (localStorage.getItem(SYNC_OVERRIDE_KEY) || '').trim() || SYNC_URL;
+  } catch (_) {
+    return SYNC_URL;
+  }
+}
+function encodeUserKey(userId) {
+  return encodeURIComponent(String(userId || '').trim());
+}
+function nsKey(userId, suffix) {
+  return `raedworkouts.${encodeUserKey(userId)}.${suffix}.v1`;
+}
+function stateKey(userId) { return nsKey(userId, 'state'); }
+function settingsKey(userId) { return nsKey(userId, 'settings'); }
+function lastWriteKey(userId) { return nsKey(userId, 'lastwrite'); }
+function lastRevKey(userId) { return nsKey(userId, 'lastrev'); }
+function preRestoreKey(userId) { return nsKey(userId, 'prerestore'); }
+function dirtyKey(userId) { return nsKey(userId, 'dirty'); }
 
 // ---- RPE picker -----------------------------------------------
 // Maps emoji → numeric RPE used by the progression algorithm.
@@ -438,6 +469,7 @@ const defaultState = () => ({
   schema_version: 2,
   current_week: 1,
   current_block: 1,
+  profile: null,                // { display_name, experience, bodyweight_kg, created_at }
   active_session: null,        // { date, session_id, started_at, exercises: {...} }
   history: [],                 // [{ date, session_id, started_at, ended_at, notes, exercises: {...}, swaps: {...} }]
   bodyweight_log: [],          // [{ date, kg }]
@@ -470,78 +502,420 @@ const defaultSettings = () => ({
   gym_launch_override: '',     // user-set custom URL (e.g. shortcuts://run-shortcut?name=Open%20IN2)
   sync_url: SYNC_URL,
   sync_key: SYNC_KEY,
+  user_key: '',                 // sha256(user_id_lower + ':' + pin); local-only, never synced
   user_id: '',
+  pending_registration: null,   // local-only retry data when first profile setup happens offline
+  needs_pin_reauth: false,      // local-only: PIN exists server-side, but this browser needs the key
+  pin_prompt_dismissed_at: '',
   block_auto_color: true,
   lang: 'en',
 });
 
 let state = defaultState();
 let settings = defaultSettings();
+let syncDirty = false;
+let syncTimer = null;
+let syncInFlight = false;
+let syncInFlightPromise = null;
+let activeUser = '';
+let welcomeProfiles = null;
+let welcomeLoading = false;
+let welcomePreselectUser = '';
+let welcomeMode = 'tiles';
+let welcomeSelectedProfile = null;
+let welcomePinMessage = '';
+let suppressNextPush = false;
 
 function hasMeaningfulLocalData() {
   return (state.history || []).length > 0 || Boolean(state.active_session) || (state.bodyweight_log || []).length > 0;
 }
 
+function familyProfileSeeds() {
+  return RW.FAMILY_PROFILES || [
+    { user_id: 'Raed', display_name: 'Raed', experience: 'returning', bodyweight_kg: 82, allowlisted: true },
+    { user_id: 'bassam', display_name: 'Bassam', experience: 'returning', allowlisted: true },
+    { user_id: 'abdullah', display_name: 'Abdullah', experience: 'beginner', allowlisted: true },
+  ];
+}
+function fallbackProfile(userId) {
+  const seed = familyProfileSeeds().find(p => String(p.user_id).toLowerCase() === String(userId || '').toLowerCase());
+  return {
+    display_name: seed?.display_name || userId || '',
+    experience: seed?.experience || 'returning',
+    bodyweight_kg: seed?.bodyweight_kg ?? null,
+    created_at: new Date().toISOString(),
+  };
+}
+function ensureProfile() {
+  if (!state.profile || typeof state.profile !== 'object') {
+    state.profile = fallbackProfile(settings.user_id || activeUser);
+  }
+  if (!state.profile.display_name) state.profile.display_name = settings.user_id || activeUser || '';
+  if (!state.profile.experience) state.profile.experience = 'returning';
+  if (!state.profile.created_at) state.profile.created_at = new Date().toISOString();
+}
+function registerLocalProfile(profile) {
+  const list = getLocalProfiles().filter(p => String(p.user_id).toLowerCase() !== String(profile.user_id).toLowerCase());
+  list.push({
+    user_id: profile.user_id,
+    display_name: profile.display_name || profile.user_id,
+    experience: profile.experience || 'returning',
+    updated_at: new Date().toISOString(),
+  });
+  localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(list));
+}
+function getLocalProfiles() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_INDEX_KEY) || '[]'); } catch (_) { return []; }
+}
+function getActiveUser() {
+  return localStorage.getItem(ACTIVE_USER_KEY) || '';
+}
+function setActiveUser(userId) {
+  activeUser = userId || '';
+  if (activeUser) localStorage.setItem(ACTIVE_USER_KEY, activeUser);
+  else localStorage.removeItem(ACTIVE_USER_KEY);
+}
+function readLastRev(userId = settings.user_id) {
+  const raw = localStorage.getItem(lastRevKey(userId));
+  return raw ? parseInt(raw, 10) : null;
+}
+function writeLastRev(rev, userId = settings.user_id) {
+  if (!userId) return;
+  if (rev == null || Number.isNaN(Number(rev))) localStorage.removeItem(lastRevKey(userId));
+  else localStorage.setItem(lastRevKey(userId), String(rev));
+}
+function readDirtyMarker(userId = settings.user_id) {
+  return !!userId && localStorage.getItem(dirtyKey(userId)) === '1';
+}
+function writeDirtyMarker(userId = settings.user_id) {
+  if (userId) localStorage.setItem(dirtyKey(userId), '1');
+}
+function clearDirtyMarker(userId = settings.user_id) {
+  if (userId) localStorage.removeItem(dirtyKey(userId));
+}
+function backfillSessionUids() {
+  let changed = false;
+  const makeUid = () => (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : ('sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)));
+  (state.history || []).forEach(sess => {
+    if (sess && !sess.uid) { sess.uid = makeUid(); changed = true; }
+  });
+  if (state.active_session && !state.active_session.uid) {
+    state.active_session.uid = makeUid();
+    changed = true;
+  }
+  return changed;
+}
+function stripForSync(value, mode = 'state') {
+  if (Array.isArray(value)) return value.map(v => stripForSync(v, mode));
+  if (!value || typeof value !== 'object') return value;
+  const deny = mode === 'settings'
+    ? new Set(['sync_key', 'sync_url', 'user_key', 'last_rev', 'pending_variant', 'pending_registration', 'needs_pin_reauth'])
+    : new Set(['last_sync']);
+  const out = {};
+  Object.entries(value).forEach(([k, v]) => {
+    if (k.startsWith('_') || deny.has(k)) return;
+    out[k] = stripForSync(v, mode);
+  });
+  return out;
+}
+function syncStatePayload() {
+  const clean = stripForSync(state, 'state');
+  clean.profile = clean.profile || fallbackProfile(settings.user_id);
+  return clean;
+}
+function syncSettingsPayload() {
+  return stripForSync(settings, 'settings');
+}
+function profileProteinRange() {
+  const kg = parseFloat(state.profile?.bodyweight_kg || RW.ATHLETE?.bodyweight_kg || 82);
+  const low = Math.round(kg * 1.6);
+  const high = Math.round(kg * 2.2);
+  return `${low}-${high} g`;
+}
+function migrationUserFromLegacy(legacySettings) {
+  if (legacySettings?.user_id) return legacySettings.user_id;
+  const urlUser = new URLSearchParams(window.location.search).get('user');
+  return urlUser || '';
+}
+function migrateLegacyStorage() {
+  const legacyStateRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+  const legacySettingsRaw = localStorage.getItem(LEGACY_SETTINGS_KEY);
+  if (!legacyStateRaw && !legacySettingsRaw) return;
+  let legacySettings = {};
+  try { legacySettings = JSON.parse(legacySettingsRaw || '{}'); } catch (_) {}
+  const userId = migrationUserFromLegacy(legacySettings);
+  if (!userId) return;
+  if (!localStorage.getItem(stateKey(userId)) && legacyStateRaw) localStorage.setItem(stateKey(userId), legacyStateRaw);
+  if (!localStorage.getItem(settingsKey(userId)) && legacySettingsRaw) localStorage.setItem(settingsKey(userId), legacySettingsRaw);
+  const lw = localStorage.getItem(LEGACY_LAST_WRITE_KEY);
+  if (lw && !localStorage.getItem(lastWriteKey(userId))) localStorage.setItem(lastWriteKey(userId), lw);
+  setActiveUser(userId);
+  registerLocalProfile({ user_id: userId, display_name: userId, experience: legacySettings.profile?.experience || 'returning' });
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_SETTINGS_KEY);
+  localStorage.removeItem(LEGACY_LAST_WRITE_KEY);
+}
 function loadLocal() {
-  try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; } catch (e) {}
-  try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch (e) {}
-  if (!localStorage.getItem(LAST_WRITE_KEY) && hasMeaningfulLocalData()) {
-    localStorage.setItem(LAST_WRITE_KEY, new Date().toISOString());
+  migrateLegacyStorage();
+  activeUser = getActiveUser();
+  state = defaultState();
+  settings = defaultSettings();
+  if (activeUser) {
+    try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(stateKey(activeUser)) || '{}') }; } catch (e) {}
+    try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(settingsKey(activeUser)) || '{}') }; } catch (e) {}
+    settings.user_id = settings.user_id || activeUser;
+    activeUser = settings.user_id;
+    setActiveUser(activeUser);
+  }
+  if (activeUser && !localStorage.getItem(lastWriteKey(activeUser)) && hasMeaningfulLocalData()) {
+    localStorage.setItem(lastWriteKey(activeUser), new Date().toISOString());
   }
   const hadPendingVariant = Boolean(settings.pending_variant);
   settings.pending_variant = null;
   // Always use the baked-in sync endpoint — no manual setup needed
-  settings.sync_url = SYNC_URL;
+  settings.sync_url = getSyncUrl();
   settings.sync_key = SYNC_KEY;
-  if (hadPendingVariant) localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  if (settings.user_id) {
+    ensureProfile();
+    backfillSessionUids();
+    syncDirty = readDirtyMarker(settings.user_id);
+    registerLocalProfile({ user_id: settings.user_id, ...state.profile });
+    localStorage.setItem(settingsKey(settings.user_id), JSON.stringify(settings));
+    localStorage.setItem(stateKey(settings.user_id), JSON.stringify(state));
+  } else {
+    syncDirty = false;
+  }
+  if (hadPendingVariant && settings.user_id) localStorage.setItem(settingsKey(settings.user_id), JSON.stringify(settings));
 }
-function saveLocal() {
+function persistLocal() {
+  if (!settings.user_id) return;
   const now = new Date().toISOString();
   state.last_sync = now;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  localStorage.setItem(LAST_WRITE_KEY, now);
-  if (settings.sync_url && settings.sync_key) {
-    syncToCloud().catch(err => {
-      setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
-      if (!saveLocal._toastShown) {
-        saveLocal._toastShown = true;
-        toast('Cloud sync failed — check Settings → Cloud sync.', 3500);
-      }
+  settings.sync_url = getSyncUrl();
+  settings.sync_key = SYNC_KEY;
+  ensureProfile();
+  backfillSessionUids();
+  localStorage.setItem(stateKey(settings.user_id), JSON.stringify(state));
+  localStorage.setItem(settingsKey(settings.user_id), JSON.stringify(settings));
+  localStorage.setItem(lastWriteKey(settings.user_id), now);
+  registerLocalProfile({ user_id: settings.user_id, ...state.profile });
+}
+function markDirty() {
+  syncDirty = true;
+  writeDirtyMarker(settings.user_id);
+  setSyncStatus(navigator.onLine === false ? 'err' : 'off', navigator.onLine === false ? 'Pending — offline' : 'Pending sync');
+}
+function schedulePush(delay = 2500) {
+  if (!settings.user_id || !settings.sync_url || !settings.sync_key) return;
+  clearScheduledPush();
+  syncTimer = setTimeout(() => flushSync().catch(() => {}), delay);
+}
+function clearScheduledPush() {
+  clearTimeout(syncTimer);
+  syncTimer = null;
+}
+async function quiesceSyncPipeline() {
+  clearScheduledPush();
+  if (syncInFlightPromise) await syncInFlightPromise.catch(() => false);
+  clearScheduledPush();
+}
+function saveLocal(opts = {}) {
+  const { sync = true, dirty = true } = opts;
+  persistLocal();
+  if (dirty) markDirty();
+  if (sync && dirty && !suppressNextPush) schedulePush();
+}
+function applyRemotePayload(remote) {
+  const localUserId = settings.user_id || remote.user_id;
+  const localUserKey = settings.user_key || '';
+  const localLang = settings.lang;
+  const localTheme = settings.theme;
+  const remoteState = remote.state_json || remote.state || {};
+  const remoteSettings = remote.settings_json || remote.settings || {};
+  state = { ...defaultState(), ...remoteState };
+  settings = { ...defaultSettings(), ...remoteSettings };
+  settings.user_id = remote.user_id || localUserId;
+  settings.user_key = localUserKey;
+  settings.lang = settings.lang || localLang;
+  settings.theme = settings.theme || localTheme;
+  settings.pending_variant = null;
+  settings.sync_url = getSyncUrl();
+  settings.sync_key = SYNC_KEY;
+  setActiveUser(settings.user_id);
+  ensureProfile();
+  backfillSessionUids();
+  writeLastRev(remote.rev || remote.latest_rev, settings.user_id);
+  syncDirty = false;
+  clearDirtyMarker(settings.user_id);
+  persistLocal();
+}
+function syncAuthBody() {
+  return {
+    _auth_token: settings.sync_key,
+    _auth_user_key: settings.user_key || '',
+  };
+}
+function syncErrorStatus(err) {
+  const match = String(err?.message || '').match(/Sync\s+(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+function isNetworkError(err) {
+  const msg = String(err?.message || err || '');
+  if (/^Sync\s+\d+/.test(msg)) return false;
+  return err instanceof TypeError || /Failed to fetch|NetworkError|Load failed|internet connection|offline/i.test(msg);
+}
+function pinErrorMessage(err) {
+  const status = syncErrorStatus(err);
+  if (status === 401) return 'Wrong PIN. Try again.';
+  if (status === 429) return 'Too many tries — wait 15 min.';
+  if (isNetworkError(err)) return "Can't reach the server — check connection.";
+  return 'Could not verify PIN.';
+}
+async function retryPendingRegistration() {
+  const pending = settings.pending_registration;
+  if (!pending || !settings.user_id) return true;
+  try {
+    const res = await syncFetch('/register', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: pending.user_id || settings.user_id, pin: pending.pin, _auth_token: settings.sync_key }),
     });
+    settings.user_id = res.user_id || settings.user_id;
+    settings.user_key = res.user_key || await deriveUserKey(settings.user_id, pending.pin);
+    settings.pending_registration = null;
+    settings.needs_pin_reauth = false;
+    setActiveUser(settings.user_id);
+    persistLocal();
+    return true;
+  } catch (err) {
+    const status = syncErrorStatus(err);
+    if (isNetworkError(err)) {
+      setSyncStatus('err', 'Registration pending — offline');
+      return true;
+    }
+    if (status === 409 || /pin_already_set/.test(String(err?.message || ''))) {
+      settings.pending_registration = null;
+      settings.needs_pin_reauth = true;
+      syncDirty = true;
+      writeDirtyMarker(settings.user_id);
+      persistLocal();
+      render();
+      toast('Enter your PIN to reconnect sync.', 3500);
+      return false;
+    }
+    throw err;
   }
 }
 
 // ---- Cloud sync (self-hosted on Raed's HP server) ----------
 async function syncFetch(path, opts = {}) {
-  const url = settings.sync_url.replace(/\/$/, '') + path;
-  const headers = {
-    'Authorization': 'Bearer ' + settings.sync_key,
-    'Content-Type': 'application/json',
-    ...(opts.headers || {})
-  };
+  const base = (settings.sync_url || getSyncUrl()).replace(/\/$/, '');
+  const url = base + path;
+  const headers = { ...(opts.headers || {}) };
+  if (settings.sync_key) headers.Authorization = 'Bearer ' + settings.sync_key;
+  if (settings.user_key) headers['X-User-Key'] = settings.user_key;
+  if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   const res = await fetch(url, { ...opts, headers });
   if (!res.ok) throw new Error(`Sync ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
-async function syncToCloud() {
-  if (!settings.sync_url || !settings.sync_key || !settings.user_id) return;
-  await syncFetch('/state', {
-    method: 'POST',
-    body: JSON.stringify({
-      user_id: settings.user_id,
-      state_json: state,
-      settings_json: settings,
-      updated_at: new Date().toISOString(),
-    }),
-  });
-  setSyncStatus('ok', 'Synced ' + fmtTime(Date.now()));
-  saveLocal._toastShown = false;  // reset so next failure is visible again
+async function syncToCloud(opts = {}) {
+  if (!settings.sync_url || !settings.sync_key || !settings.user_id) return false;
+  if (settings.pending_registration && !opts.beacon) {
+    const canContinue = await retryPendingRegistration();
+    if (!canContinue) return false;
+  }
+  const userIdAtStart = settings.user_id;
+  const bodyObj = {
+    user_id: settings.user_id,
+    state_json: syncStatePayload(),
+    settings_json: syncSettingsPayload(),
+    updated_at: new Date().toISOString(),
+    base_rev: readLastRev(settings.user_id),
+    ...(opts.mode ? { mode: opts.mode } : {}),
+    ...(opts.beaconAuth ? syncAuthBody() : {}),
+  };
+  const body = JSON.stringify(bodyObj);
+  if (opts.beacon && navigator.sendBeacon) {
+    const url = settings.sync_url.replace(/\/$/, '') + '/state';
+    return navigator.sendBeacon(url, new Blob([body], { type: 'text/plain' }));
+  }
+  syncDirty = false;
+  let response;
+  try {
+    response = await syncFetch('/state', {
+      method: 'POST',
+      body,
+      ...(opts.keepalive ? { keepalive: true } : {}),
+    });
+  } catch (err) {
+    syncDirty = true;
+    writeDirtyMarker(userIdAtStart);
+    throw err;
+  }
+  const rev = response?.rev || response?.latest_rev;
+  if (response?.merged === true) {
+    if (syncDirty) {
+      setSyncStatus('off', 'Merged remotely — pending local edits');
+      saveLocal._toastShown = false;
+      return true;
+    }
+    applyRemotePayload(response);
+    applyTheme();
+    render();
+  } else if (rev) {
+    writeLastRev(rev, userIdAtStart);
+    if (!syncDirty) clearDirtyMarker(userIdAtStart);
+  }
+  setSyncStatus('ok', (response?.merged ? 'Merged + synced ' : 'Synced ') + fmtTime(Date.now()));
+  saveLocal._toastShown = false;
+  return true;
+}
+
+async function flushSync(opts = {}) {
+  if (!settings.user_id) return false;
+  while (true) {
+    if (syncInFlightPromise) {
+      const inFlightOk = await syncInFlightPromise.catch(() => false);
+      if (!inFlightOk) return false;
+      if (syncDirty || readDirtyMarker(settings.user_id)) continue;
+      return true;
+    }
+    if (!syncDirty && !readDirtyMarker(settings.user_id)) return true;
+    if (navigator.onLine === false) {
+      setSyncStatus('err', 'Pending — offline');
+      return false;
+    }
+    clearScheduledPush();
+    let ok = false;
+    let run;
+    syncInFlight = true;
+    run = (async () => {
+      try {
+        ok = await syncToCloud(opts);
+        return ok;
+      } catch (err) {
+        setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
+        if (!saveLocal._toastShown) {
+          saveLocal._toastShown = true;
+          toast('Cloud sync failed — saved locally.', 3500);
+        }
+        return false;
+      } finally {
+        syncInFlight = false;
+        if (syncInFlightPromise === run) syncInFlightPromise = null;
+        if (syncDirty) schedulePush(ok ? 2500 : 60000);
+      }
+    })();
+    syncInFlightPromise = run;
+    const pushed = await run;
+    if (!pushed) return false;
+  }
 }
 
 async function pullFromCloud() {
   if (!settings.sync_url || !settings.sync_key || !settings.user_id) return false;
+  if (syncDirty || readDirtyMarker(settings.user_id)) return flushSync();
   let remote;
   try {
     remote = await syncFetch('/state?user=' + encodeURIComponent(settings.user_id));
@@ -550,23 +924,12 @@ async function pullFromCloud() {
     if (/Sync 404/.test(e.message || '')) return false;
     throw e;
   }
-  const localLast = localStorage.getItem(LAST_WRITE_KEY) || '';
-  if (remote && remote.updated_at && localLast && String(remote.updated_at) <= localLast) {
-    if (hasMeaningfulLocalData()) syncToCloud().catch(() => {});
-    setSyncStatus('ok', 'Local newer — pushed');
+  if (remote?.latest_rev && readLastRev(settings.user_id) === remote.latest_rev) {
+    setSyncStatus('ok', 'Synced');
     return false;
   }
   if (remote && remote.state_json) {
-    state = { ...defaultState(), ...remote.state_json };
-    if (remote.settings_json) {
-      settings = { ...defaultSettings(), ...remote.settings_json };
-      settings.pending_variant = null;
-      settings.sync_url = SYNC_URL;
-      settings.sync_key = SYNC_KEY;
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    localStorage.setItem(LAST_WRITE_KEY, remote.updated_at || new Date().toISOString());
+    applyRemotePayload(remote);
     setSyncStatus('ok', 'Pulled from cloud');
     return true;
   }
@@ -596,35 +959,387 @@ async function testCloudConnection() {
   }
 }
 
-function showNameModal() {
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function deriveUserKey(userId, pin) {
+  return sha256Hex(`${String(userId).toLowerCase()}:${pin}`);
+}
+async function loadWelcomeProfiles() {
+  if (welcomeLoading) return;
+  welcomeLoading = true;
+  try {
+    const rows = await syncFetch('/users');
+    const merged = [...rows];
+    getLocalProfiles().forEach(local => {
+      if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
+    });
+    familyProfileSeeds().forEach(seed => {
+      if (!merged.some(p => String(p.user_id).toLowerCase() === String(seed.user_id).toLowerCase())) merged.push(seed);
+    });
+    welcomeProfiles = merged;
+  } catch (_) {
+    const merged = [...familyProfileSeeds()];
+    getLocalProfiles().forEach(local => {
+      if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
+    });
+    welcomeProfiles = merged;
+  } finally {
+    welcomeLoading = false;
+    if (!settings.user_id) renderWelcome();
+  }
+}
+function selectProfile(profile) {
+  welcomeSelectedProfile = profile;
+  welcomePinMessage = '';
+  welcomeMode = profile.has_pin ? 'pin' : 'register';
+  renderWelcome();
+}
+function finishLocalSignIn(userId, profile, userKey = '') {
+  settings = { ...defaultSettings(), user_id: userId, user_key: userKey, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  state = { ...defaultState(), profile: {
+    display_name: profile?.display_name || userId,
+    experience: profile?.experience || 'returning',
+    bodyweight_kg: profile?.bodyweight_kg ?? null,
+    created_at: new Date().toISOString(),
+  }};
+  setActiveUser(userId);
+  persistLocal();
+  syncDirty = false;
+  clearDirtyMarker(userId);
+  render();
+}
+async function verifyPin(profile, pin) {
+  const userId = profile.user_id;
+  const key = await deriveUserKey(userId, pin);
+  const prev = settings;
+  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId, user_key: key };
+  try {
+    const remote = await syncFetch('/state?user=' + encodeURIComponent(userId));
+    applyRemotePayload({ ...remote, user_id: remote.user_id || userId });
+    toast('Signed in.');
+    applyTheme();
+    render();
+  } catch (e) {
+    settings = prev;
+    throw e;
+  }
+}
+async function verifyReconnectPin(pin) {
+  const userId = settings.user_id;
+  if (!userId) throw new Error('No active profile.');
+  const key = await deriveUserKey(userId, pin);
+  const previousKey = settings.user_key;
+  settings.user_key = key;
+  try {
+    await syncFetch('/state?user=' + encodeURIComponent(userId));
+    settings.needs_pin_reauth = false;
+    settings.pending_registration = null;
+    saveLocal({ sync: false, dirty: false });
+    markDirty();
+    toast('Sync reconnected.');
+    render();
+    flushSync().catch(() => {});
+  } catch (e) {
+    settings.user_key = previousKey;
+    throw e;
+  }
+}
+async function registerProfile(profile, pin, bodyweight) {
+  const body = {
+    user_id: profile.user_id || profile.display_name,
+    pin,
+    _auth_token: SYNC_KEY,
+  };
+  const prev = settings;
+  let claimed = false;
+  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  try {
+    const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify(body) });
+    const userId = res.user_id || profile.user_id;
+    const userKey = res.user_key || await deriveUserKey(userId, pin);
+    claimed = true;
+    finishLocalSignIn(userId, { ...profile, bodyweight_kg: bodyweight ?? profile.bodyweight_kg }, userKey);
+    state.profile.experience = profile.experience || state.profile.experience || 'returning';
+    if (bodyweight) {
+      state.profile.bodyweight_kg = bodyweight;
+      state.bodyweight_log = [{ date: todayISO(), kg: bodyweight }];
+    }
+    saveLocal({ sync: false, dirty: false });
+    const pushed = await syncToCloud().catch(err => {
+      syncDirty = true;
+      writeDirtyMarker(userId);
+      setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
+      schedulePush(60000);
+      return false;
+    });
+    toast(pushed ? 'Profile ready.' : 'Profile ready locally. Cloud sync is pending.', pushed ? 1800 : 3500);
+    applyTheme();
+    render();
+  } catch (e) {
+    if (!claimed) settings = prev;
+    throw e;
+  }
+}
+function renderPinPad(profile) {
+  let pin = '';
+  let checking = false;
+  const dots = h('div', { class: 'pin-dots' }, [0,1,2,3].map(i => h('span', { class: i < pin.length ? 'filled' : '' })));
+  const status = h('div', { class: 'tiny muted', style: 'min-height:18px;' }, welcomePinMessage || 'Enter your PIN');
+  const refresh = () => {
+    dots.innerHTML = '';
+    [0,1,2,3].forEach(i => dots.appendChild(h('span', { class: i < pin.length ? 'filled' : '' })));
+  };
+  const submit = async () => {
+    if (checking || pin.length !== 4) return;
+    checking = true;
+    status.textContent = 'Checking...';
+    try {
+      await verifyPin(profile, pin);
+    } catch (e) {
+      pin = '';
+      checking = false;
+      status.textContent = pinErrorMessage(e);
+      dots.classList.add('shake');
+      setTimeout(() => dots.classList.remove('shake'), 350);
+      refresh();
+    }
+  };
+  const keys = ['1','2','3','4','5','6','7','8','9','←','0','OK'];
+  return h('div', { class: 'pin-panel' },
+    h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
+    h('h2', {}, profile.display_name || profile.user_id),
+    dots,
+    status,
+    h('div', { class: 'pin-grid' }, keys.map(k => h('button', {
+      type: 'button',
+      class: 'pin-key' + (k === 'OK' ? ' ok' : ''),
+      onClick: () => {
+        if (k === '←') pin = pin.slice(0, -1);
+        else if (k === 'OK') submit();
+        else if (pin.length < 4) pin += k;
+        refresh();
+        if (pin.length === 4) submit();
+      }
+    }, k)))
+  );
+}
+function renderRegisterPanel(profile) {
+  const pin1 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN' });
+  const pin2 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: 'Repeat PIN' });
+  const bw = h('input', { type: 'number', inputmode: 'decimal', step: '0.1', placeholder: 'Bodyweight kg (optional)', value: profile.bodyweight_kg ?? '' });
+  const exp = h('select', {},
+    ['beginner','returning','experienced'].map(v => h('option', { value: v, ...(profile.experience === v ? { selected: '' } : {}) },
+      v === 'beginner' ? 'New to the gym' : v === 'returning' ? 'Trained before, coming back' : 'Currently training'
+    ))
+  );
+  const status = h('div', { class: 'tiny muted' }, '');
+  return h('div', { class: 'register-panel card' },
+    h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
+    h('h2', {}, profile.display_name || profile.user_id),
+    h('p', { class: 'muted' }, 'Create a PIN. Your workout data stays separate.'),
+    h('label', {}, 'Experience', exp),
+    h('label', {}, 'PIN', pin1),
+    h('label', {}, 'Repeat PIN', pin2),
+    h('label', {}, 'Bodyweight', bw),
+    status,
+    h('button', { class: 'btn primary full', onClick: async () => {
+      const p1 = pin1.value.trim();
+      const p2 = pin2.value.trim();
+      if (!/^\d{4}$/.test(p1)) { status.textContent = 'Use a 4 digit PIN.'; return; }
+      if (p1 !== p2) { status.textContent = 'PINs do not match.'; return; }
+      status.textContent = 'Creating profile...';
+      try {
+        await registerProfile({ ...profile, experience: exp.value }, p1, parseFloat(bw.value) || null);
+      } catch (e) {
+        const statusCode = syncErrorStatus(e);
+        if (statusCode === 409 || /pin_already_set/.test(e.message || '')) {
+          welcomeSelectedProfile = { ...profile, has_pin: true };
+          welcomePinMessage = 'This profile already has a PIN — enter it.';
+          welcomeMode = 'pin';
+          renderWelcome();
+          return;
+        }
+        if (statusCode === 403 || /not_allowlisted/.test(e.message || '')) {
+          status.textContent = 'Ask Raed to add this name first.';
+          return;
+        }
+        if (!isNetworkError(e)) {
+          status.textContent = e.message || 'Could not create profile.';
+          return;
+        }
+        const localId = profile.user_id || (profile.display_name || '').trim();
+        const userKey = await deriveUserKey(localId, p1);
+        finishLocalSignIn(localId, { ...profile, experience: exp.value, bodyweight_kg: parseFloat(bw.value) || null }, userKey);
+        settings.pending_registration = { user_id: localId, pin: p1 };
+        saveLocal({ sync: false });
+        toast('Offline profile created. It will connect when the server is reachable.', 3500);
+      }
+    }}, 'Create profile')
+  );
+}
+function renderSomeoneElsePanel() {
+  const name = h('input', { type: 'text', placeholder: 'Name' });
+  const status = h('div', { class: 'tiny muted' }, 'Only Raed-approved names can register.');
+  return h('div', { class: 'register-panel card' },
+    h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
+    h('h2', {}, 'Someone else?'),
+    h('label', {}, 'Name', name),
+    status,
+    h('button', { class: 'btn primary full', onClick: () => {
+      const value = name.value.trim();
+      if (!value) return;
+      welcomeSelectedProfile = { user_id: value, display_name: value, experience: 'beginner' };
+      welcomeMode = 'register';
+      renderWelcome();
+    }}, 'Continue')
+  );
+}
+function renderWelcome() {
+  document.body.classList.add('welcome-mode');
+  const root = $('#page-home');
+  $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-home'));
+  $$('.tab').forEach(t => t.classList.remove('active'));
+  root.innerHTML = '';
+  if (!welcomeProfiles && !welcomeLoading) loadWelcomeProfiles();
+  const profiles = welcomeProfiles || (() => {
+    const merged = [...familyProfileSeeds()];
+    getLocalProfiles().forEach(local => {
+      if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
+    });
+    return merged;
+  })();
+  if (welcomePreselectUser) {
+    const pre = profiles.find(p => String(p.user_id).toLowerCase() === welcomePreselectUser.toLowerCase());
+    if (pre && welcomeMode === 'tiles') setTimeout(() => selectProfile(pre), 0);
+    welcomePreselectUser = '';
+  }
+  const wrap = h('div', { class: 'welcome-screen' },
+    h('div', { class: 'welcome-head' },
+      h('div', { class: 'app-title big' }, h('span', { class: 'dot' }), h('span', {}, 'Raedworkouts')),
+      h('p', {}, 'Family training profiles. Offline-first, synced when reachable.'),
+    )
+  );
+  if (welcomeMode === 'pin' && welcomeSelectedProfile) {
+    wrap.appendChild(renderPinPad(welcomeSelectedProfile));
+  } else if (welcomeMode === 'register' && welcomeSelectedProfile) {
+    wrap.appendChild(renderRegisterPanel(welcomeSelectedProfile));
+  } else if (welcomeMode === 'other') {
+    wrap.appendChild(renderSomeoneElsePanel());
+  } else {
+    wrap.appendChild(h('div', { class: 'profile-grid' },
+      profiles.map(profile => h('button', {
+        type: 'button',
+        class: 'profile-tile',
+        onClick: () => selectProfile(profile),
+      },
+        h('span', { class: 'profile-initial' }, String(profile.display_name || profile.user_id || '?').slice(0,1).toUpperCase()),
+        h('span', { class: 'profile-name' }, profile.display_name || profile.user_id),
+        h('span', { class: 'profile-meta' }, `${profile.sessions || 0} sessions · ${profile.experience || 'returning'}${profile.has_pin ? ' · PIN' : ''}`),
+      ))
+    ));
+    wrap.appendChild(h('button', { class: 'btn ghost full', onClick: () => { welcomeMode = 'other'; renderWelcome(); } }, 'Someone else?'));
+    if (welcomeLoading) wrap.appendChild(h('div', { class: 'tiny muted', style: 'text-align:center;margin-top:8px;' }, 'Loading server profiles...'));
+  }
+  root.appendChild(wrap);
+}
+function shouldShowPinPrompt() {
+  if (!settings.user_id || settings.user_key || settings.needs_pin_reauth) return false;
+  const last = settings.pin_prompt_dismissed_at ? new Date(settings.pin_prompt_dismissed_at).getTime() : 0;
+  return !last || (Date.now() - last) > 7 * 86400 * 1000;
+}
+function openSetPinModal() {
   const overlay = $('#modal-overlay');
   const m = $('#modal');
   m.innerHTML = '';
-  overlay.dataset.required = 'true';  // blocks outside-click dismiss
-  const nameInput = h('input', {
-    type: 'text',
-    placeholder: 'e.g. Raed, Ahmed...',
-    style: 'width:100%;margin:12px 0;font-size:1.1rem;',
-  });
-  const submit = () => {
-    const name = nameInput.value.trim();
-    if (!name) { toast('Enter your name.'); return; }
-    settings.user_id = name.toLowerCase().replace(/\s+/g, '_');
-    delete overlay.dataset.required;
-    saveLocal();
-    overlay.classList.remove('show');
-    toast('Welcome, ' + name + '!');
-    if (settings.sync_url && settings.sync_key) {
-      pullFromCloud().then(ok => { if (ok) render(); }).catch(() => {});
+  const pin1 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN', style: 'width:100%;margin:8px 0;' });
+  const pin2 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: 'Repeat PIN', style: 'width:100%;margin:8px 0;' });
+  const status = h('div', { class: 'tiny muted' }, '');
+  m.appendChild(h('h3', {}, 'Lock this profile'));
+  m.appendChild(h('p', { class: 'muted' }, 'Set a PIN so only this profile can read or write its cloud row.'));
+  m.appendChild(pin1);
+  m.appendChild(pin2);
+  m.appendChild(status);
+  m.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
+    h('button', { class: 'btn ghost', style: 'flex:1;', onClick: () => {
+      settings.pin_prompt_dismissed_at = new Date().toISOString();
+      saveLocal({ sync: false, dirty: false });
+      overlay.classList.remove('show');
+      render();
+    }}, 'Later'),
+    h('button', { class: 'btn primary', style: 'flex:1;', onClick: async () => {
+      const p1 = pin1.value.trim();
+      const p2 = pin2.value.trim();
+      if (!/^\d{4}$/.test(p1)) { status.textContent = 'Use a 4 digit PIN.'; return; }
+      if (p1 !== p2) { status.textContent = 'PINs do not match.'; return; }
+      status.textContent = 'Saving...';
+      try {
+        const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify({ user_id: settings.user_id, pin: p1, _auth_token: settings.sync_key }) });
+        settings.user_id = res.user_id || settings.user_id;
+        settings.user_key = res.user_key || await deriveUserKey(settings.user_id, p1);
+        setActiveUser(settings.user_id);
+        saveLocal({ sync: false, dirty: false });
+        overlay.classList.remove('show');
+        toast('PIN set.');
+        render();
+      } catch (e) {
+        status.textContent = /pin_already_set|409/.test(e.message || '') ? 'PIN already exists. Switch profile and sign in.' : 'Could not set PIN.';
+      }
+    }}, 'Set PIN'),
+  ));
+  overlay.classList.add('show');
+  setTimeout(() => pin1.focus(), 80);
+}
+function openReconnectPinModal() {
+  const overlay = $('#modal-overlay');
+  const m = $('#modal');
+  m.innerHTML = '';
+  const pin = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN', style: 'width:100%;margin:8px 0;' });
+  const status = h('div', { class: 'tiny muted' }, '');
+  let checking = false;
+  const submit = async () => {
+    const value = pin.value.trim();
+    if (checking) return;
+    if (!/^\d{4}$/.test(value)) { status.textContent = 'Use a 4 digit PIN.'; return; }
+    checking = true;
+    status.textContent = 'Reconnecting...';
+    try {
+      await verifyReconnectPin(value);
+      overlay.classList.remove('show');
+    } catch (e) {
+      checking = false;
+      pin.value = '';
+      status.textContent = pinErrorMessage(e);
+      pin.focus();
     }
   };
-  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
-  m.appendChild(h('h3', { style: 'margin-bottom:8px;' }, t('welcome')));
-  m.appendChild(h('p', { class: 'muted', style: 'margin-bottom:4px;' }, t('welcome_desc')));
-  m.appendChild(nameInput);
-  m.appendChild(h('button', { class: 'btn primary', style: 'width:100%;', onClick: submit }, t('start_arrow')));
+  m.appendChild(h('h3', {}, 'Reconnect sync'));
+  m.appendChild(h('p', { class: 'muted' }, 'Enter your PIN to reconnect cloud sync. Local workout data stays on this device and will be merged after verification.'));
+  m.appendChild(pin);
+  m.appendChild(status);
+  m.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
+    h('button', { class: 'btn ghost', style: 'flex:1;', onClick: () => overlay.classList.remove('show') }, 'Cancel'),
+    h('button', { class: 'btn primary', style: 'flex:1;', onClick: submit }, 'Reconnect'),
+  ));
+  pin.addEventListener('input', () => {
+    pin.value = pin.value.replace(/\D/g, '').slice(0, 4);
+    if (pin.value.length === 4) submit();
+  });
   overlay.classList.add('show');
-  setTimeout(() => nameInput.focus(), 150);
+  setTimeout(() => pin.focus(), 80);
+}
+function renderReconnectBanner() {
+  return h('div', { class: 'card compact pin-nudge' },
+    h('div', { class: 'setting-row' },
+      h('div', { class: 'label' },
+        h('div', { class: 'name' }, 'Enter your PIN to reconnect sync'),
+        h('div', { class: 'desc' }, 'Local workout data is saved. Reconnect to merge it into cloud storage.'),
+      ),
+      h('button', { class: 'btn tiny primary', onClick: openReconnectPinModal }, 'Enter PIN'),
+    )
+  );
 }
 
 // ---- Theme --------------------------------------------------
@@ -746,13 +1461,44 @@ function getLastTwoPerformances(exercise_id) {
   }
   return out;
 }
+function effectiveStartKg(planned) {
+  const base = Number(planned.start_kg) || 0;
+  if (!base) return 0;
+  const exp = state.profile?.experience || 'returning';
+  const factor = exp === 'beginner' ? 0.5 : (exp === 'experienced' ? 1.25 : 1);
+  const scaled = base * factor;
+  if (exp === 'beginner') return Math.max(2.5, Math.floor(scaled / 2.5) * 2.5);
+  return Math.round(scaled / 2.5) * 2.5;
+}
+function roundToGymIncrement(value) {
+  const n = Number(value) || 0;
+  return Math.max(2.5, Math.round(n / 2.5) * 2.5);
+}
+function fmtKgValue(value) {
+  return Number(value).toFixed(1).replace(/\.0$/, '');
+}
+function twoSetWarmupFrom(weight) {
+  return [
+    { weight: roundToGymIncrement(weight * 0.5), reps: 10 },
+    { weight: roundToGymIncrement(weight * 0.75), reps: 6 },
+  ];
+}
+function warmupText(planned, suggestedWeight) {
+  if (!planned.warmup) return '';
+  if (/^2\s+sets/i.test(planned.warmup)) {
+    const warmups = twoSetWarmupFrom(suggestedWeight);
+    return `2 sets: ${fmtKgValue(warmups[0].weight)}kg×10, ${fmtKgValue(warmups[1].weight)}kg×6`;
+  }
+  return planned.warmup;
+}
 
 function suggestNextWeight(exercise_id, planned) {
   // Returns { weight, note } — based on last 2 sessions
   const last2 = getLastTwoPerformances(exercise_id);
   const ex = getAllExercises().find(e => e.id === exercise_id);
-  if (!ex) return { weight: planned.start_kg, note: 'First time — start light, find your RPE 7.' };
-  if (!last2.length) return { weight: planned.start_kg, note: '⚡ First session — calibrate. Start with ' + planned.start_kg + ' kg.' };
+  const startKg = effectiveStartKg(planned);
+  if (!ex) return { weight: startKg, note: 'First time — start light, find your RPE 7.' };
+  if (!last2.length) return { weight: startKg, note: `⚡ First time — calibration. Start ~${startKg} kg, find a weight you could do for ${planned.reps} with 2-3 left in the tank. سجّل الوزن الحقيقي.` };
   const latest = last2[0];
   const topReps = parseInt(String(planned.reps).split('-').pop(), 10) || 10;
   // Find the heaviest working set
@@ -814,9 +1560,13 @@ function startSession(session) {
     const sets = [];
     // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle`
     if (plan.is_first_of_muscle && plan.warmup) {
-      // Two warmup placeholders for first exercise of muscle — user logs them
-      sets.push({ is_warmup: true, weight: Math.round(sug.weight * 0.5 * 2) / 2, reps: 10, rpe: null, completed: false });
-      sets.push({ is_warmup: true, weight: Math.round(sug.weight * 0.75 * 2) / 2, reps: 6, rpe: null, completed: false });
+      if (/^2\s+sets/i.test(plan.warmup)) {
+        twoSetWarmupFrom(sug.weight).forEach(warm =>
+          sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, rpe: null, completed: false })
+        );
+      } else if (/^1\s+light\s+set/i.test(plan.warmup)) {
+        sets.push({ is_warmup: true, weight: roundToGymIncrement(sug.weight * 0.5), reps: 10, rpe: null, completed: false });
+      }
     }
     for (let i = 0; i < plan.sets; i++) {
       sets.push({ is_warmup: false, weight: sug.weight, reps: '', rpe: '', completed: false });
@@ -829,6 +1579,7 @@ function startSession(session) {
     };
   });
   state.active_session = {
+    uid: (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : ('sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2))),
     date: todayISO(),
     session_id: session.id,
     session_name: session.name,
@@ -1027,6 +1778,11 @@ function cancelRest() {
 let focusExerciseIdx = null;
 
 function render() {
+  if (!settings.user_id) {
+    renderWelcome();
+    return;
+  }
+  document.body.classList.remove('welcome-mode');
   const route = window.location.hash.replace('#', '') || 'home';
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + route));
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.route === route));
@@ -1082,11 +1838,26 @@ function renderHome() {
     root.appendChild(h('div', { class: 'today-banner rest' },
       h('div', { class: 'tb-kicker' }, 'Rest day'),
       h('h2', {}, 'Next: ' + next.session.name.split(' — ')[0]),
-      h('p', {}, `${next.session.day} · in ${next.in_days} day${next.in_days===1?'':'s'}`),
-      h('div', { class: 'tb-meta' }, 'Eat 130–160g protein · Sleep 7+ hrs'),
+      h('p', {}, getActiveVariant() === 'ppl_3x' ? `${next.session.day} day · next in rotation` : `${next.session.day} · in ${next.in_days} day${next.in_days===1?'':'s'}`),
+      h('div', { class: 'tb-meta' }, `Eat ${profileProteinRange()} protein · Sleep 7+ hrs`),
     ));
   }
 
+  if (settings.needs_pin_reauth) {
+    root.appendChild(renderReconnectBanner());
+  }
+
+  if (shouldShowPinPrompt()) {
+    root.appendChild(h('div', { class: 'card compact pin-nudge' },
+      h('div', { class: 'setting-row' },
+        h('div', { class: 'label' },
+          h('div', { class: 'name' }, 'Lock this profile'),
+          h('div', { class: 'desc' }, 'Set a PIN so this cloud row is protected. Legacy sync still works during the grace period.'),
+        ),
+        h('button', { class: 'btn tiny primary', onClick: openSetPinModal }, 'Set PIN'),
+      )
+    ));
+  }
 
   // Stats row
   root.appendChild(h('div', { class: 'stat-row' },
@@ -1383,7 +2154,7 @@ function renderExerciseCard(ex_id, exState) {
   // Action row: alternatives + add set + warmup helper
   if (planned.warmup) {
     body.appendChild(h('div', { class: 'warmup-block' },
-      h('strong', {}, 'Warm-up: '), planned.warmup
+      h('strong', {}, 'Warm-up: '), warmupText(planned, sug.weight)
     ));
   }
 
@@ -1808,8 +2579,9 @@ function renderHistory() {
       expanded.appendChild(row);
     });
     if (sess.notes) expanded.appendChild(h('div', { class: 'cue', style: 'margin-top:8px;' }, h('strong', {}, 'Notes: '), sess.notes));
+    const fallbackSessionName = ({ session_a: 'Session A', session_b: 'Session B', ppl_push: 'Push', ppl_pull: 'Pull', ppl_legs: 'Legs' })[sess.session_id] || sess.session_id;
     card.appendChild(h('div', { onClick: () => { expanded.style.display = expanded.style.display === 'none' ? 'block' : 'none'; } },
-      h('div', { class: 'date' }, fmtDate(sess.date) + ' · ' + (sess.session_id === 'session_a' ? 'Session A' : 'Session B')),
+      h('div', { class: 'date' }, fmtDate(sess.date) + ' · ' + (sess.session_name || fallbackSessionName)),
       h('h3', { style: 'margin:4px 0;' }, totalSets + ' sets · ' + Math.round(totalKg).toLocaleString() + ' kg total'),
       h('div', { class: 'summary' },
         Object.keys(sess.exercises).slice(0, 5).map(ex_id => {
@@ -1823,17 +2595,230 @@ function renderHistory() {
   });
 }
 
+function stashPreRestore(reason) {
+  if (!settings.user_id) return;
+  const snapshot = {
+    created_at: new Date().toISOString(),
+    reason,
+    state: stripForSync(state, 'state'),
+    settings: syncSettingsPayload(),
+  };
+  localStorage.setItem(preRestoreKey(settings.user_id), JSON.stringify(snapshot));
+}
+async function undoPreRestore() {
+  if (!settings.user_id) return;
+  let snapshot;
+  try { snapshot = JSON.parse(localStorage.getItem(preRestoreKey(settings.user_id)) || 'null'); } catch (_) {}
+  if (!snapshot) { toast('No restore snapshot found.'); return; }
+  await quiesceSyncPipeline();
+  const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  state = { ...defaultState(), ...(snapshot.state || {}) };
+  settings = { ...defaultSettings(), ...(snapshot.settings || {}), ...keep };
+  ensureProfile();
+  saveLocal({ sync: false });
+  const pushed = await flushSync({ mode: 'replace' });
+  applyTheme();
+  render();
+  toast(pushed ? 'Restored previous local snapshot.' : 'Restored locally. Cloud sync is pending.');
+}
+function notifyUndoRestore() {
+  toast('Snapshot restored.', 7000, 'Undo', undoPreRestore);
+}
+function exportPayload() {
+  return {
+    exported_at: new Date().toISOString(),
+    user_id: settings.user_id,
+    state: stripForSync(state, 'state'),
+    settings: syncSettingsPayload(),
+    latest_rev: readLastRev(settings.user_id),
+  };
+}
+function downloadJson(name, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+async function downloadCloudExport() {
+  try {
+    const payload = await syncFetch('/export?user=' + encodeURIComponent(settings.user_id));
+    downloadJson(`${settings.user_id}-workouts-${todayISO()}.json`, payload);
+  } catch (_) {
+    downloadJson(`raedworkouts-${settings.user_id}-${todayISO()}.json`, exportPayload());
+    toast('Cloud export failed. Downloaded local export instead.');
+  }
+}
+async function restoreRevision(rev) {
+  if (!confirm('Restore this cloud snapshot? Current data is saved locally first and the restore becomes a new cloud revision.')) return;
+  await quiesceSyncPipeline();
+  stashPreRestore('revision ' + rev);
+  const snap = await syncFetch('/revision?user=' + encodeURIComponent(settings.user_id) + '&rev=' + encodeURIComponent(rev));
+  const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  state = { ...defaultState(), ...(snap.state_json || {}) };
+  settings = { ...defaultSettings(), ...(snap.settings_json || {}), ...keep };
+  ensureProfile();
+  saveLocal({ sync: false });
+  const pushed = await flushSync({ mode: 'replace' });
+  applyTheme();
+  render();
+  if (pushed) notifyUndoRestore();
+  else toast('Restored locally. Cloud sync is pending.', 5000, 'Undo', undoPreRestore);
+}
+async function openRestoreModal() {
+  const overlay = $('#modal-overlay');
+  const m = $('#modal');
+  m.innerHTML = '';
+  m.appendChild(h('h3', {}, 'Restore from backup'));
+  m.appendChild(h('p', { class: 'muted' }, 'Restoring creates a new head. Older revisions stay on the server.'));
+  const list = h('div', { class: 'revision-list' }, h('div', { class: 'tiny muted' }, 'Loading...'));
+  m.appendChild(list);
+  m.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:12px;', onClick: () => overlay.classList.remove('show') }, 'Close'));
+  overlay.classList.add('show');
+  try {
+    const rows = await syncFetch('/revisions?user=' + encodeURIComponent(settings.user_id) + '&limit=30');
+    list.innerHTML = '';
+    rows.forEach(row => list.appendChild(h('button', {
+      type: 'button',
+      class: 'revision-row',
+      onClick: () => {
+        overlay.classList.remove('show');
+        restoreRevision(row.rev).catch(e => toast('Restore failed: ' + (e.message || 'unknown'), 3500));
+      }
+    },
+      h('span', {}, fmtDate(row.server_at || row.updated_at)),
+      h('span', { class: 'muted' }, `${row.sessions || 0} sessions · rev ${row.rev}`)
+    )));
+    if (!rows.length) list.appendChild(h('div', { class: 'empty' }, 'No revisions yet.'));
+  } catch (e) {
+    list.innerHTML = '';
+    list.appendChild(h('div', { class: 'tiny muted' }, 'Could not load revisions.'));
+  }
+}
+async function importJsonFile(file) {
+  const text = await file.text();
+  const parsed = JSON.parse(text);
+  await quiesceSyncPipeline();
+  stashPreRestore('import');
+  const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  if (parsed.state) state = { ...defaultState(), ...parsed.state };
+  if (parsed.settings) settings = { ...defaultSettings(), ...parsed.settings, ...keep };
+  else settings = { ...settings, ...keep };
+  ensureProfile();
+  saveLocal({ sync: false });
+  const pushed = await flushSync({ mode: 'replace' });
+  applyTheme();
+  render();
+  toast(pushed ? 'Imported.' : 'Imported locally. Cloud sync is pending.', 7000, 'Undo', undoPreRestore);
+}
+async function switchProfile() {
+  if (syncDirty || readDirtyMarker(settings.user_id) || syncInFlightPromise) {
+    toast('Syncing before switch...', 1200);
+    const ok = await flushSync();
+    if (!ok || syncDirty || readDirtyMarker(settings.user_id)) {
+      toast('Cannot switch until this profile is synced.');
+      return;
+    }
+  }
+  await quiesceSyncPipeline();
+  focusExerciseIdx = null;
+  setActiveUser('');
+  state = defaultState();
+  settings = defaultSettings();
+  settings.sync_url = getSyncUrl();
+  settings.sync_key = SYNC_KEY;
+  welcomeMode = 'tiles';
+  welcomeSelectedProfile = null;
+  welcomePinMessage = '';
+  welcomeProfiles = null;
+  render();
+}
+
 function renderSettings() {
   const root = $('#page-settings');
   root.innerHTML = '';
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'Settings'),
-    h('div', { class: 'sub' }, 'Theme, sync, and data export.'),
+    h('div', { class: 'sub' }, 'Profile, programme, sync, and data.'),
+  ));
+  if (settings.needs_pin_reauth) {
+    root.appendChild(renderReconnectBanner());
+  }
+
+  // Profile
+  const profileCard = h('div', { class: 'card' });
+  profileCard.appendChild(h('h3', {}, '👤 Profile'));
+  const displayName = h('input', {
+    type: 'text',
+    value: state.profile?.display_name || settings.user_id,
+    onChange: (e) => { state.profile.display_name = e.target.value.trim() || settings.user_id; saveLocal(); renderSettings(); }
+  });
+  const experienceSelect = h('select', {
+    onChange: (e) => { state.profile.experience = e.target.value; saveLocal(); renderSettings(); }
+  },
+    ['beginner','returning','experienced'].map(v => h('option', { value: v, ...(state.profile?.experience === v ? { selected: '' } : {}) },
+      v === 'beginner' ? 'New to the gym' : v === 'returning' ? 'Trained before, coming back' : 'Currently training'
+    ))
+  );
+  const bwInput = h('input', {
+    type: 'number', step: '0.1', inputmode: 'decimal',
+    value: state.profile?.bodyweight_kg ?? '',
+    placeholder: 'kg',
+    onChange: (e) => {
+      const kg = parseFloat(e.target.value);
+      state.profile.bodyweight_kg = kg || null;
+      if (kg) state.bodyweight_log.push({ date: todayISO(), kg });
+      saveLocal();
+      renderSettings();
+    }
+  });
+  profileCard.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Display name'), h('div', { class: 'desc' }, 'Shown on profile tiles.')),
+    displayName,
+  ));
+  profileCard.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Experience'), h('div', { class: 'desc' }, 'Only affects first-time calibration weights.')),
+    experienceSelect,
+  ));
+  profileCard.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Bodyweight'), h('div', { class: 'desc' }, `Protein target: ${profileProteinRange()}/day.`)),
+    bwInput,
+  ));
+  profileCard.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Cloud identity'), h('div', { class: 'desc' }, settings.user_key ? 'PIN protected.' : 'Legacy token until a PIN is set.')),
+    h('button', { class: 'btn tiny', onClick: switchProfile }, 'Switch profile'),
+  ));
+  root.appendChild(profileCard);
+
+  // Programme
+  const progVariant = getActiveVariant();
+  root.appendChild(h('div', { class: 'card' },
+    h('h3', {}, 'Programme'),
+    h('div', { class: 'setting-row' },
+      h('div', { class: 'label' },
+        h('div', { class: 'name' }, 'Training split'),
+        h('div', { class: 'desc' }, 'History and suggestions stay per exercise.'),
+      ),
+      h('div', { class: 'variant-switch', style: 'margin:0;' },
+        h('button', {
+          type: 'button',
+          class: progVariant === 'fullbody_2x' ? 'active' : '',
+          onClick: () => switchVariant('fullbody_2x'),
+        }, '2-day'),
+        h('button', {
+          type: 'button',
+          class: progVariant === 'ppl_3x' ? 'active' : '',
+          onClick: () => switchVariant('ppl_3x'),
+        }, '3-day'),
+      ),
+    ),
   ));
 
+  // Preferences
   const card = h('div', { class: 'card' });
-
-  // Theme
+  card.appendChild(h('h3', {}, 'Preferences'));
   card.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
       h('div', { class: 'name' }, 'Theme'),
@@ -1919,32 +2904,46 @@ function renderSettings() {
     ),
   );
   root.appendChild(card);
-
-  // Programme (2-day / 3-day) — its own card, easy to find
-  const progVariant = getActiveVariant();
-  root.appendChild(h('div', { class: 'card' },
-    h('div', { class: 'setting-row' },
-      h('div', { class: 'label' },
-        h('div', { class: 'name' }, 'Programme'),
-        h('div', { class: 'desc' }, 'Switches immediately. History and weight suggestions stay per exercise.'),
-      ),
-      h('div', { class: 'variant-switch', style: 'margin:0;' },
-        h('button', {
-          type: 'button',
-          class: progVariant === 'fullbody_2x' ? 'active' : '',
-          onClick: () => switchVariant('fullbody_2x'),
-        }, '2-day'),
-        h('button', {
-          type: 'button',
-          class: progVariant === 'ppl_3x' ? 'active' : '',
-          onClick: () => switchVariant('ppl_3x'),
-        }, '3-day'),
-      ),
-    ),
-  ));
-
   root.appendChild(musicCard);
-  root.appendChild(cloudCard);
+
+  // Cloud + data
+  const dataCard = h('div', { class: 'card' });
+  dataCard.appendChild(h('h3', {}, '☁️ Cloud & Data'));
+  dataCard.appendChild(cloudCard.firstChild);
+  dataCard.appendChild(h('div', { class: 'cloud-actions' },
+    h('button', { class: 'btn tiny', onClick: testCloudConnection }, 'Test'),
+    h('button', { class: 'btn tiny', onClick: openRestoreModal }, 'Restore from backup...'),
+    h('button', { class: 'btn tiny', onClick: downloadCloudExport }, 'Download my data'),
+    h('button', { class: 'btn tiny', onClick: () => downloadJson(`raedworkouts-${settings.user_id}-${todayISO()}.json`, exportPayload()) }, 'Export JSON'),
+    h('button', { class: 'btn tiny', onClick: () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'application/json';
+      inp.onchange = async () => {
+        const f = inp.files[0]; if (!f) return;
+        try { await importJsonFile(f); }
+        catch (e) { alert('Import failed: ' + e.message); }
+      };
+      inp.click();
+    }}, 'Import JSON'),
+    h('button', { class: 'btn tiny danger', onClick: () => {
+      if (!confirm('Wipe this profile from this device only? Cloud data is untouched.')) return;
+      const uid = settings.user_id;
+      localStorage.removeItem(stateKey(uid));
+      localStorage.removeItem(settingsKey(uid));
+      localStorage.removeItem(lastWriteKey(uid));
+      localStorage.removeItem(lastRevKey(uid));
+      localStorage.removeItem(preRestoreKey(uid));
+      localStorage.removeItem(dirtyKey(uid));
+      setActiveUser('');
+      state = defaultState();
+      settings = defaultSettings();
+      settings.sync_url = getSyncUrl();
+      settings.sync_key = SYNC_KEY;
+      render();
+      toast('Local profile wiped.');
+    }}, 'Wipe local'),
+  ));
+  root.appendChild(dataCard);
 
   // Silent reachability probe — so the badge tells the truth even when the
   // backend is paused/unreachable (no toast; updates only the badge).
@@ -2056,57 +3055,6 @@ function renderSettings() {
 
   root.appendChild(adv);
 
-  // Data export / import / wipe
-  const dataCard = h('div', { class: 'card' });
-  dataCard.appendChild(h('h3', {}, '💾 Data'));
-  dataCard.appendChild(h('div', { style: 'display:flex; gap:8px; flex-wrap:wrap;' },
-    h('button', { class: 'btn', onClick: () => {
-      const blob = new Blob([JSON.stringify({ state, settings }, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'raedworkouts-backup-' + todayISO() + '.json'; a.click();
-      URL.revokeObjectURL(url);
-    }}, '⬇ Export JSON'),
-    h('button', { class: 'btn', onClick: () => {
-      const inp = document.createElement('input');
-      inp.type = 'file'; inp.accept = 'application/json';
-      inp.onchange = async () => {
-        const f = inp.files[0]; if (!f) return;
-        const text = await f.text();
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed.state) state = { ...defaultState(), ...parsed.state };
-          if (parsed.settings) settings = { ...defaultSettings(), ...parsed.settings };
-          saveLocal(); applyTheme(); render();
-          toast('Imported.');
-        } catch (e) { alert('Import failed: ' + e.message); }
-      };
-      inp.click();
-    }}, '⬆ Import JSON'),
-    h('button', { class: 'btn danger', onClick: () => {
-      if (!confirm('Wipe ALL local data? This cannot be undone (unless you have cloud sync set up and pull again).')) return;
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(SETTINGS_KEY);
-      localStorage.removeItem(LAST_WRITE_KEY);
-      state = defaultState(); settings = defaultSettings();
-      applyTheme(); render(); toast('Wiped.');
-    }}, '🗑 Wipe local data'),
-  ));
-  root.appendChild(dataCard);
-
-  // Athlete profile (read-only summary)
-  const profile = h('div', { class: 'card' });
-  profile.appendChild(h('h3', {}, '👤 Athlete profile'));
-  Object.entries(RW.ATHLETE).forEach(([k, v]) => {
-    if (Array.isArray(v)) v = v.join(', ');
-    if (typeof v === 'object') return;
-    profile.appendChild(h('div', { class: 'setting-row' },
-      h('div', { class: 'label' }, h('div', { class: 'name' }, k.replace(/_/g, ' '))),
-      h('div', { class: 'tiny muted' }, String(v)),
-    ));
-  });
-  root.appendChild(profile);
-
   // Language toggle — bottom of settings
   const langCard = h('div', { class: 'card' },
     h('div', { class: 'setting-row' },
@@ -2131,47 +3079,49 @@ function renderSettings() {
 function renderHelp() {
   const root = $('#page-help');
   root.innerHTML = '';
+  const prog = getActiveProgramme();
+  const variant = getActiveVariant();
+  const sessions = prog.sessions || [];
+  const firstSession = sessions[0];
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'How this works'),
-    h('div', { class: 'sub' }, 'Read this once. It explains everything.'),
+    h('div', { class: 'sub' }, `${state.profile?.display_name || settings.user_id} · ${VARIANTS[variant]?.label || 'Programme'}`),
   ));
-  root.appendChild(h('div', { class: 'card onboard', html: `
-    <h2>The programme</h2>
-    <p>Full-body × 2 days/week — Tuesday (Session A) + Saturday (Session B). Each muscle hits twice a week. Block 1 is calibration: 5 exercises per session, RPE 7–8, no grinding.</p>
-
-    <h2>Each session day</h2>
-    <ol>
-      <li>Open the app on Home → tap <strong>Start Session</strong>.</li>
-      <li>The first exercise of each muscle has 2 warm-up sets pre-filled (50% × 10, 75% × 6). Log them and check them off.</li>
-      <li>Working sets show your <strong>suggested weight</strong> based on your last 2 sessions. Hit it. Tick the circle when done — rest timer starts automatically.</li>
-      <li>Machine taken? Tap <strong>⇄ Swap</strong> on any exercise to use a pre-curated alternative for the same muscle.</li>
-      <li>When done, tap <strong>Finish & save session</strong>. The session goes to History.</li>
-    </ol>
-
-    <h2>Progressive overload (auto)</h2>
-    <p>If you hit the top of the rep range at RPE ≤ 8 for <strong>two sessions in a row</strong>, the next session suggests +2.5 kg (upper) or +5 kg (lower). Accessories add reps before weight. You don't have to remember anything.</p>
-
-    <h2>Rules</h2>
-    <ul>
-      <li>RPE 7–8: leave 2–3 reps in the tank. Never grind.</li>
-      <li>Technique always beats weight. If form breaks, drop the weight.</li>
-      <li>No barbell back squat or conventional deadlift in Block 1. RDL introduced in Block 2.</li>
-      <li>Eat 130–160 g protein/day. Sleep ≥ 7 hours. Without these, the gym does nothing.</li>
-    </ul>
-
-    <h2>Library</h2>
-    <p>30 exercises. Each has Mohannad's short clips (the small thumbnails) and one Jeff Nippard form video (the teal-bordered one labeled JN). You can paste your own YouTube links per exercise. They're saved permanently.</p>
-
-    <h2>Cloud sync</h2>
-    <p>Your data always lives on this device first, so the app works fully offline and nothing is ever lost if you're disconnected. On top of that, it backs up automatically to your own always-on home server (no setup, no accounts, nothing that expires). It pushes after every change and pulls when the app opens, so your history follows you across devices. Settings → Cloud sync shows the live status; if it ever reads "Offline", you're just temporarily unreachable and it resumes on its own.</p>
-
-    <h2>Add to home screen</h2>
-    <p><strong>iPhone Safari:</strong> Share button → "Add to Home Screen". Now it opens like a native app.</p>
-    <p><strong>Android Chrome:</strong> menu → "Install app" or "Add to Home screen".</p>
-
-    <h2>Backup</h2>
-    <p>Settings → Export JSON. Email it to yourself once a week. Belt + suspenders.</p>
-  `}));
+  const card = h('div', { class: 'card onboard' });
+  card.appendChild(h('h2', {}, 'How the app works'));
+  card.appendChild(h('p', {}, 'Pick your profile, start the next session, log the actual weight/reps/RPE, and finish. The app works offline first and syncs when the server is reachable.'));
+  card.appendChild(h('h2', {}, 'Your programme'));
+  card.appendChild(h('p', {}, variant === 'ppl_3x'
+    ? 'Push/Pull/Legs cycles by history. Pick any 3 days with 24h+ rest.'
+    : 'Full-body 2-day uses Session A and Session B. The app can still start either session when your week shifts.'
+  ));
+  sessions.forEach(sess => {
+    card.appendChild(h('h3', {}, sess.name));
+    card.appendChild(h('ul', {},
+      sess.exercises.map(plan => {
+        const ex = getAllExercises().find(e => e.id === plan.exercise_id);
+        const sug = suggestNextWeight(plan.exercise_id, plan);
+        return h('li', {}, `${ex?.name || plan.exercise_id}: ${plan.sets} x ${plan.reps} @ ~${sug.weight} kg`);
+      })
+    ));
+  });
+  card.appendChild(h('h2', {}, 'First sessions = calibration'));
+  card.appendChild(h('p', {}, `Your profile is "${state.profile?.experience || 'returning'}". First-time weights scale from the reference programme, then your own history takes over. RPE: 😌 easy = 3 reps left, 💪 right = 1-2 left, 🥵 hard = maybe 1 left.`));
+  card.appendChild(h('h2', {}, 'Progressive overload'));
+  card.appendChild(h('p', {}, 'If the last two sessions hit the top of the rep range at RPE 8 or easier, the app suggests +2.5 kg upper body or +5 kg lower body. Accessories add reps before weight.'));
+  card.appendChild(h('h2', {}, 'The rules'));
+  card.appendChild(h('ul', {},
+    h('li', {}, 'Technique beats weight. No grinding in calibration.'),
+    h('li', {}, `Protein target: ${profileProteinRange()}/day. Sleep 7+ hours.`),
+    h('li', {}, 'No barbell back squat or conventional deadlift in Block 1. RDL comes after form is ready.'),
+  ));
+  card.appendChild(h('h2', {}, 'Library & videos'));
+  card.appendChild(h('p', {}, 'Exercises include Mohannad clips and a Jeff Nippard form link. You can add custom videos, hide videos from session view, edit JN links, and add custom exercises.'));
+  card.appendChild(h('h2', {}, 'Your data'));
+  card.appendChild(h('p', {}, 'Profiles use PINs, sync is automatic, and the server keeps revisions plus scheduled backups. Settings has restore from backup, cloud download, and local JSON export/import. Offline logging stays on this device until sync returns.'));
+  card.appendChild(h('h2', {}, 'Install to Home Screen'));
+  card.appendChild(h('p', {}, 'iPhone Safari: Share button -> Add to Home Screen. Android Chrome: menu -> Install app or Add to Home screen.'));
+  root.appendChild(card);
 }
 
 // ---- Boot ---------------------------------------------------
@@ -2179,13 +3129,9 @@ function init() {
   loadLocal();
   applyLang();
 
-  // ?user=ahmed — shareable link pre-fills name
-  // Write directly to localStorage (no syncToCloud) — pull happens next to avoid overwriting cloud data
+  // ?user=abdullah — profile picker preselect only. It never bypasses PIN.
   const urlUser = new URLSearchParams(window.location.search).get('user');
-  if (urlUser && !settings.user_id) {
-    settings.user_id = urlUser.toLowerCase().replace(/\s+/g, '_');
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }
+  if (urlUser && !settings.user_id) welcomePreselectUser = urlUser.trim();
 
   applyTheme();
 
@@ -2207,13 +3153,36 @@ function init() {
   if (!window.location.hash) window.location.hash = 'home';
   render();
 
-  // Show name screen on first launch (no user_id set yet)
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+
+  window.addEventListener('online', () => {
+    if (syncDirty) flushSync().catch(() => {});
+    if (!welcomeProfiles && !settings.user_id) loadWelcomeProfiles();
+  });
+  setInterval(() => { if (syncDirty) flushSync().catch(() => {}); }, 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && syncDirty) {
+      flushSync({ keepalive: true }).then(ok => {
+        if (!ok) syncToCloud({ beacon: true, beaconAuth: true }).catch(() => {});
+      }).catch(() => {});
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    if (syncDirty) syncToCloud({ beacon: true, beaconAuth: true }).catch(() => {});
+  });
+
+  // Show profile screen on first launch (no user_id set yet)
   if (!settings.user_id) {
-    showNameModal();
+    renderWelcome();
   } else if (settings.sync_url && settings.sync_key) {
-    // Pull from cloud on load — only when user_id is known
+    // If this browser has meaningful local data but no revision marker, push first.
+    // Server v2 merges stale/legacy writes into the head and returns the accepted state.
     toast('Syncing…', 1200);
-    pullFromCloud()
+    const shouldPushFirst = readDirtyMarker(settings.user_id) || (hasMeaningfulLocalData() && !readLastRev(settings.user_id));
+    const bootSync = shouldPushFirst
+      ? (markDirty(), flushSync())
+      : pullFromCloud();
+    bootSync
       .then(ok => { if (ok) { applyTheme(); render(); } })
       .catch(err => {
         setSyncStatus('err', 'Pull failed: ' + (err.message || 'unknown'));
