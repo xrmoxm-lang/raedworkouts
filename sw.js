@@ -10,7 +10,7 @@
  * index.html. The new SW installs in the background, calls skipWaiting(), and
  * the page (see app.js) reloads itself once to apply — no manual force-refresh.
  */
-const VERSION = 'v17';
+const VERSION = 'v18';
 const CACHE = 'raedworkouts-' + VERSION;
 const SHELL = [
   './',

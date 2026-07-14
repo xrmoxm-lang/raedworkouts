@@ -762,7 +762,7 @@ function syncErrorStatus(err) {
 function isNetworkError(err) {
   const msg = String(err?.message || err || '');
   if (/^Sync\s+\d+/.test(msg)) return false;
-  return err instanceof TypeError || /Failed to fetch|NetworkError|Load failed|internet connection|offline/i.test(msg);
+  return err instanceof TypeError || /Sync timeout|Failed to fetch|NetworkError|Load failed|internet connection|offline/i.test(msg);
 }
 function pinErrorMessage(err) {
   const status = syncErrorStatus(err);
@@ -808,15 +808,27 @@ async function retryPendingRegistration() {
 
 // ---- Cloud sync (self-hosted on Raed's HP server) ----------
 async function syncFetch(path, opts = {}) {
+  const { timeoutMs = 15000, signal, ...fetchOpts } = opts;
   const base = (settings.sync_url || getSyncUrl()).replace(/\/$/, '');
   const url = base + path;
-  const headers = { ...(opts.headers || {}) };
+  const headers = { ...(fetchOpts.headers || {}) };
   if (settings.sync_key) headers.Authorization = 'Bearer ' + settings.sync_key;
   if (settings.user_key) headers['X-User-Key'] = settings.user_key;
-  if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-  const res = await fetch(url, { ...opts, headers });
-  if (!res.ok) throw new Error(`Sync ${res.status}: ${await res.text()}`);
-  return res.json();
+  if (fetchOpts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+
+  const canAbort = typeof AbortController !== 'undefined' && timeoutMs > 0 && !signal;
+  const controller = canAbort ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(url, { ...fetchOpts, headers, signal: signal || controller?.signal });
+    if (!res.ok) throw new Error(`Sync ${res.status}: ${await res.text()}`);
+    return res.json();
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('Sync timeout');
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function syncToCloud(opts = {}) {
@@ -950,7 +962,7 @@ async function testCloudConnection() {
   }
   toast('Testing…');
   try {
-    await syncFetch('/health');
+    await syncFetch('/health', { timeoutMs: 8000 });
     setSyncStatus('ok', 'Connected ✓');
     toast('Connection OK.');
   } catch (e) {
@@ -971,7 +983,7 @@ async function loadWelcomeProfiles() {
   if (welcomeLoading) return;
   welcomeLoading = true;
   try {
-    const rows = await syncFetch('/users');
+    const rows = await syncFetch('/users', { timeoutMs: 8000 });
     const merged = [...rows];
     getLocalProfiles().forEach(local => {
       if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
@@ -2948,7 +2960,7 @@ function renderSettings() {
   // Silent reachability probe — so the badge tells the truth even when the
   // backend is paused/unreachable (no toast; updates only the badge).
   if (configured) {
-    syncFetch('/health')
+    syncFetch('/health', { timeoutMs: 8000 })
       .then(() => setSyncStatus('ok', 'Connected'))
       .catch(() => setSyncStatus('err', 'Offline — tap Test below'));
   }
