@@ -343,10 +343,11 @@ for (const [skin, label] of skins) {
 }
 
 const accentLabelRules = rulesUsingCustomProperty('--accent-label');
-if (!accentLabelRules.length) {
-  fail('--accent-label is defined but no CSS rule consumes var(--accent-label)');
+const runnerAccentLabelRule = accentLabelRules.find((rule) => rule.includes('.runner-current-set-label'));
+if (!runnerAccentLabelRule) {
+  fail('--accent-label must be consumed by .runner-current-set-label');
 } else {
-  console.log(`accent-label used by ${accentLabelRules.join(', ')}`);
+  console.log(`accent-label used by ${runnerAccentLabelRule}`);
 }
 
 if (/--text-dim|--accent[-]glow/.test(css)) fail('retired token remains in styles.css');

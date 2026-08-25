@@ -1,4 +1,5 @@
 import { rejectedSkinSuggestion, suggestionForBlockBoundary } from './domain/skin-suggestions.mjs';
+import { assessSubstitution } from './domain/substitutions.js';
 
 /* ============================================================
    Raedworkouts — app.js
@@ -31,6 +32,7 @@ const h = (tag, attrs = {}, ...children) => {
   }
   return el;
 };
+const isolate = (...children) => h('bdi', {}, children);
 const brandMark = () => h('svg', {
   class: 'brand-mark', viewBox: '0 0 200 100', 'aria-hidden': 'true',
 }, h('g', { transform: 'translate(100 50)', fill: 'currentColor' },
@@ -58,6 +60,9 @@ const STRINGS = {
     auto_color: 'Auto color (by block)', syncing: 'Syncing…', sync_ok: 'Synced',
     welcome: '👋 Welcome', welcome_desc: "What's your name? Keeps your workout data separate.",
     start_arrow: 'Start →', enter_name: 'Enter your name.',
+    runner_video: 'Video', runner_cues: 'Cues', runner_log_set: 'Log set',
+    runner_skip_warmup: 'Skip warm-up', runner_rest: 'Rest', runner_last_time: 'Last time',
+    runner_next_exercise: 'Next exercise',
   },
   ar: {
     start_session: 'ابدأ التمرين', finish_session: '✓ حفظ وإنهاء التمرين',
@@ -75,6 +80,9 @@ const STRINGS = {
     auto_color: 'لون تلقائي (حسب البلوك)', syncing: 'جارٍ المزامنة…', sync_ok: 'تمت المزامنة',
     welcome: '👋 أهلاً', welcome_desc: 'ما اسمك؟ يحفظ بياناتك منفصلة عن الآخرين.',
     start_arrow: 'ابدأ ←', enter_name: 'أدخل اسمك.',
+    runner_video: 'الشرح', runner_cues: 'التلميحات', runner_log_set: 'سجّل المجموعة',
+    runner_skip_warmup: 'تخطَّ الإحماء', runner_rest: 'راحة', runner_last_time: 'آخر مرة',
+    runner_next_exercise: 'التمرين التالي',
   },
 };
 const t = (key) => STRINGS[settings?.lang || 'en']?.[key] ?? STRINGS.en[key] ?? key;
@@ -475,6 +483,7 @@ const defaultSettings = () => ({
   notifications: true,         // browser notifications when rest ends (req permission)
   focus_mode: true,            // one-exercise-at-a-time during active session
   show_cues: true,             // live-session control; defaults to useful form cues
+  runner_video_open: false,    // persisted per profile; runner video starts collapsed
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
   programme_variant: 'ppl_3x',  // fullbody_2x | ppl_3x
   pending_variant: null,       // legacy queue value; cleared on boot/switch
@@ -1740,7 +1749,7 @@ function startSession(session) {
   const skinSuggestion = skinBoundary.suggestion;
   state._last_toasted_block = curBlock;
   saveLocal();
-  router('home');
+  router('runner');
   if (skinSuggestion) showSkinSuggestion(skinSuggestion);
   else {
     toast('Session started — let\'s go.');
@@ -1882,46 +1891,33 @@ function renderSessionEnd() {
   root.appendChild(wrap);
 }
 
-function addFractionalCredits(ledger, exercise, sets, direction = 1) {
-  if (!exercise) return;
-  const count = Number(sets) || 0;
-  const primary = exercise.primary?.[0];
-  if (!primary || count <= 0) return;
-  ledger[primary] = (ledger[primary] || 0) + count * direction;
-  (exercise.secondary || []).filter((muscle) => muscle !== primary).forEach((muscle) => {
-    ledger[muscle] = (ledger[muscle] || 0) + count * 0.5 * direction;
-  });
-}
 function assessSessionSubstitution(exercise_id, alt_id, scope) {
   const programme = getActiveProgramme();
   const allExercises = getAllExercises();
   const from = allExercises.find((exercise) => exercise.id === exercise_id);
   const to = allExercises.find((exercise) => exercise.id === alt_id);
-  const baseline = {}, projected = {};
-  (programme.sessions || []).forEach((session) => (session.exercises || []).forEach((plan) => {
-    const original = allExercises.find((exercise) => exercise.id === plan.exercise_id);
-    addFractionalCredits(baseline, original, plan.sets);
-    const applies = plan.exercise_id === exercise_id && (scope !== 'this_session' || session.id === state.active_session?.session_id);
-    addFractionalCredits(projected, applies ? to : original, plan.sets);
-  }));
-  const muscleIds = new Set([...Object.keys(baseline), ...Object.keys(projected)]);
-  const ledger_delta = {};
-  for (const muscle of muscleIds) {
-    const change = (projected[muscle] || 0) - (baseline[muscle] || 0);
-    if (Math.abs(change) > 0.0001) ledger_delta[muscle] = Number(change.toFixed(2));
-  }
-  // The live programme may already have a deliberate volume status. A swap is
-  // blocked only when it newly crosses a hard boundary; this prevents a legacy
-  // baseline deficit from making every harmless same-muscle swap impossible.
-  const crossings = [...muscleIds].map((muscle) => ({ muscle, before: baseline[muscle] || 0, after: projected[muscle] || 0 }));
-  const blocked = crossings.filter((row) => (row.after < 4 && row.before >= 4) || (row.after > 15 && row.before <= 15));
-  const warned = crossings.filter((row) => !blocked.includes(row) && ((row.after < 8 && row.before >= 8) || (row.after > 14 && row.before <= 14)));
-  const classification = blocked.length
-    ? { severity: 'block-with-override', muscles_affected: blocked.map((row) => row.muscle), message: `Hard volume limit crossed: ${blocked.map((row) => `${row.muscle} → ${row.after}`).join(', ')}.` }
-    : warned.length
-      ? { severity: 'warn', muscles_affected: warned.map((row) => row.muscle), message: `Efficiency band changed: ${warned.map((row) => `${row.muscle} → ${row.after}`).join(', ')}.` }
-      : { severity: 'clean', muscles_affected: Object.keys(ledger_delta), message: 'Fractional ledger stays within its current safe boundaries.' };
-  return { from, to, baseline, projected, ledger_delta, classification };
+  if (!from || !to) return { from, to, baseline: {}, projected: {}, ledger_delta: {}, classification: { severity: 'block-with-override', muscles_affected: [], message: 'Unknown exercise.' } };
+  // The runner never interprets substitution volume itself. Domain code first
+  // recomputes the fractional ledger, then classifies it clean/warn/block.
+  const assessed = assessSubstitution({
+    catalogue: allExercises,
+    programme,
+    substitution: {
+      from_exercise_id: exercise_id,
+      to_exercise_id: alt_id,
+      scope,
+      session_id: scope === 'this_session' ? state.active_session?.session_id : null,
+    },
+    existingSubstitutions: [],
+  });
+  return {
+    from,
+    to,
+    baseline: assessed.ledger.baseline,
+    projected: assessed.ledger.projected,
+    ledger_delta: assessed.ledger.ledger_delta,
+    classification: assessed.classification,
+  };
 }
 function newLocalId(prefix) {
   return `${prefix}-${window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
@@ -1934,7 +1930,7 @@ function recordSubstitution(exercise_id, alt_id, scope, assessment, override = n
     from_exercise_id: exercise_id,
     to_exercise_id: alt_id,
     scope,
-    session_id: scope === 'this_session' ? state.active_session?.uid : null,
+    session_id: scope === 'this_session' ? state.active_session?.session_id : null,
     expires_after_week: scope === 'this_week' ? state.current_week : null,
     block: scope === 'this_block' ? state.current_block : null,
     created_at: new Date().toISOString(),
@@ -1955,7 +1951,7 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
     const status = assessment.classification;
     modal.innerHTML = '';
     modal.appendChild(h('h3', {}, `Adopt ${alt.name}`));
-    modal.appendChild(h('p', { class: 'tiny muted' }, 'Swipe adoption checks the weekly fractional ledger first. Choose exactly how long this replacement lasts.'));
+    modal.appendChild(h('p', { class: 'tiny muted' }, 'The fractional ledger is checked before adoption. Choose exactly how long this replacement lasts.'));
     modal.appendChild(h('div', { class: 'scope-picker' }, [
       ['this_session', 'This session'], ['this_week', 'This week'], ['this_block', 'This block'],
     ].map(([value, label]) => h('button', {
@@ -2033,13 +2029,27 @@ let focusExerciseIdx = null;
 
 function render() {
   if (!settings.user_id) {
+    document.body.classList.remove('runner-mode');
     renderWelcome();
     return;
   }
   document.body.classList.remove('welcome-mode');
   const route = window.location.hash.replace('#', '') || 'home';
+  const isRunner = route === 'runner' && Boolean(state.active_session);
+  document.body.classList.toggle('runner-mode', isRunner);
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + route));
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.route === route));
+  if (route === 'runner') {
+    if (!state.active_session) {
+      router('home');
+      return;
+    }
+    // A training screen owns the DOM. The overview is cleared rather than
+    // visually hidden, so it cannot remain reachable or inflate the document.
+    $('#page-home').replaceChildren();
+    renderRunner();
+    return;
+  }
   if (route === 'home') renderHome();
   if (route === 'library') renderLibrary();
   if (route === 'history') renderHistory();
@@ -2050,6 +2060,278 @@ function render() {
 function router(route) {
   window.location.hash = route;
   render();
+}
+
+function runnerEntries(activeSession = state.active_session) {
+  return Object.entries(activeSession?.exercises || {});
+}
+
+function runnerExerciseIndex(activeSession = state.active_session) {
+  const total = runnerEntries(activeSession).length;
+  if (!total) return 0;
+  return Math.max(0, Math.min(Number(activeSession.runner_exercise_index) || 0, total - 1));
+}
+
+function moveRunnerExercise(delta) {
+  if (!state.active_session) return;
+  const current = runnerExerciseIndex();
+  const next = Math.max(0, Math.min(current + delta, runnerEntries().length - 1));
+  if (next === current) return;
+  state.active_session.runner_exercise_index = next;
+  saveLocal();
+  render();
+}
+
+function updateRunnerSet(exerciseId, setIndex, property, value) {
+  const set = state.active_session?.exercises?.[exerciseId]?.sets?.[setIndex];
+  if (!set) return;
+  set[property] = value;
+  saveLocal();
+}
+
+function toggleRunnerSet(exerciseId, setIndex) {
+  const exerciseState = state.active_session?.exercises?.[exerciseId];
+  const set = exerciseState?.sets?.[setIndex];
+  if (!set) return;
+  const actualId = exerciseState.swapped_to || exerciseId;
+  const workingSets = exerciseState.sets.filter((item) => !item.is_warmup);
+  const isFinalWorkingSet = !set.is_warmup && set === workingSets[workingSets.length - 1];
+  if (!set.completed) {
+    if (isFinalWorkingSet && !set.effort) {
+      toast('Final set: tap easy, medium, or very hard first.');
+      return;
+    }
+    if (!set.is_warmup && exerciseState.sets.some((prior, index) => index < setIndex && prior.is_warmup && !prior.completed)) {
+      toast('Finish this exercise’s ramp set first.');
+      return;
+    }
+    if (!set.is_warmup && set.weight && set.reps) detectPR(actualId, Number(set.weight), Number(set.reps));
+  }
+  const wasCompleted = set.completed;
+  set.completed = !set.completed;
+  saveLocal();
+  render();
+  if (!wasCompleted && set.completed && !set.is_warmup) {
+    startRest(settings.rest_seconds);
+    if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
+  }
+}
+
+function completeRunnerWarmup({ skipped = false } = {}) {
+  const warmup = state.active_session?.warmup;
+  if (!warmup) return;
+  const now = new Date().toISOString();
+  if (skipped) {
+    warmup.skipped = true;
+    warmup.skipped_at = now;
+  }
+  warmup.completed_at = now;
+  state.active_session.phase = 'lifting';
+  saveLocal();
+  render();
+}
+
+function renderRunnerSettings() {
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  modal.appendChild(h('div', { class: 'runner-settings-sheet', dir: 'rtl' },
+    h('h3', {}, 'إعدادات التمرين'),
+    h('div', { class: 'runner-setting-row' },
+      h('span', {}, isolate(t('runner_video'))),
+      h('button', {
+        type: 'button', class: 'btn tiny' + (settings.runner_video_open ? ' primary' : ''), 'data-runner-video-setting': 'true',
+        onClick: () => { settings.runner_video_open = !settings.runner_video_open; saveLocal(); render(); renderRunnerSettings(); },
+      }, settings.runner_video_open ? 'مفتوح' : 'مغلق'),
+    ),
+    h('div', { class: 'runner-setting-row' },
+      h('span', {}, isolate(t('runner_cues'))),
+      h('button', {
+        type: 'button', class: 'btn tiny' + (settings.show_cues ? ' primary' : ''), 'data-runner-cues-setting': 'true',
+        onClick: () => { settings.show_cues = !settings.show_cues; saveLocal(); render(); renderRunnerSettings(); },
+      }, settings.show_cues ? 'ظاهر' : 'مخفي'),
+    ),
+    h('button', { type: 'button', class: 'btn ghost full', onClick: () => $('#modal-overlay').classList.remove('show') }, 'تم'),
+  ));
+  $('#modal-overlay').classList.add('show');
+}
+
+function runnerLongPress(exerciseId, exerciseState) {
+  let timer = null;
+  const clear = () => { if (timer) clearTimeout(timer); timer = null; };
+  return {
+    onPointerdown: () => {
+      clear();
+      timer = setTimeout(() => {
+        timer = null;
+        showAltModal(exerciseId, exerciseState);
+      }, 600);
+    },
+    onPointerup: clear,
+    onPointercancel: clear,
+    onPointerleave: clear,
+  };
+}
+
+function renderRunnerWarmup(activeSession) {
+  const warmup = activeSession.warmup;
+  const drills = warmup?.drills || [];
+  const complete = generalWarmupComplete(warmup);
+  return h('div', { class: 'runner-warmup', 'data-runner-warmup': 'true', dir: 'rtl' },
+    h('div', { class: 'runner-exercise-title' },
+      h('div', { class: 'runner-overline' }, 'المرحلة الأولى'),
+      h('h1', {}, 'الإحماء'),
+      h('p', {}, 'المشي أولاً، ثم الحركات التحضيرية.'),
+    ),
+    h('div', { class: 'runner-warmup-card' },
+      h('div', { class: 'runner-warmup-head' }, h('strong', {}, 'المشاية'), h('span', {}, '٥–١٠ دقائق')),
+      h('div', { class: 'runner-minute-picker' }, [5, 7, 10].map((minutes) => h('button', {
+        type: 'button', class: warmup.treadmill_minutes === minutes ? 'active' : '',
+        onClick: () => { warmup.treadmill_minutes = minutes; warmup.treadmill_done = true; saveLocal(); render(); },
+      }, isolate(`${minutes} min`)))),
+    ),
+    h('div', { class: 'runner-drills' }, drills.map((drill) => h('button', {
+      type: 'button', class: 'runner-drill' + (drill.completed ? ' done' : ''),
+      disabled: !warmup.treadmill_done,
+      onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
+    }, isolate(drill.movement), h('span', {}, isolate(`${drill.reps} reps`), drill.completed ? ' ✓' : '')))),
+    h('div', { class: 'runner-warmup-actions' },
+      h('button', { type: 'button', class: 'btn ghost', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
+      h('button', { type: 'button', class: 'btn primary', disabled: !complete, onClick: () => completeRunnerWarmup() }, complete ? 'ابدأ التمرين' : 'أكمل الإحماء'),
+    ),
+  );
+}
+
+function renderRunner() {
+  const root = $('#page-runner');
+  root.innerHTML = '';
+  const active = state.active_session;
+  if (!active) return;
+  const entries = runnerEntries(active);
+  const index = runnerExerciseIndex(active);
+  const [exerciseId, exerciseState] = entries[index] || [];
+  const actualId = exerciseState?.swapped_to || exerciseId;
+  const exercise = getAllExercises().find((item) => item.id === actualId);
+  let swipeStart = null;
+  const shell = h('section', {
+    class: 'runner-shell', dir: 'rtl', 'data-session-runner': 'true',
+    'data-runner-phase': active.phase === 'warmup' ? 'warmup' : 'lifting',
+  });
+  shell.appendChild(h('header', { class: 'runner-topbar' },
+    h('button', { type: 'button', class: 'runner-icon-button', 'aria-label': 'Leave workout', onClick: () => router('home') }, '✕'),
+    h('button', { type: 'button', class: 'runner-top-nav', 'aria-label': 'Previous exercise', disabled: index === 0, onClick: () => moveRunnerExercise(-1) }, '→'),
+    h('div', { class: 'runner-progress' },
+      h('bdi', {}, `${index + 1} / ${entries.length}`),
+      h('div', { class: 'runner-progress-track', 'aria-hidden': 'true' }, h('span', { style: `width:${entries.length ? ((index + 1) / entries.length) * 100 : 0}%` })),
+    ),
+    h('button', { type: 'button', class: 'runner-top-nav', 'aria-label': 'Next exercise', disabled: index >= entries.length - 1, onClick: () => moveRunnerExercise(1) }, '←'),
+    h('button', { type: 'button', class: 'runner-icon-button', 'aria-label': 'Workout settings', onClick: renderRunnerSettings }, '⚙'),
+  ));
+
+  const middle = h('main', {
+    class: 'runner-main',
+    onPointerdown: (event) => { swipeStart = { x: event.clientX, y: event.clientY }; },
+    onPointerup: (event) => {
+      if (!swipeStart) return;
+      const dx = event.clientX - swipeStart.x;
+      const dy = event.clientY - swipeStart.y;
+      swipeStart = null;
+      if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      moveRunnerExercise(dx < 0 ? 1 : -1);
+    },
+    onPointercancel: () => { swipeStart = null; },
+  });
+
+  if (active.phase === 'warmup' && active.warmup) {
+    middle.appendChild(renderRunnerWarmup(active));
+    shell.appendChild(middle);
+    shell.appendChild(h('footer', { class: 'runner-bottom-bar' },
+      h('button', { type: 'button', class: 'btn primary full', 'data-runner-skip-warmup': 'true', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
+    ));
+    root.appendChild(shell);
+    return;
+  }
+
+  if (!exercise || !exerciseState) {
+    middle.appendChild(h('div', { class: 'runner-empty' }, isolate('No exercise is available in this session.')));
+    shell.appendChild(middle);
+    root.appendChild(shell);
+    return;
+  }
+
+  active.runner_exercise_index = index;
+  const suggested = suggestNextWeight(actualId, exerciseState.planned);
+  const currentIndex = exerciseState.sets.findIndex((set) => !set.completed);
+  const selectedSet = currentIndex >= 0 ? exerciseState.sets[currentIndex] : null;
+  const currentExerciseComplete = !selectedSet;
+  const nextIncompleteExerciseIndex = entries.findIndex(([, entry]) =>
+    (entry.sets || []).some((set) => !set.is_warmup && !set.completed));
+  const sessionComplete = nextIncompleteExerciseIndex === -1;
+  const last = getLastPerformance(actualId);
+  const videos = buildExerciseVideos(actualId, exercise);
+  const workingSets = exerciseState.sets.filter((set) => !set.is_warmup);
+
+  middle.appendChild(h('div', { class: 'runner-exercise-title', ...runnerLongPress(exerciseId, exerciseState) },
+    h('h1', {}, isolate(exercise.name)),
+    h('p', {}, `${exercise.name_ar || exercise.primary?.[0] || ''} · `, isolate(`${exerciseState.planned.sets} sets`)),
+  ));
+  const video = h('section', {
+    class: 'runner-video' + (settings.runner_video_open ? ' expanded' : ''),
+    'data-runner-video': 'true', 'data-expanded': settings.runner_video_open ? 'true' : 'false',
+  }, h('button', {
+    type: 'button', class: 'runner-video-toggle', 'data-runner-video-toggle': 'true',
+    onClick: () => { settings.runner_video_open = !settings.runner_video_open; saveLocal(); render(); },
+  }, '▶ ', isolate(t('runner_video')), h('span', { class: 'runner-chevron' }, settings.runner_video_open ? '⌃' : '⌄')));
+  if (settings.runner_video_open) {
+    video.appendChild(h('div', { class: 'runner-video-expanded' }, videos.length
+      ? buildVideoTile(videos[0], { className: 'runner-video-thumb' })
+      : h('span', { class: 'muted' }, isolate('No saved video for this exercise.'))));
+  }
+  middle.appendChild(video);
+
+  middle.appendChild(h('section', { class: 'runner-set-panel', 'data-runner-set-panel': 'true' },
+    h('div', { class: 'runner-current-set-label' }, 'المجموعة الحالية'),
+    h('div', { class: 'runner-set-columns', 'aria-hidden': 'true' },
+      h('span', {}, 'رقم'),
+      h('span', {}, 'الوزن'),
+      h('span', {}, 'كغ'),
+      h('span', {}, 'التكرار'),
+      h('span', {}, 'تم'),
+    ),
+    exerciseState.sets.map((set, setIndex) => {
+      const warmupCount = exerciseState.sets.slice(0, setIndex + 1).filter((item) => item.is_warmup).length;
+      const workingNumber = setIndex + 1 - exerciseState.sets.slice(0, setIndex + 1).filter((item) => item.is_warmup).length;
+      const isFinal = !set.is_warmup && set === workingSets[workingSets.length - 1];
+      return h('div', {
+        class: 'runner-set-row' + (setIndex === currentIndex ? ' current' : '') + (set.completed ? ' done' : ''),
+        'data-runner-set-row': String(setIndex),
+      },
+      h('span', { class: 'runner-set-number' }, isolate(set.is_warmup ? `W${warmupCount}` : String(workingNumber))),
+      h('input', { type: 'number', dir: 'ltr', step: '0.5', inputmode: 'decimal', 'aria-label': `Weight for set ${setIndex + 1}`, value: set.weight ?? suggested.weight, onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'weight', event.target.value === '' ? '' : Number(event.target.value)) }),
+      h('span', { class: 'runner-unit' }, isolate('kg')),
+      h('input', { type: 'number', dir: 'ltr', step: '1', inputmode: 'numeric', 'aria-label': `Reps for set ${setIndex + 1}`, value: set.reps ?? workingRepTarget(exerciseState.planned), onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'reps', event.target.value === '' ? '' : Number(event.target.value)) }),
+      h('button', { type: 'button', class: 'runner-set-check', 'aria-label': `Log set ${setIndex + 1}`, onClick: () => toggleRunnerSet(exerciseId, setIndex) }, set.completed ? '✓' : '○'),
+      isFinal && setIndex === currentIndex ? h('div', { class: 'runner-effort', dir: 'ltr' }, effortPicker(set, () => { saveLocal(); render(); })) : null,
+    );
+    }),
+  ));
+  if (settings.show_cues && exercise.cue) middle.appendChild(h('p', { class: 'runner-cue' }, isolate(exercise.cue)));
+  const lastWorking = last?.sets?.filter((set) => !set.is_warmup && set.completed) || [];
+  middle.appendChild(h('div', { class: 'runner-last-time' }, isolate(`${t('runner_last_time')} · `), isolate(lastWorking.length ? `${lastWorking.at(-1).weight} kg × ${lastWorking.at(-1).reps}` : '—')));
+  middle.appendChild(h('button', { type: 'button', class: 'runner-rest', onClick: () => startRest(settings.rest_seconds) }, isolate(`⏱ ${String(Math.floor(settings.rest_seconds / 60))}:${String(settings.rest_seconds % 60).padStart(2, '0')} · ${t('runner_rest')}`)));
+  shell.appendChild(middle);
+  const runnerAction = sessionComplete
+    ? h('button', { type: 'button', class: 'btn primary runner-log-button', onClick: endSession }, isolate(t('finish_session')))
+    : currentExerciseComplete
+      ? h('button', {
+        type: 'button', class: 'btn primary runner-log-button',
+        onClick: () => { state.active_session.runner_exercise_index = nextIncompleteExerciseIndex; saveLocal(); render(); },
+      }, isolate(t('runner_next_exercise')))
+      : h('button', {
+        type: 'button', class: 'btn primary runner-log-button',
+        onClick: () => toggleRunnerSet(exerciseId, currentIndex),
+      }, isolate(t('runner_log_set')));
+  shell.appendChild(h('footer', { class: 'runner-bottom-bar' }, runnerAction));
+  root.appendChild(shell);
 }
 
 function renderHome() {
@@ -2068,7 +2350,7 @@ function renderHome() {
     const doneSets = Object.values(a.exercises).reduce((s,ex) => s + ex.sets.filter(set => !set.is_warmup && set.completed).length, 0);
     const pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
     const parts = a.session_name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner active' },
+    root.appendChild(h('div', { class: 'today-banner active', 'data-home-overview': 'true' },
       h('div', { class: 'tb-kicker' }, 'In progress · started ' + fmtTime(a.started_at)),
       h('h2', {}, parts[0]),
       h('p', {}, parts[1] || 'Log every set as you go.'),
@@ -2102,7 +2384,7 @@ function renderHome() {
   }
 
   // Stats row
-  root.appendChild(h('div', { class: 'stat-row' },
+  root.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
       h('div', { class: 'stat-num' }, String(streak)),
       h('div', { class: 'stat-cap' }, 'Streak'),
@@ -2125,7 +2407,7 @@ function renderHome() {
 
   // Action button
   if (state.active_session) {
-    root.appendChild(h('button', { class: 'btn primary full', onClick: () => render() },
+    root.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('runner') },
       'Continue session ↓'
     ));
   } else if (planned) {
@@ -2160,6 +2442,11 @@ function renderHome() {
       root.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
     }
   }
+
+  // Leaving the runner is intentionally non-terminal: Home remains the small
+  // in-progress overview and its Continue button returns to #runner. The old
+  // all-exercises session page below is therefore never appended here.
+  if (state.active_session) return;
 
   // Active session detail
   if (state.active_session) {
@@ -2446,25 +2733,15 @@ function showAltModal(ex_id, exState) {
   );
   const altCard = (alt, onClick) => {
     const bodyUrl = RW.bodyImg ? RW.bodyImg(alt.primary) : '';
-    let startX = null;
-    let adoptedBySwipe = false;
     return h('div', {
       class: 'ex swap-option', style: 'cursor:pointer; margin-bottom:6px; touch-action:pan-y;',
-      onPointerdown: (event) => { startX = event.clientX; adoptedBySwipe = false; },
-      onPointerup: (event) => {
-        if (startX != null && event.clientX - startX < -56) {
-          adoptedBySwipe = true;
-          onClick();
-        }
-        startX = null;
-      },
-      onClick: () => { if (!adoptedBySwipe) onClick(); },
+      onClick,
     },
       h('div', { class: 'ex-head' },
         h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
         h('div', { class: 'ex-info' },
           h('h4', {}, alt.name),
-          h('div', { class: 'meta' }, (alt.primary || []).map(p => RW.MUSCLES[p]?.en).join(', '), ' · swipe left to adopt'),
+          h('div', { class: 'meta' }, (alt.primary || []).map(p => RW.MUSCLES[p]?.en).join(', '), ' · tap to inspect'),
         ),
       ),
     );
@@ -2475,7 +2752,7 @@ function showAltModal(ex_id, exState) {
   // ===== SECTION 1: Replace =====
   const validAlts = (ex?.alternatives || []).map(id => allEx.find(e => e.id === id)).filter(Boolean);
   if (validAlts.length) {
-    m.appendChild(sectionHead('Replace with…', 'Swipe left (or tap) to calculate the ledger before adopting.'));
+    m.appendChild(sectionHead('Replace with…', 'Tap to calculate the ledger before adopting.'));
     validAlts.forEach(alt => m.appendChild(altCard(alt, () => {
       showSubstitutionScopeModal(ex_id, exState, alt);
     })));

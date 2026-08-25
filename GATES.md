@@ -1,6 +1,6 @@
 # Gates: v16 Phase 1 foundation
 
-<!-- OWNS merged into one ledger header: Phase 1 = domain/**, tests/**, package.json, data.js; Phase 2 = app.js, styles.css, domain/substitutions.js, research/22-progression-engine.md, research/24-data-model.md, tests/phase2.test.mjs, dashboard.html generator; Phase 3 = styles.css, index.html, app.js, manifest.webmanifest, icon-*.svg, scripts/build-dashboard.mjs, scripts/lint-contrast.mjs, scripts/verify-phase3-identity.mjs, package.json, dashboard.html, GATES.md. -->
+<!-- OWNS merged into one ledger header: Phase 1 = domain/**, tests/**, package.json, data.js; Phase 2 = app.js, styles.css, domain/substitutions.js, research/22-progression-engine.md, research/24-data-model.md, tests/phase2.test.mjs, dashboard.html generator; Phase 3 = styles.css, index.html, app.js, manifest.webmanifest, icon-*.svg, scripts/build-dashboard.mjs, scripts/lint-contrast.mjs, scripts/verify-phase3-identity.mjs, package.json, dashboard.html, GATES.md; Phase 4 = app.js, styles.css, index.html, scripts/lint-contrast.mjs, tests/phase4-runner.spec.mjs, package.json, GATES.md. -->
 OWNS: domain/**, tests/**, package.json, data.js, styles.css, index.html, app.js, manifest.webmanifest, icon-192.svg, icon-512.svg, icon-maskable-512.svg, scripts/build-dashboard.mjs, scripts/lint-contrast.mjs, scripts/verify-phase3-identity.mjs, dashboard.html, GATES.md
 
 Scope: independently testable ES-module foundation for catalogue, event log, volume, progression, clamps, migrations, and the reproduced v15 data-loss regressions.
@@ -78,3 +78,20 @@ Scope extension: three adopted skins across light, dark, and automatic modes; no
   CHECK: test "$(git rev-parse main)" = "4627432fc5fce240503702bf040ada2e9f01b487" && git diff --stat main && printf 'MAIN_ANCHORED\\n'
   EXPECT: MAIN_ANCHORED
   EVIDENCE: exit=0; output=MAIN_ANCHORED; git diff --stat main emitted
+
+# Gates: v16 Phase 4 session runner
+
+- [ ] G15: The 390×844 runner contains its own shell, main, and set-panel content without clipping in either video state, and the home overview is absent from its DOM
+  CHECK: npm run test:runner
+  EXPECT: /PHASE4_RUNNER_COLLAPSED_PASSED[\s\S]*PHASE4_RUNNER_EXPANDED_PASSED/
+  EVIDENCE: SUPERSEDED INSTRUMENT — document scrollHeight was blind behind overflow:hidden. External positive control (a test-only, env-triggered fixture; no application code) proved it: collapsed shell client=844 scroll=844 spare=0 while main client=692 scroll=1116 spare=-424; expanded main client=692 scroll=1248 spare=-556; exit=1, 2 failed. The local geometry gate first passed externally: collapsed viewport=844 shell=844 viewportMargin=0, main=692/692, setPanel=482/482, belowFold=[]; expanded viewport=844 shell=844 viewportMargin=0, main=692/692, setPanel=350/350, belowFold=[]; exit=0, 4 passed. After the 52px-target redesign, its real gate correctly failed: collapsed main=692/692, setPanel=448/448; expanded main=692/692, setPanel=316/322, spare=-6; exit=1, 1 failed. Its matching positive control still failed with document spare=0 but main spare=-458 collapsed / -590 expanded. The row gap is now reduced from 4px to 2px, a computed 10px reclaim across five rows; external re-verification is pending. Claude runs this gate outside the Codex sandbox because Chromium aborts in the sandbox.
+
+- [x] G16: Runner video and cue settings persist per profile across reload
+  CHECK: npm run test:runner
+  EXPECT: PHASE4_RUNNER_PREFERENCES_PASSED
+  EVIDENCE: external Playwright exit=0; 4 passed.
+
+- [x] G17: The runner records a skipped warm-up, uses horizontal swipe only to change exercises, and leaves without ending the active session
+  CHECK: npm run test:runner
+  EXPECT: PHASE4_RUNNER_SESSION_LIFECYCLE_PASSED
+  EVIDENCE: external Playwright exit=0; 4 passed.
