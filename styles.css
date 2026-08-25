@@ -361,9 +361,8 @@ main { padding: 16px 16px 28px; }
 .ex.expanded .ex-body { display: block; animation: exReveal var(--dur) var(--ease-out); }
 @keyframes exReveal { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
 
-/* ===== Info rows — differentiated by ROLE (no side-stripe) ===
-   last-time = quiet data · today-target = the one highlight · cue = subtle tip */
-.cue, .last-time, .today-target, .warmup-block {
+/* ===== Info rows — differentiated by role (no side-stripe) === */
+.cue, .last-time, .warmup-block {
   position: relative;
   line-height: 1.45;
   border-radius: var(--radius-sm);
@@ -377,14 +376,6 @@ main { padding: 16px 16px 28px; }
   color: var(--text-muted); font-size: 12.5px;
 }
 .last-time strong { color: var(--text); font-weight: 650; }
-/* today's target → THE highlight */
-.today-target {
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  color: color-mix(in srgb, var(--accent) 58%, var(--text));
-  font-size: 13.5px; font-weight: 500;
-}
-.today-target strong { color: color-mix(in srgb, var(--accent) 80%, var(--text)); font-weight: 700; }
 /* cue → subtle tip */
 .cue {
   background: var(--bg-elev);
@@ -402,7 +393,7 @@ main { padding: 16px 16px 28px; }
 /* ===== Set grid ========================================== */
 .set-grid-headers, .set-grid {
   display: grid;
-  grid-template-columns: 30px 1fr 1fr 58px 46px;
+  grid-template-columns: 30px minmax(72px, 1fr) minmax(64px, 0.8fr) 48px;
   gap: 8px;
 }
 .set-grid-headers {
@@ -461,6 +452,40 @@ main { padding: 16px 16px 28px; }
   box-shadow: var(--shadow-accent);
   animation: checkPop var(--dur) var(--ease-out);
 }
+
+/* A set row fits a narrow phone without horizontal scrolling. Weight and reps
+   arrive prefilled, so the ordinary working-set action is one thumb tap. */
+.set-grid, .set-grid-headers { max-width: 100%; min-width: 0; }
+.set-grid input { min-width: 0; font-size: max(16px, 1em); }
+.set-check { touch-action: manipulation; }
+.final-effort-row {
+  display: grid; grid-template-columns: 1fr; gap: 7px;
+  margin: 3px 0 12px; padding: 10px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-muted); font-weight: 650;
+}
+.effort-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.effort-picker button {
+  min-height: 46px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--text); font: inherit; font-weight: 700;
+  cursor: pointer; touch-action: manipulation;
+}
+.effort-picker button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
+/* General warm-up is a real, ordered session phase. */
+.warmup-phase { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.phase-kicker { color: var(--warning); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.warmup-phase h3 { margin: 6px 0; }
+.warmup-step { display: grid; gap: 9px; padding: 13px 0; border-top: 1px solid var(--border); }
+.warmup-minute-picker, .warmup-drill-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.warmup-drill {
+  width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center;
+  padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  touch-action: manipulation;
+}
+.warmup-drill.done { border-color: var(--good); color: var(--good); }
+.warmup-drill:disabled { opacity: .45; cursor: not-allowed; }
 @keyframes checkPop { 0% { transform: scale(0.82); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
 
 /* ===== RPE picker ======================================== */
@@ -535,6 +560,12 @@ main { padding: 16px 16px 28px; }
 }
 
 .ex-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.scope-picker { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0; }
+.substitution-status { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin: 10px 0; }
+.substitution-status.clean { border-color: color-mix(in srgb, var(--good) 55%, var(--border)); color: var(--good); }
+.substitution-status.warn { border-color: color-mix(in srgb, var(--warning) 60%, var(--border)); color: var(--warning); }
+.substitution-status.block-with-override { border-color: color-mix(in srgb, var(--danger) 60%, var(--border)); color: var(--danger); }
+.substitution-status .tiny { margin-top: 4px; color: var(--text-muted); }
 
 /* ===== Video thumbs ====================================== */
 .video-row {
@@ -1134,8 +1165,6 @@ body.welcome-mode main {
 .set-grid input { font-size: 20px; font-weight: 720; min-height: 48px; }
 .set-grid .set-num { font-size: 14px; font-weight: 800; }
 .set-check { width: 48px; height: 48px; font-size: 21px; border-width: 2px; }
-.today-target { font-size: 14.5px; }
-.today-target strong { font-weight: 800; }
 
 /* Primary CTA — punchier */
 .btn { font-weight: 650; }

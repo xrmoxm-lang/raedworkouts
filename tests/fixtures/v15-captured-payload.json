@@ -1,0 +1,43 @@
+{
+  "schema_version": 2,
+  "current_week": 1,
+  "current_block": 1,
+  "profile": {
+    "display_name": "Raed",
+    "experience": "returning",
+    "bodyweight_kg": 82,
+    "created_at": "2026-08-20T06:00:00.000Z"
+  },
+  "history": [
+    {
+      "date": "2026-08-23",
+      "session_id": "session_b",
+      "started_at": "2026-08-23T06:00:00.000Z",
+      "ended_at": "2026-08-23T07:00:00.000Z",
+      "exercises": {
+        "hip_thrust": {
+          "sets": [
+            { "is_warmup": false, "weight": 10, "reps": 0, "rpe": 8, "completed": true }
+          ]
+        },
+        "incline_chest_press": {
+          "sets": [
+            { "is_warmup": false, "weight": 0, "reps": 0, "rpe": 8, "completed": true }
+          ]
+        },
+        "lat_pulldown": {
+          "sets": [
+            { "is_warmup": false, "weight": 30, "reps": 10, "rpe": 8, "completed": true }
+          ]
+        }
+      }
+    }
+  ],
+  "active_session": null,
+  "custom_videos": {
+    "lat_pulldown": ["https://www.youtube.com/watch?v=goIzUxshgGI"]
+  },
+  "custom_exercises": [],
+  "video_hidden": {},
+  "prs": {}
+}

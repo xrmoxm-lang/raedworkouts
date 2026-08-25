@@ -468,13 +468,13 @@ const EXERCISES = [
 // `is_first_of_muscle` triggers the warmup prompt.
 const PROGRAMME = {
   block: 1,
-  block_name: 'Block 1 — Calibration (Weeks 1–4)',
+  block_name: 'Block 1 — Re-entry (Weeks 1–4)',
   weeks: 4,
   notes: [
-    'First exercise of each muscle gets 2 warm-up sets (50% × 10, 75% × 6). Other exercises: 1 light set or none.',
-    'RPE target 7–8 on all working sets (3 reps in the tank).',
-    'Add weight when you hit top of rep range at RPE 7–8 for 2 consecutive sessions: upper +2.5 kg, lower +5 kg, accessories +reps before +kg.',
-    'Week 1 is calibration. If anything feels too light, flag it for next session. Don\'t grind.',
+    'Compound ramps: 2 sets (50% × 6–10, 70% × 4–6). Isolation: 1 set at 60% or none. Repeated movement patterns get no ramp.',
+    'Completed reps drive progression. Final-set effort is only a brake: very hard blocks an earned increase; easy can land one reps-earned increase one exposure sooner.',
+    'Add load after every working set reaches the top of its rep range in 2 consecutive sessions; deterministic safety clamps decide the final weight.',
+    'Weeks 1–2 are a re-entry ramp. Start from logged history when it exists; do not deliberately under-load a detrained lifter.',
     'No barbell back squat or conventional deadlift yet. Romanian Deadlift introduced in Block 2.',
   ],
   sessions: [
@@ -501,11 +501,11 @@ const PROGRAMME = {
         ],
       },
       exercises: [
-        { exercise_id: 'leg_press',            sets: 3, reps: '10',    start_kg: 60,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 30kg×10, 45kg×6' },
-        { exercise_id: 'incline_chest_press',  sets: 3, reps: '10',    start_kg: 25,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 12.5kg×10, 20kg×6' },
-        { exercise_id: 'lat_pulldown',         sets: 3, reps: '10',    start_kg: 30,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 15kg×10, 22.5kg×6' },
-        { exercise_id: 'leg_extension',        sets: 3, reps: '12',    start_kg: 17.5, rpe: '7-8', is_first_of_muscle: false },
-        { exercise_id: 'lateral_raise_db',     sets: 3, reps: '12-15', start_kg: 4,    rpe: '8',   is_first_of_muscle: true,  warmup: '1 light set' },
+        { exercise_id: 'leg_press',            sets: 3, reps: '8-10',  start_kg: 60,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 30kg×10, 40kg×6' },
+        { exercise_id: 'incline_chest_press',  sets: 3, reps: '8-10',  start_kg: 25,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 12.5kg×10, 17.5kg×6' },
+        { exercise_id: 'lat_pulldown',         sets: 3, reps: '8-10',  start_kg: 30,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 15kg×10, 20kg×6' },
+        { exercise_id: 'leg_extension',        sets: 3, reps: '10-12', start_kg: 17.5, rpe: '7-8', is_first_of_muscle: false },
+        { exercise_id: 'lateral_raise_db',     sets: 3, reps: '10-12', start_kg: 4,    rpe: '8',   is_first_of_muscle: true,  warmup: '1 light set' },
       ],
     },
     {
@@ -531,11 +531,11 @@ const PROGRAMME = {
         ],
       },
       exercises: [
-        { exercise_id: 'hip_thrust',           sets: 3, reps: '10',    start_kg: 20,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 10kg×10, 15kg×6' },
-        { exercise_id: 'chest_press_machine',  sets: 3, reps: '10',    start_kg: 25,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 12.5kg×10, 20kg×6' },
-        { exercise_id: 'lat_pulldown_neutral', sets: 3, reps: '10',    start_kg: 30,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 15kg×10, 22.5kg×6' },
-        { exercise_id: 'prone_leg_curl',       sets: 3, reps: '12',    start_kg: 10,   rpe: '7-8', is_first_of_muscle: true,  warmup: '1 light set' },
-        { exercise_id: 'face_pull',            sets: 3, reps: '15',    start_kg: 10,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets — go straight in' },
+        { exercise_id: 'hip_thrust',           sets: 3, reps: '8-10',  start_kg: 20,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 10kg×10, 12.5kg×6' },
+        { exercise_id: 'chest_press_machine',  sets: 3, reps: '8-10',  start_kg: 25,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 12.5kg×10, 17.5kg×6' },
+        { exercise_id: 'lat_pulldown_neutral', sets: 3, reps: '8-10',  start_kg: 30,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 15kg×10, 20kg×6' },
+        { exercise_id: 'prone_leg_curl',       sets: 3, reps: '10-12', start_kg: 10,   rpe: '7-8', is_first_of_muscle: true,  warmup: '1 light set' },
+        { exercise_id: 'face_pull',            sets: 3, reps: '10-12', start_kg: 10,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets — go straight in' },
       ],
     },
   ],
@@ -546,10 +546,10 @@ const PROGRAMME = {
 // Same Block 1 calibration philosophy, just split across 3 sessions.
 const PROGRAMME_PPL = {
   block: 1,
-  block_name: 'Block 1 — Calibration (Weeks 1–4) — PPL 3×',
+  block_name: 'Block 1 — Re-entry (Weeks 1–4) — PPL 3×',
   weeks: 4,
   notes: [
-    'Same calibration rules as full-body. RPE 7–8. No grind.',
+    'Same re-entry rules as full-body. Completed reps lead; final-set effort can only slow an earned increase. No grind.',
     'Pick any 3 days that give 24h+ rest between adjacent sessions (Sat/Mon/Wed works well).',
     'Order is fixed: Push → Pull → Legs. Loop. The app shows what\'s next based on history, not day-of-week.',
     'Romanian Deadlift introduced Block 2. No barbell back squat in Block 1.',
@@ -575,11 +575,11 @@ const PROGRAMME_PPL = {
         ],
       },
       exercises: [
-        { exercise_id: 'incline_chest_press',  sets: 3, reps: '10',     start_kg: 25,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 12.5kg×10, 20kg×6' },
-        { exercise_id: 'chest_press_machine',  sets: 3, reps: '10',     start_kg: 25,   rpe: '7-8', is_first_of_muscle: false, warmup: '0 sets — chest is warm' },
-        { exercise_id: 'shoulder_press_machine', sets: 3, reps: '10',   start_kg: 7.5,  rpe: '7-8', is_first_of_muscle: true,  warmup: '1 light set' },
-        { exercise_id: 'lateral_raise_db',     sets: 3, reps: '12-15',  start_kg: 4,    rpe: '8',   is_first_of_muscle: false },
-        { exercise_id: 'tricep_pushdown',      sets: 3, reps: '12',     start_kg: 15,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
+        { exercise_id: 'incline_chest_press',  sets: 3, reps: '8-10',   start_kg: 25,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 12.5kg×10, 17.5kg×6' },
+        { exercise_id: 'chest_press_machine',  sets: 3, reps: '8-10',   start_kg: 25,   rpe: '7-8', is_first_of_muscle: false, warmup: '0 sets — chest is warm' },
+        { exercise_id: 'shoulder_press_machine', sets: 3, reps: '8-10', start_kg: 7.5,  rpe: '7-8', is_first_of_muscle: true,  warmup: '1 light set' },
+        { exercise_id: 'lateral_raise_db',     sets: 3, reps: '10-12',  start_kg: 4,    rpe: '8',   is_first_of_muscle: false },
+        { exercise_id: 'tricep_pushdown',      sets: 3, reps: '10-12',  start_kg: 15,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
       ],
     },
     {
@@ -601,11 +601,11 @@ const PROGRAMME_PPL = {
         ],
       },
       exercises: [
-        { exercise_id: 'lat_pulldown',         sets: 3, reps: '10',     start_kg: 30,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 15kg×10, 22.5kg×6' },
-        { exercise_id: 'seated_cable_row',     sets: 3, reps: '10',     start_kg: 25,   rpe: '7-8', is_first_of_muscle: false, warmup: '1 light set' },
-        { exercise_id: 'face_pull',            sets: 3, reps: '15',     start_kg: 10,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
-        { exercise_id: 'biceps_curl',          sets: 3, reps: '12',     start_kg: 5,    rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
-        { exercise_id: 'hammer_curl',          sets: 3, reps: '12',     start_kg: 4,    rpe: '8',   is_first_of_muscle: false },
+        { exercise_id: 'lat_pulldown',         sets: 3, reps: '8-10',   start_kg: 30,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 15kg×10, 20kg×6' },
+        { exercise_id: 'seated_cable_row',     sets: 3, reps: '8-10',   start_kg: 25,   rpe: '7-8', is_first_of_muscle: false, warmup: '1 light set' },
+        { exercise_id: 'face_pull',            sets: 3, reps: '10-12',  start_kg: 10,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
+        { exercise_id: 'biceps_curl',          sets: 3, reps: '10-12',  start_kg: 5,    rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
+        { exercise_id: 'hammer_curl',          sets: 3, reps: '10-12',  start_kg: 4,    rpe: '8',   is_first_of_muscle: false },
       ],
     },
     {
@@ -627,21 +627,47 @@ const PROGRAMME_PPL = {
         ],
       },
       exercises: [
-        { exercise_id: 'leg_press',            sets: 3, reps: '10',     start_kg: 60,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 30kg×10, 45kg×6' },
-        { exercise_id: 'leg_extension',        sets: 3, reps: '12',     start_kg: 17.5, rpe: '7-8', is_first_of_muscle: false, warmup: '0 sets — quads warm' },
-        { exercise_id: 'hip_thrust',           sets: 3, reps: '10',     start_kg: 20,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 10kg×10, 15kg×6' },
-        { exercise_id: 'prone_leg_curl',       sets: 3, reps: '12',     start_kg: 10,   rpe: '7-8', is_first_of_muscle: true,  warmup: '1 light set' },
-        { exercise_id: 'standing_calf',        sets: 3, reps: '15',     start_kg: 25,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
+        { exercise_id: 'leg_press',            sets: 3, reps: '8-10',   start_kg: 60,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 30kg×10, 40kg×6' },
+        { exercise_id: 'leg_extension',        sets: 3, reps: '10-12',  start_kg: 17.5, rpe: '7-8', is_first_of_muscle: false, warmup: '0 sets — quads warm' },
+        { exercise_id: 'hip_thrust',           sets: 3, reps: '8-10',   start_kg: 20,   rpe: '7',   is_first_of_muscle: true,  warmup: '2 sets: 10kg×10, 12.5kg×6' },
+        { exercise_id: 'prone_leg_curl',       sets: 3, reps: '10-12',  start_kg: 10,   rpe: '7-8', is_first_of_muscle: true,  warmup: '1 light set' },
+        { exercise_id: 'standing_calf',        sets: 3, reps: '10-12',  start_kg: 25,   rpe: '8',   is_first_of_muscle: true,  warmup: '0 sets' },
       ],
     },
   ],
+};
+
+// ---- v16 session warm-up phases -----------------------------
+// The general phase is deliberately short: treadmill first, then ten-rep
+// drills, then each exercise's own ramp rows. Upper never includes leg drills.
+const SESSION_WARMUPS = {
+  upper: {
+    cap_minutes: 15,
+    treadmill_minutes: [5, 7, 10],
+    drills: [
+      { id: 'arm_swings', movement: 'Arm swings', reps: 10 },
+      { id: 'arm_circles', movement: 'Arm circles', reps: 10 },
+      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10 },
+    ],
+  },
+  lower: {
+    cap_minutes: 15,
+    treadmill_minutes: [5, 7, 10],
+    drills: [
+      { id: 'arm_swings', movement: 'Arm swings', reps: 10 },
+      { id: 'arm_circles', movement: 'Arm circles', reps: 10 },
+      { id: 'front_back_leg_swings', movement: 'Front/back leg swings', reps: 10 },
+      { id: 'side_side_leg_swings', movement: 'Side/side leg swings', reps: 10 },
+      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10 },
+    ],
+  },
 };
 
 // ---- Athlete profile (from SKILL.md) ------------------------
 const ATHLETE = {
   name: 'Raed',
   goal: 'Body recomposition — muscle gain + fat loss',
-  experience: 'Returning beginner (2-year layoff)',
+  experience: 'Detrained lifter returning after a 2-year layoff',
   schedule: 'Tuesday + Saturday AM',
   session_cap_min: 80,
   bodyweight_kg: 82,
@@ -659,7 +685,7 @@ const ATHLETE = {
 };
 
 const FAMILY_PROFILES = [
-  { user_id: 'Raed', display_name: 'Raed', experience: 'returning', bodyweight_kg: 82, allowlisted: true },
+  { user_id: 'Raed', display_name: 'Raed', experience: 'detrained', bodyweight_kg: 82, allowlisted: true },
   { user_id: 'bassam', display_name: 'Bassam', experience: 'returning', bodyweight_kg: null, allowlisted: true },
   { user_id: 'abdullah', display_name: 'Abdullah', experience: 'beginner', bodyweight_kg: null, allowlisted: true },
 ];
@@ -690,4 +716,4 @@ const MOTIVATIONAL_MESSAGES = [
 ];
 
 // Export to global scope for the app
-window.RW = { MUSCLES, EXERCISES, PROGRAMME, PROGRAMME_PPL, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };
+window.RW = { MUSCLES, EXERCISES, PROGRAMME, PROGRAMME_PPL, SESSION_WARMUPS, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };

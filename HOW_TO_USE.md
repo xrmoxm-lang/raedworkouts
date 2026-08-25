@@ -6,7 +6,7 @@ This is for you, Raed. Read it once. Don't read it again. The whole point of thi
 
 ## The one-paragraph version
 
-Tuesday and Saturday mornings, you open the app. The Home screen tells you exactly what to do. Press the green **Start Session** button. Your first exercise appears. Do the warm-up sets the app pre-fills, then your working sets. Tap the circle when each set is done — the rest timer runs automatically. When you're done with that exercise, press **Next exercise**. Repeat 5 times. Press **Finish session**. Walk out. Done.
+Open the app and press the green **Start Session** button. First complete the 5–10 minute treadmill walk and the 10-rep drills, then the per-exercise ramps the app pre-fills. Working weight and reps are already filled in; tap the circle with one thumb when a set is done. On the final set of an exercise, tap **easy**, **medium**, or **very hard**, then finish it. The rest timer runs automatically. Repeat, then press **Finish session**.
 
 ---
 
@@ -28,7 +28,8 @@ The app already knows:
 
 - The exercise.
 - The weight you should put on the bar (calculated from your last 2 sessions).
-- How many warm-up sets to do (and at what weight — 50% × 10, then 75% × 6 for the first exercise of each muscle).
+- A short warm-up phase: treadmill walk 5–10 min, then 10 reps of each drill (Upper days never show leg drills), capped at 15 min before exercise ramps.
+- How many per-exercise ramp sets to do (and at what weight — 50% × 10, then 70% × 6 for the first exercise of each muscle).
 - How many working sets and reps you're aiming for.
 - The RPE target (how hard it should feel).
 - A one-line cue on form.
@@ -42,7 +43,7 @@ You don't decide any of this. **You just do it.**
 
 ## When a machine is busy
 
-Tap **⇄ Swap** on that exercise. The app shows you 1–3 alternatives that hit the same muscle. Tap one. Your weight is auto-recalculated. Keep going.
+Tap **⇄ Swap** on that exercise. Swipe an alternative left (or tap it), choose whether it lasts this session, this week, or this block, and read the volume result before adopting. A hard volume violation needs an explicit override, which the app records with that scope.
 
 This is the single feature that will save you the most stress at a busy commercial gym. Use it without guilt. The substitute lifts are equally good for hypertrophy.
 
@@ -50,18 +51,19 @@ This is the single feature that will save you the most stress at a busy commerci
 
 ## The set-tracker
 
-Each set has 4 inputs:
+Each set has three controls:
 
 ```
-Weight (kg)   Reps   RPE   ✓
+Weight (kg)   Reps   ✓
 ```
 
 - **Weight**: pre-filled with the suggestion. Change it if you used something different.
-- **Reps**: how many you actually did.
-- **RPE**: optional but useful. 7 = comfortable, 8 = hard but clean, 9 = grinding (don't go here in Block 1), 10 = couldn't do another (never go here in Block 1).
+- **Reps**: pre-filled at the bottom of the range. Change them only when you did something different.
 - **✓**: tap when the set is done. The rest timer starts. Your phone buzzes when rest is over.
 
-If you forget RPE, that's fine. Just log weight + reps.
+After the final working set only, choose **easy**, **medium**, or **very hard**. It is a simple ranking, not a reps-left number. Very hard can block a reps-earned increase; easy can land one session sooner. It can never create an increase without the completed reps.
+
+Numeric RIR is not part of normal set logging. It remains reserved for the separate weekly calibration set.
 
 ---
 
@@ -80,12 +82,13 @@ These are Spotify defaults. You can paste your own playlist URLs by editing `dat
 
 You don't track this. The app does.
 
-- Hit the top of the rep range at RPE ≤ 8 for **two sessions in a row** → next session, the suggested weight goes up.
+- Hit the top of the rep range for **two sessions in a row** → next session, the suggested weight goes up unless the final set was **very hard**.
+- If every set hit the top and the final-set rating is **easy**, that reps-earned increase can land one session sooner.
 - Upper body exercises: +2.5 kg.
 - Lower body exercises: +5 kg.
 - Accessories (lateral raise, face pull, etc.): you'll be prompted to add reps before adding weight.
 
-You'll see a note like "🔥 You hit 10 @ RPE≤8 for 2 sessions. Bump +2.5 kg." That's the cue. Trust it.
+You'll see a note like "Completed 10 on every set twice. Bump +2.5 kg." That's the cue. Trust it.
 
 ---
 
@@ -100,14 +103,14 @@ The app handles this automatically. The warm-up rows are dimmer and labeled **W1
 
 ---
 
-## Block 1 (weeks 1–4) is calibration
+## Weeks 1–2 are re-entry
 
-This is the boring truth: the first 4 weeks are about **finding your weights**, not breaking PRs.
+You trained before. The first two weeks are about returning smoothly while completed reps find the real level — not pretending you are starting from zero.
 
 - Don't grind.
-- Don't go to RPE 9.
-- If a weight feels too light, that's fine for now — finish the session, the app will bump it next time.
-- If a weight feels too heavy, drop it 2.5 kg mid-set. Note it. Move on.
+- Do not grind.
+- If a weight feels easy and all sets reached the top, choose **easy** on the final set; reps still have to earn the increase.
+- If a weight is too heavy, drop it 2.5 kg mid-session. Log the real set and move on.
 
 In Block 2 (weeks 5–8), Romanian Deadlift gets added. In Block 3 (weeks 9–12), peak — then deload week 12.
 

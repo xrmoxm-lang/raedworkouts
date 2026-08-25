@@ -39,7 +39,7 @@ const STRINGS = {
     save: 'Save', cancel: 'Cancel', wipe_data: 'Wipe all data',
     theme: 'Theme', language: 'Language', music: 'Music',
     force_session: 'Force next session', missed_day: 'Missed a day? Override which session starts next.',
-    working_sets: 'working sets', last_time: '📊 Last time', today_target: '🎯 Today:',
+    working_sets: 'working sets', last_time: '📊 Last time',
     warmup: 'Warm-up', add_set: '+ Set', swap: '⇄ Swap', done: 'Done',
     sessions_4wk: 'sessions / 4 wks', kg_this_week: 'kg this week',
     foundation: 'foundation', strength: 'strength', peak: 'peak',
@@ -56,7 +56,7 @@ const STRINGS = {
     save: 'حفظ', cancel: 'إلغاء', wipe_data: 'مسح كل البيانات',
     theme: 'المظهر', language: 'اللغة', music: 'الموسيقى',
     force_session: 'تحديد الجلسة التالية', missed_day: 'غبت يوم؟ اختر الجلسة التالية يدوياً.',
-    working_sets: 'سيت', last_time: '📊 آخر مرة', today_target: '🎯 اليوم:',
+    working_sets: 'سيت', last_time: '📊 آخر مرة',
     warmup: 'إحماء', add_set: '+ سيت', swap: '⇄ بديل', done: 'تم',
     sessions_4wk: 'جلسات / 4 أسابيع', kg_this_week: 'كغ هذا الأسبوع',
     foundation: 'التأسيس', strength: 'القوة', peak: 'الذروة',
@@ -120,56 +120,25 @@ function lastRevKey(userId) { return nsKey(userId, 'lastrev'); }
 function preRestoreKey(userId) { return nsKey(userId, 'prerestore'); }
 function dirtyKey(userId) { return nsKey(userId, 'dirty'); }
 
-// ---- RPE picker -----------------------------------------------
-// Maps emoji → numeric RPE used by the progression algorithm.
-const RPE_LEVELS = [
-  { value: 7, emoji: '😌', label: 'Easy' },
-  { value: 8, emoji: '💪', label: 'Right' },
-  { value: 9, emoji: '🥵', label: 'Hard' },
+// ---- Final-set effort -----------------------------------------
+// D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
+const EFFORT_LEVELS = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'very_hard', label: 'Very hard' },
 ];
-function rpeEmoji(rpe) {
-  if (rpe == null || rpe === '') return '💪';
-  const n = parseFloat(rpe);
-  if (n <= 7.5) return '😌';
-  if (n >= 8.5) return '🥵';
-  return '💪';
-}
-function rpePicker(set, onChange) {
-  const wrap = h('div', { style: 'position:relative;' });
-  const btn = h('button', {
-    class: 'rpe-btn', type: 'button',
-    'data-rpe': String(set.rpe || 8),
-    onClick: (ev) => {
-      ev.stopPropagation();
-      pop.classList.toggle('open');
-      // close on outside click
-      const closer = (e) => {
-        if (!wrap.contains(e.target)) {
-          pop.classList.remove('open');
-          document.removeEventListener('click', closer, true);
-        }
-      };
-      setTimeout(() => document.addEventListener('click', closer, true), 0);
-    }
-  }, rpeEmoji(set.rpe));
-  const pop = h('div', { class: 'rpe-popover' },
-    RPE_LEVELS.map(l => h('button', {
+function effortPicker(set, onChange) {
+  return h('div', { class: 'effort-picker', role: 'group', 'aria-label': 'Final-set effort' },
+    EFFORT_LEVELS.map(level => h('button', {
       type: 'button',
-      class: parseFloat(set.rpe) === l.value ? 'active' : '',
-      title: l.label,
-      onClick: (ev) => {
-        ev.stopPropagation();
-        set.rpe = l.value;
-        btn.textContent = l.emoji;
-        btn.setAttribute('data-rpe', String(l.value));
-        pop.classList.remove('open');
-        if (onChange) onChange();
-      }
-    }, l.emoji))
+      class: set.effort === level.value ? 'active' : '',
+      'aria-pressed': set.effort === level.value ? 'true' : 'false',
+      onClick: () => {
+        set.effort = level.value;
+        if (onChange) onChange(level.value);
+      },
+    }, level.label))
   );
-  wrap.appendChild(btn);
-  wrap.appendChild(pop);
-  return wrap;
 }
 
 // ---- Programme variants --------------------------------------
@@ -470,8 +439,8 @@ const defaultState = () => ({
   current_week: 1,
   current_block: 1,
   profile: null,                // { display_name, experience, bodyweight_kg, created_at }
-  active_session: null,        // { date, session_id, started_at, exercises: {...} }
-  history: [],                 // [{ date, session_id, started_at, ended_at, notes, exercises: {...}, swaps: {...} }]
+  active_session: null,        // { date, session_id, started_at, warmup, exercises: {...} }
+  history: [],                 // [{ date, session_id, started_at, ended_at, exercises: {...}, substitutions: [...] }]
   bodyweight_log: [],          // [{ date, kg }]
   custom_videos: {},           // { exercise_id: [url, url, ...] }  — extra videos user adds
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
@@ -482,6 +451,7 @@ const defaultState = () => ({
   msg_index: 0,                // rotates through MOTIVATIONAL_MESSAGES
   last_sync: null,
   forced_next_session: null,   // session id override when user missed a day
+  substitutions: [],           // explicit, scoped D24 §5 substitution records
 });
 
 const defaultSettings = () => ({
@@ -492,6 +462,7 @@ const defaultSettings = () => ({
   vibrate: true,
   notifications: true,         // browser notifications when rest ends (req permission)
   focus_mode: true,            // one-exercise-at-a-time during active session
+  show_cues: true,             // live-session control; defaults to useful form cues
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
   programme_variant: 'ppl_3x',  // fullbody_2x | ppl_3x
   pending_variant: null,       // legacy queue value; cleared on boot/switch
@@ -532,7 +503,7 @@ function hasMeaningfulLocalData() {
 
 function familyProfileSeeds() {
   return RW.FAMILY_PROFILES || [
-    { user_id: 'Raed', display_name: 'Raed', experience: 'returning', bodyweight_kg: 82, allowlisted: true },
+    { user_id: 'Raed', display_name: 'Raed', experience: 'detrained', bodyweight_kg: 82, allowlisted: true },
     { user_id: 'bassam', display_name: 'Bassam', experience: 'returning', allowlisted: true },
     { user_id: 'abdullah', display_name: 'Abdullah', experience: 'beginner', allowlisted: true },
   ];
@@ -551,7 +522,7 @@ function ensureProfile() {
     state.profile = fallbackProfile(settings.user_id || activeUser);
   }
   if (!state.profile.display_name) state.profile.display_name = settings.user_id || activeUser || '';
-  if (!state.profile.experience) state.profile.experience = 'returning';
+  if (!state.profile.experience) state.profile.experience = 'detrained';
   if (!state.profile.created_at) state.profile.created_at = new Date().toISOString();
 }
 function registerLocalProfile(profile) {
@@ -559,7 +530,7 @@ function registerLocalProfile(profile) {
   list.push({
     user_id: profile.user_id,
     display_name: profile.display_name || profile.user_id,
-    experience: profile.experience || 'returning',
+    experience: profile.experience || 'detrained',
     updated_at: new Date().toISOString(),
   });
   localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(list));
@@ -1477,22 +1448,34 @@ function effectiveStartKg(planned) {
   const base = Number(planned.start_kg) || 0;
   if (!base) return 0;
   const exp = state.profile?.experience || 'returning';
+  // D19: a detrained lifter starts from real logged history whenever it exists.
+  // The reference seed is not deliberately scaled down for Raed's re-entry.
+  if (exp === 'detrained' || exp === 'returning') return Math.round(base / 2.5) * 2.5;
   const factor = exp === 'beginner' ? 0.5 : (exp === 'experienced' ? 1.25 : 1);
   const scaled = base * factor;
   if (exp === 'beginner') return Math.max(2.5, Math.floor(scaled / 2.5) * 2.5);
   return Math.round(scaled / 2.5) * 2.5;
 }
-function roundToGymIncrement(value) {
+// Clamp C3: always round DOWN to the equipment step. Rounding to nearest, as this
+// did before, silently sent a warm-up set ABOVE the prescribed percentage — a 9 kg
+// working weight produced a 5 kg "50%" warm-up. Down is the conservative direction
+// for a beginner, and it is the only direction the clamp spec allows.
+// `step` is per-exercise and is learned from logged weights; 2.5 is the provisional
+// default until enough observations exist. Phase 2 replaces this with the shared
+// domain/clamps.js implementation once app.js is loaded as a module.
+function roundToGymIncrement(value, step) {
   const n = Number(value) || 0;
-  return Math.max(2.5, Math.round(n / 2.5) * 2.5);
+  const s = Number(step) > 0 ? Number(step) : 2.5;
+  return Math.max(s, Math.floor(n / s) * s);
 }
 function fmtKgValue(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
 }
-function twoSetWarmupFrom(weight) {
+// Compound ramp, sourced: 50% x 6-10 then 70% x 4-6 (ML L11160/L11162, PPL L:1454/1457).
+function twoSetWarmupFrom(weight, step) {
   return [
-    { weight: roundToGymIncrement(weight * 0.5), reps: 10 },
-    { weight: roundToGymIncrement(weight * 0.75), reps: 6 },
+    { weight: roundToGymIncrement(weight * 0.5, step), reps: 10 },
+    { weight: roundToGymIncrement(weight * 0.7, step), reps: 6 },
   ];
 }
 function warmupText(planned, suggestedWeight) {
@@ -1509,29 +1492,36 @@ function suggestNextWeight(exercise_id, planned) {
   const last2 = getLastTwoPerformances(exercise_id);
   const ex = getAllExercises().find(e => e.id === exercise_id);
   const startKg = effectiveStartKg(planned);
-  if (!ex) return { weight: startKg, note: 'First time — start light, find your RPE 7.' };
-  if (!last2.length) return { weight: startKg, note: `⚡ First time — calibration. Start ~${startKg} kg, find a weight you could do for ${planned.reps} with 2-3 left in the tank. سجّل الوزن الحقيقي.` };
+  if (!ex) return { weight: startKg, note: 'First exposure — use the seeded load, then log the real result.' };
+  if (!last2.length) return { weight: startKg, note: `⚡ Re-entry seed: ${startKg} kg. Let completed reps find the right level; do not grind.` };
   const latest = last2[0];
   const topReps = parseInt(String(planned.reps).split('-').pop(), 10) || 10;
   // Find the heaviest working set
   const workingSets = (latest.sets || []).filter(s => !s.is_warmup && s.weight && s.reps && s.completed);
-  if (!workingSets.length) return { weight: latest.sets?.[0]?.weight || planned.start_kg, note: 'Last session not fully logged — repeat.' };
+  if (!workingSets.length) return { weight: latest.sets?.[0]?.weight || planned.start_kg, note: 'Use the last logged working load and complete the prescribed reps.' };
   const lastTopSet = workingSets[workingSets.length - 1];
-  const allHitTarget = workingSets.every(s => s.reps >= topReps && (s.rpe == null || s.rpe <= 8));
+  const allHitTarget = workingSets.every(s => s.reps >= topReps);
+  const finalEffort = lastTopSet.effort || null;
   // Check if last 2 sessions both hit target
   const isLowerBody = ['quads','glutes','hamstrings','calves'].some(m => ex.primary.includes(m));
   const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
   const bump = isLowerBody ? 5 : (isAccessory ? 0 : 2.5);
   if (allHitTarget && last2.length === 2) {
     const prevSets = (last2[1].sets || []).filter(s => !s.is_warmup && s.completed);
-    const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps && (s.rpe == null || s.rpe <= 8));
+    const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
     if (prevAllHit) {
+      if (finalEffort === 'very_hard') {
+        return { weight: lastTopSet.weight, note: 'Very hard on the final set: hold this reps-earned load once more.' };
+      }
       if (bump > 0) {
-        return { weight: lastTopSet.weight + bump, note: `🔥 You hit ${topReps} @ RPE≤8 for 2 sessions. Bump +${bump} kg.` };
+        return { weight: lastTopSet.weight + bump, note: `Completed ${topReps} on every set twice. Bump +${bump} kg.` };
       } else {
         return { weight: lastTopSet.weight, note: `Add a rep or a set instead of weight (accessory).` };
       }
     }
+  }
+  if (allHitTarget && finalEffort === 'easy' && bump > 0) {
+    return { weight: lastTopSet.weight + bump, note: `Easy on the final set after every set reached ${topReps}: reps-earned bump +${bump} kg lands one session sooner.` };
   }
   return { weight: lastTopSet.weight, note: `Last session: ${lastTopSet.weight} kg × ${lastTopSet.reps}. Match or beat it.` };
 }
@@ -1561,6 +1551,73 @@ function getWeeklyVolume() {
   return { totalSets, totalKg: Math.round(totalKg) };
 }
 
+// ---- Session warm-up phase ---------------------------------
+function warmupTypeForSession(session) {
+  const id = String(session?.id || '');
+  if (id.includes('legs') || id.includes('session_a') || id.includes('session_b')) return 'lower';
+  return 'upper';
+}
+function createSessionWarmup(session) {
+  const type = warmupTypeForSession(session);
+  const source = RW.SESSION_WARMUPS?.[type] || { cap_minutes: 15, treadmill_minutes: [5, 7, 10], drills: [] };
+  // A hard source-level guard: the merged Upper warm-up can never contain leg drills.
+  const drills = (source.drills || []).filter((drill) => type !== 'upper' || !/leg/i.test(drill.id));
+  return {
+    type,
+    cap_minutes: source.cap_minutes || 15,
+    treadmill_minutes: null,
+    treadmill_done: false,
+    drills: drills.map((drill) => ({ ...drill, completed: false })),
+    started_at: new Date().toISOString(),
+    completed_at: null,
+  };
+}
+function generalWarmupComplete(warmup) {
+  return Boolean(warmup?.treadmill_done) && (warmup.drills || []).every((drill) => drill.completed);
+}
+function workingRepTarget(planned) {
+  return parseInt(String(planned?.reps || '').split('-')[0], 10) || 1;
+}
+function scopedReplacementFor(session, exerciseId) {
+  const active = (state.substitutions || []).filter((entry) => {
+    if (entry.from_exercise_id !== exerciseId) return false;
+    if (entry.scope === 'this_week') return entry.expires_after_week === state.current_week;
+    if (entry.scope === 'this_block') return entry.block === state.current_block;
+    return false;
+  });
+  return active.length ? active[active.length - 1].to_exercise_id : exerciseId;
+}
+function renderWarmupPhase(activeSession) {
+  const warmup = activeSession.warmup;
+  const card = h('div', { class: 'card warmup-phase' },
+    h('div', { class: 'phase-kicker' }, 'PHASE 1 · WARM-UP'),
+    h('h3', {}, 'Warm-up — cap 15 min'),
+    h('p', { class: 'tiny muted' }, 'Treadmill first, then 10-rep drills. Exercise ramps come next.'),
+  );
+  const treadmillDone = warmup.treadmill_done;
+  card.appendChild(h('div', { class: 'warmup-step' },
+    h('div', {}, h('strong', {}, '1. Treadmill walk'), h('div', { class: 'tiny muted' }, 'Choose 5–10 min, then tap done.')),
+    h('div', { class: 'warmup-minute-picker' }, [5, 7, 10].map((minutes) => h('button', {
+      class: 'btn tiny' + (warmup.treadmill_minutes === minutes ? ' primary' : ''),
+      onClick: () => { warmup.treadmill_minutes = minutes; warmup.treadmill_done = true; saveLocal(); render(); },
+    }, `${minutes} min`)))
+  ));
+  card.appendChild(h('div', { class: 'warmup-step' },
+    h('div', {}, h('strong', {}, '2. Drills'), h('div', { class: 'tiny muted' }, '10 reps each.')),
+    h('div', { class: 'warmup-drill-list' }, warmup.drills.map((drill) => h('button', {
+      class: 'warmup-drill' + (drill.completed ? ' done' : ''),
+      disabled: !treadmillDone,
+      onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
+    }, h('span', {}, `${drill.movement} · ${drill.reps}`), h('span', {}, drill.completed ? '✓' : '○'))))
+  ));
+  const complete = generalWarmupComplete(warmup);
+  card.appendChild(h('button', {
+    class: 'btn primary full', disabled: !complete,
+    onClick: () => { warmup.completed_at = new Date().toISOString(); activeSession.phase = 'lifting'; saveLocal(); render(); },
+  }, complete ? 'Start exercise ramps →' : 'Finish treadmill and drills'));
+  return card;
+}
+
 // ---- Active session lifecycle ------------------------------
 function startSession(session) {
   if (state.active_session) {
@@ -1568,26 +1625,27 @@ function startSession(session) {
   }
   const exercises = {};
   session.exercises.forEach(plan => {
-    const sug = suggestNextWeight(plan.exercise_id, plan);
+    const replacementId = scopedReplacementFor(session, plan.exercise_id);
+    const effectivePlan = replacementId === plan.exercise_id ? plan : { ...plan, exercise_id: replacementId };
+    const sug = suggestNextWeight(replacementId, effectivePlan);
     const sets = [];
     // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle`
     if (plan.is_first_of_muscle && plan.warmup) {
       if (/^2\s+sets/i.test(plan.warmup)) {
         twoSetWarmupFrom(sug.weight).forEach(warm =>
-          sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, rpe: null, completed: false })
+          sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
         );
       } else if (/^1\s+light\s+set/i.test(plan.warmup)) {
-        sets.push({ is_warmup: true, weight: roundToGymIncrement(sug.weight * 0.5), reps: 10, rpe: null, completed: false });
+        sets.push({ is_warmup: true, weight: roundToGymIncrement(sug.weight * 0.5), reps: 10, effort: null, completed: false });
       }
     }
     for (let i = 0; i < plan.sets; i++) {
-      sets.push({ is_warmup: false, weight: sug.weight, reps: '', rpe: '', completed: false });
+      sets.push({ is_warmup: false, weight: sug.weight, reps: workingRepTarget(effectivePlan), effort: null, completed: false });
     }
     exercises[plan.exercise_id] = {
-      planned: plan,
+      planned: effectivePlan,
       sets,
-      swapped_to: null,
-      notes: '',
+      swapped_to: replacementId === plan.exercise_id ? null : replacementId,
     };
   });
   state.active_session = {
@@ -1596,6 +1654,8 @@ function startSession(session) {
     session_id: session.id,
     session_name: session.name,
     started_at: new Date().toISOString(),
+    phase: 'warmup',
+    warmup: createSessionWarmup(session),
     exercises,
   };
   focusExerciseIdx = null;
@@ -1744,6 +1804,110 @@ function renderSessionEnd() {
   root.appendChild(wrap);
 }
 
+function addFractionalCredits(ledger, exercise, sets, direction = 1) {
+  if (!exercise) return;
+  const count = Number(sets) || 0;
+  const primary = exercise.primary?.[0];
+  if (!primary || count <= 0) return;
+  ledger[primary] = (ledger[primary] || 0) + count * direction;
+  (exercise.secondary || []).filter((muscle) => muscle !== primary).forEach((muscle) => {
+    ledger[muscle] = (ledger[muscle] || 0) + count * 0.5 * direction;
+  });
+}
+function assessSessionSubstitution(exercise_id, alt_id, scope) {
+  const programme = getActiveProgramme();
+  const allExercises = getAllExercises();
+  const from = allExercises.find((exercise) => exercise.id === exercise_id);
+  const to = allExercises.find((exercise) => exercise.id === alt_id);
+  const baseline = {}, projected = {};
+  (programme.sessions || []).forEach((session) => (session.exercises || []).forEach((plan) => {
+    const original = allExercises.find((exercise) => exercise.id === plan.exercise_id);
+    addFractionalCredits(baseline, original, plan.sets);
+    const applies = plan.exercise_id === exercise_id && (scope !== 'this_session' || session.id === state.active_session?.session_id);
+    addFractionalCredits(projected, applies ? to : original, plan.sets);
+  }));
+  const muscleIds = new Set([...Object.keys(baseline), ...Object.keys(projected)]);
+  const ledger_delta = {};
+  for (const muscle of muscleIds) {
+    const change = (projected[muscle] || 0) - (baseline[muscle] || 0);
+    if (Math.abs(change) > 0.0001) ledger_delta[muscle] = Number(change.toFixed(2));
+  }
+  // The live programme may already have a deliberate volume status. A swap is
+  // blocked only when it newly crosses a hard boundary; this prevents a legacy
+  // baseline deficit from making every harmless same-muscle swap impossible.
+  const crossings = [...muscleIds].map((muscle) => ({ muscle, before: baseline[muscle] || 0, after: projected[muscle] || 0 }));
+  const blocked = crossings.filter((row) => (row.after < 4 && row.before >= 4) || (row.after > 15 && row.before <= 15));
+  const warned = crossings.filter((row) => !blocked.includes(row) && ((row.after < 8 && row.before >= 8) || (row.after > 14 && row.before <= 14)));
+  const classification = blocked.length
+    ? { severity: 'block-with-override', muscles_affected: blocked.map((row) => row.muscle), message: `Hard volume limit crossed: ${blocked.map((row) => `${row.muscle} → ${row.after}`).join(', ')}.` }
+    : warned.length
+      ? { severity: 'warn', muscles_affected: warned.map((row) => row.muscle), message: `Efficiency band changed: ${warned.map((row) => `${row.muscle} → ${row.after}`).join(', ')}.` }
+      : { severity: 'clean', muscles_affected: Object.keys(ledger_delta), message: 'Fractional ledger stays within its current safe boundaries.' };
+  return { from, to, baseline, projected, ledger_delta, classification };
+}
+function newLocalId(prefix) {
+  return `${prefix}-${window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
+}
+function recordSubstitution(exercise_id, alt_id, scope, assessment, override = null) {
+  const entry = {
+    id: newLocalId('sub'),
+    user_key: String(settings.user_id || '').trim().toLowerCase(),
+    programme_id: getActiveVariant(),
+    from_exercise_id: exercise_id,
+    to_exercise_id: alt_id,
+    scope,
+    session_id: scope === 'this_session' ? state.active_session?.uid : null,
+    expires_after_week: scope === 'this_week' ? state.current_week : null,
+    block: scope === 'this_block' ? state.current_block : null,
+    created_at: new Date().toISOString(),
+    ledger_delta: assessment.ledger_delta,
+    warning: assessment.classification.severity === 'clean' ? null : assessment.classification,
+    override,
+  };
+  state.substitutions = [...(state.substitutions || []), entry];
+  return entry;
+}
+function showSubstitutionScopeModal(exercise_id, exState, alt) {
+  const modal = $('#modal');
+  let scope = 'this_session';
+  const draw = () => {
+    // Deterministic arithmetic always runs before this UI assigns prose or asks
+    // for consent, matching 24 §5.1's required order.
+    const assessment = assessSessionSubstitution(exercise_id, alt.id, scope);
+    const status = assessment.classification;
+    modal.innerHTML = '';
+    modal.appendChild(h('h3', {}, `Adopt ${alt.name}`));
+    modal.appendChild(h('p', { class: 'tiny muted' }, 'Swipe adoption checks the weekly fractional ledger first. Choose exactly how long this replacement lasts.'));
+    modal.appendChild(h('div', { class: 'scope-picker' }, [
+      ['this_session', 'This session'], ['this_week', 'This week'], ['this_block', 'This block'],
+    ].map(([value, label]) => h('button', {
+      class: 'btn tiny' + (scope === value ? ' primary' : ''),
+      onClick: () => { scope = value; draw(); },
+    }, label))));
+    modal.appendChild(h('div', { class: `substitution-status ${status.severity}` },
+      h('strong', {}, status.severity === 'clean' ? 'Clean' : status.severity === 'warn' ? 'Check this' : 'Blocked without override'),
+      h('div', { class: 'tiny' }, status.message),
+      Object.keys(assessment.ledger_delta).length ? h('div', { class: 'tiny muted' }, `Ledger change: ${Object.entries(assessment.ledger_delta).map(([muscle, value]) => `${muscle} ${value > 0 ? '+' : ''}${value}`).join(' · ')}`) : null,
+    ));
+    const adopt = (override = null) => {
+      recordSubstitution(exercise_id, alt.id, scope, assessment, override);
+      swapExercise(exercise_id, alt.id);
+      $('#modal-overlay').classList.remove('show');
+    };
+    if (status.severity === 'block-with-override') {
+      const original = getAllExercises().find((exercise) => exercise.id === exercise_id);
+      const safe = (original?.alternatives || []).map((id) => getAllExercises().find((exercise) => exercise.id === id)).filter(Boolean)
+        .find((candidate) => assessSessionSubstitution(exercise_id, candidate.id, scope).classification.severity !== 'block-with-override');
+      if (safe) modal.appendChild(h('div', { class: 'tiny muted', style: 'margin:10px 0;' }, `Safer option for this scope: ${safe.name}.`));
+      modal.appendChild(h('button', { class: 'btn danger full', onClick: () => adopt({ accepted_at: new Date().toISOString(), reason: 'User accepted blocked volume substitution.' }) }, 'Override and adopt'));
+    } else {
+      modal.appendChild(h('button', { class: 'btn primary full', onClick: () => adopt() }, `Adopt for ${scope.replace('_', ' ')}`));
+    }
+    modal.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:8px;', onClick: () => $('#modal-overlay').classList.remove('show') }, 'Cancel'));
+  };
+  draw();
+  $('#modal-overlay').classList.add('show');
+}
 function swapExercise(exercise_id, alt_id) {
   if (!state.active_session) return;
   const ex = state.active_session.exercises[exercise_id];
@@ -1859,18 +2023,6 @@ function renderHome() {
     root.appendChild(renderReconnectBanner());
   }
 
-  if (shouldShowPinPrompt()) {
-    root.appendChild(h('div', { class: 'card compact pin-nudge' },
-      h('div', { class: 'setting-row' },
-        h('div', { class: 'label' },
-          h('div', { class: 'name' }, 'Lock this profile'),
-          h('div', { class: 'desc' }, 'Set a PIN so this cloud row is protected. Legacy sync still works during the grace period.'),
-        ),
-        h('button', { class: 'btn tiny primary', onClick: openSetPinModal }, 'Set PIN'),
-      )
-    ));
-  }
-
   // Stats row
   root.appendChild(h('div', { class: 'stat-row' },
     h('div', { class: 'stat-tile' },
@@ -1937,6 +2089,17 @@ function renderHome() {
     const a = state.active_session;
     const session = getActiveProgramme().sessions.find(s => s.id === a.session_id);
 
+    // Active sessions created before Phase 2 remain usable instead of being
+    // retroactively blocked by a phase they never received.
+    if (!a.warmup) {
+      a.phase = 'lifting';
+    }
+    if (a.phase === 'warmup' && a.warmup) {
+      root.appendChild(renderWarmupPhase(a));
+      root.appendChild(h('button', { class: 'btn danger ghost full', style: 'margin-top:12px;', onClick: () => { if (confirm('Discard this session?')) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, 'Discard session'));
+      return;
+    }
+
     // Mood + playlist row
     if (session.mood) {
       root.appendChild(h('div', { class: 'cue', style: 'margin-bottom:10px;' },
@@ -1965,6 +2128,10 @@ function renderHome() {
         class: 'btn tiny' + (settings.focus_mode ? ' primary' : ''),
         onClick: () => { settings.focus_mode = !settings.focus_mode; saveLocal(); render(); }
       }, settings.focus_mode ? 'On — one exercise at a time' : 'Off — show all'),
+      h('button', {
+        class: 'btn tiny' + (settings.show_cues ? ' primary' : ''),
+        onClick: () => { settings.show_cues = !settings.show_cues; saveLocal(); render(); },
+      }, settings.show_cues ? 'Cues on' : 'Cues off'),
     ));
 
     const exEntries = Object.entries(a.exercises);
@@ -2016,13 +2183,6 @@ function renderHome() {
     }
 
     root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
-      h('h3', {}, '📝 Session notes'),
-      h('textarea', {
-        class: 'notes-input',
-        placeholder: 'How did it feel? Sleep? Energy?',
-        onInput: (e) => { a.notes = e.target.value; saveLocal(); }
-      }, a.notes || ''),
-      h('div', { class: 'spacer-12' }),
       h('button', { class: 'btn primary full', onClick: endSession }, '✓ Finish & save session'),
       h('div', { class: 'spacer-12' }),
       h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm('Discard this session?')) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, 'Discard session'),
@@ -2031,7 +2191,7 @@ function renderHome() {
     // Show today's planned exercises preview
     const sess = planned || next.session;
     root.appendChild(h('div', { class: 'spacer-24' }));
-    root.appendChild(h('h3', { class: 'section-label' }, planned ? 'Today\'s plan' : 'Next session preview'));
+    root.appendChild(h('h3', { class: 'section-label' }, planned ? 'Session plan' : 'Next session preview'));
     sess.exercises.forEach((p, i) => {
       const ex = getAllExercises().find(e => e.id === p.exercise_id);
       const sug = suggestNextWeight(p.exercise_id, p);
@@ -2043,7 +2203,7 @@ function renderHome() {
             h('h4', {}, `${i+1}. ${ex?.name || p.exercise_id}`),
             h('div', { class: 'meta' },
               h('span', { class: 'muscle-tag' }, RW.MUSCLES[ex?.primary?.[0]]?.en || ''),
-              ` ${p.sets} × ${p.reps} @ RPE ${p.rpe} · `,
+              ` ${p.sets} × ${p.reps} · `,
               h('strong', {}, sug.weight + ' kg'),
             ),
           ),
@@ -2076,7 +2236,7 @@ function renderExerciseCard(ex_id, exState) {
       h('h4', {}, settings.lang === 'ar' && ex.name_ar ? ex.name_ar : ex.name),
       h('div', { class: 'meta' },
         ex.primary.map(m => h('span', { class: 'muscle-tag' }, RW.MUSCLES[m]?.en || m)),
-        ` ${planned.sets} × ${planned.reps} · RPE ${planned.rpe}`,
+        ` ${planned.sets} × ${planned.reps}`,
       ),
     ),
     h('div', { class: 'ex-status' + (allWorkingDone ? ' done' : '') }, allWorkingDone ? '✓' : '▸'),
@@ -2094,11 +2254,8 @@ function renderExerciseCard(ex_id, exState) {
       ));
     }
   }
-  // Today's target — the one highlight
-  body.appendChild(h('div', { class: 'today-target' }, h('strong', {}, 'Today: '), sug.note));
-
   // Cue — subtle tip
-  if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, 'Cue: '), ex.cue));
+  if (settings.show_cues && ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, 'Cue: '), ex.cue));
 
   // Videos — Library controls which are visible via state.video_hidden
   const allVideos = buildExerciseVideos(actualId, ex);
@@ -2116,12 +2273,13 @@ function renderExerciseCard(ex_id, exState) {
     h('span', {}, '#'),
     h('span', {}, 'Weight (kg)'),
     h('span', {}, 'Reps'),
-    h('span', {}, 'RPE'),
     h('span', {}, ''),
   ));
   exState.sets.forEach((set, idx) => {
     const isWarm = set.is_warmup;
     const setNum = isWarm ? `W${idx+1}` : `${idx - exState.sets.filter(s => s.is_warmup).length + 1}`;
+    const workingSets = exState.sets.filter((item) => !item.is_warmup);
+    const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
     const row = h('div', { class: 'set-grid' + (set.completed && !isWarm ? ' done' : ''), style: isWarm ? 'opacity:0.7;' : '' },
       h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
       h('input', {
@@ -2138,15 +2296,18 @@ function renderExerciseCard(ex_id, exState) {
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onInput: (e) => { set.reps = e.target.value === '' ? '' : parseInt(e.target.value, 10); saveLocal(); }
       }),
-      isWarm
-        ? h('div', { style: 'opacity:0.4;text-align:center;font-size:14px;line-height:44px;' }, '—')
-        : rpePicker(set, () => saveLocal()),
       h('button', {
         class: 'set-check' + (set.completed ? ' checked' : ''),
         onClick: () => {
           if (!set.completed) {
-            // default RPE if user hasn't set one
-            if (!isWarm && (set.rpe == null || set.rpe === '')) set.rpe = 8;
+            if (isFinalWorkingSet && !set.effort) {
+              toast('Final set: tap easy, medium, or very hard first.');
+              return;
+            }
+            if (!isWarm && exState.sets.some((prior, priorIndex) => priorIndex < idx && prior.is_warmup && !prior.completed)) {
+              toast('Finish this exercise’s ramp set first.');
+              return;
+            }
             // PR detection (silent)
             if (!isWarm && set.weight && set.reps) detectPR(actualId, parseFloat(set.weight), parseInt(set.reps, 10));
           }
@@ -2161,6 +2322,12 @@ function renderExerciseCard(ex_id, exState) {
       }, set.completed ? '✓' : '○'),
     );
     body.appendChild(row);
+    if (isFinalWorkingSet) {
+      body.appendChild(h('div', { class: 'final-effort-row' },
+        h('span', {}, 'Final-set effort'),
+        effortPicker(set, () => { saveLocal(); render(); }),
+      ));
+    }
   });
 
   // Action row: alternatives + add set + warmup helper
@@ -2173,7 +2340,7 @@ function renderExerciseCard(ex_id, exState) {
   const actions = h('div', { class: 'ex-actions' },
     h('button', { class: 'btn tiny', onClick: () => {
       const lastWorking = [...exState.sets].reverse().find(s => !s.is_warmup);
-      exState.sets.push({ is_warmup: false, weight: lastWorking?.weight ?? sug.weight, reps: '', rpe: '', completed: false });
+      exState.sets.push({ is_warmup: false, weight: lastWorking?.weight ?? sug.weight, reps: workingRepTarget(planned), effort: null, completed: false });
       saveLocal(); render();
     }}, '+ Set'),
     h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, '⏱ Rest ' + settings.rest_seconds + 's'),
@@ -2201,12 +2368,25 @@ function showAltModal(ex_id, exState) {
   );
   const altCard = (alt, onClick) => {
     const bodyUrl = RW.bodyImg ? RW.bodyImg(alt.primary) : '';
-    return h('div', { class: 'ex', style: 'cursor:pointer; margin-bottom:6px;', onClick },
+    let startX = null;
+    let adoptedBySwipe = false;
+    return h('div', {
+      class: 'ex swap-option', style: 'cursor:pointer; margin-bottom:6px; touch-action:pan-y;',
+      onPointerdown: (event) => { startX = event.clientX; adoptedBySwipe = false; },
+      onPointerup: (event) => {
+        if (startX != null && event.clientX - startX < -56) {
+          adoptedBySwipe = true;
+          onClick();
+        }
+        startX = null;
+      },
+      onClick: () => { if (!adoptedBySwipe) onClick(); },
+    },
       h('div', { class: 'ex-head' },
         h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
         h('div', { class: 'ex-info' },
           h('h4', {}, alt.name),
-          h('div', { class: 'meta' }, (alt.primary || []).map(p => RW.MUSCLES[p]?.en).join(', ')),
+          h('div', { class: 'meta' }, (alt.primary || []).map(p => RW.MUSCLES[p]?.en).join(', '), ' · swipe left to adopt'),
         ),
       ),
     );
@@ -2217,10 +2397,9 @@ function showAltModal(ex_id, exState) {
   // ===== SECTION 1: Replace =====
   const validAlts = (ex?.alternatives || []).map(id => allEx.find(e => e.id === id)).filter(Boolean);
   if (validAlts.length) {
-    m.appendChild(sectionHead('Replace with…', 'Same muscle, different machine. Auto-recalculates the suggested weight.'));
+    m.appendChild(sectionHead('Replace with…', 'Swipe left (or tap) to calculate the ledger before adopting.'));
     validAlts.forEach(alt => m.appendChild(altCard(alt, () => {
-      swapExercise(ex_id, alt.id);
-      $('#modal-overlay').classList.remove('show');
+      showSubstitutionScopeModal(ex_id, exState, alt);
     })));
   }
 
@@ -2275,7 +2454,7 @@ function addExerciseToSession(exercise_id) {
   const sug = suggestNextWeight(exercise_id, planned);
   const sets = [];
   for (let i = 0; i < planned.sets; i++) {
-    sets.push({ is_warmup: false, weight: sug.weight, reps: '', rpe: '', completed: false });
+    sets.push({ is_warmup: false, weight: sug.weight, reps: workingRepTarget(planned), effort: null, completed: false });
   }
   state.active_session.exercises[exercise_id] = { planned, sets };
   saveLocal();
@@ -2584,8 +2763,8 @@ function renderHistory() {
         h('strong', {}, (ex?.name || ex_id) + ': '),
         ws.map(s => {
           const isPR = sessionPR && Math.abs(parseFloat(s.weight) - sessionPR.kg) < 0.01 && parseInt(s.reps,10) === sessionPR.reps;
-          const rpeEmoji_ = s.rpe ? rpeEmoji(s.rpe) : '';
-          return `${s.weight}×${s.reps}${rpeEmoji_ ? ' '+rpeEmoji_ : ''}${isPR ? ' 🏆' : ''}`;
+          const effort = s.effort ? ` · ${String(s.effort).replace('_', ' ')}` : '';
+          return `${s.weight}×${s.reps}${effort}${isPR ? ' 🏆' : ''}`;
         }).join(', '),
       );
       expanded.appendChild(row);
@@ -2770,8 +2949,8 @@ function renderSettings() {
   const experienceSelect = h('select', {
     onChange: (e) => { state.profile.experience = e.target.value; saveLocal(); renderSettings(); }
   },
-    ['beginner','returning','experienced'].map(v => h('option', { value: v, ...(state.profile?.experience === v ? { selected: '' } : {}) },
-      v === 'beginner' ? 'New to the gym' : v === 'returning' ? 'Trained before, coming back' : 'Currently training'
+    ['beginner','detrained','returning','experienced'].map(v => h('option', { value: v, ...(state.profile?.experience === v ? { selected: '' } : {}) },
+      v === 'beginner' ? 'New to the gym' : v === 'detrained' ? 'Trained before, re-entering' : v === 'returning' ? 'Trained before, coming back' : 'Currently training'
     ))
   );
   const bwInput = h('input', {
@@ -2791,7 +2970,7 @@ function renderSettings() {
     displayName,
   ));
   profileCard.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Experience'), h('div', { class: 'desc' }, 'Only affects first-time calibration weights.')),
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Experience'), h('div', { class: 'desc' }, 'Detrained uses historical loads first; the first two weeks are a re-entry ramp.')),
     experienceSelect,
   ));
   profileCard.appendChild(h('div', { class: 'setting-row' },
@@ -3101,7 +3280,7 @@ function renderHelp() {
   ));
   const card = h('div', { class: 'card onboard' });
   card.appendChild(h('h2', {}, 'How the app works'));
-  card.appendChild(h('p', {}, 'Pick your profile, start the next session, log the actual weight/reps/RPE, and finish. The app works offline first and syncs when the server is reachable.'));
+  card.appendChild(h('p', {}, 'Pick your profile, complete the warm-up phase, log the actual weight/reps, rate only the final set as easy, medium, or very hard, and finish. The app works offline first and syncs when the server is reachable.'));
   card.appendChild(h('h2', {}, 'Your programme'));
   card.appendChild(h('p', {}, variant === 'ppl_3x'
     ? 'Push/Pull/Legs cycles by history. Pick any 3 days with 24h+ rest.'
@@ -3117,13 +3296,13 @@ function renderHelp() {
       })
     ));
   });
-  card.appendChild(h('h2', {}, 'First sessions = calibration'));
-  card.appendChild(h('p', {}, `Your profile is "${state.profile?.experience || 'returning'}". First-time weights scale from the reference programme, then your own history takes over. RPE: 😌 easy = 3 reps left, 💪 right = 1-2 left, 🥵 hard = maybe 1 left.`));
+  card.appendChild(h('h2', {}, 'Weeks 1–2 = re-entry'));
+  card.appendChild(h('p', {}, `Your profile is "${state.profile?.experience || 'detrained'}". Logged history wins over a lower starter level. The final-set effort ranking is simple: easy, medium, or very hard — never a numeric rep estimate.`));
   card.appendChild(h('h2', {}, 'Progressive overload'));
-  card.appendChild(h('p', {}, 'If the last two sessions hit the top of the rep range at RPE 8 or easier, the app suggests +2.5 kg upper body or +5 kg lower body. Accessories add reps before weight.'));
+  card.appendChild(h('p', {}, 'Completed reps drive every increase. Very hard blocks an earned increase; easy can bring a reps-earned increase forward by one complete exposure. Effort never raises load on its own.'));
   card.appendChild(h('h2', {}, 'The rules'));
   card.appendChild(h('ul', {},
-    h('li', {}, 'Technique beats weight. No grinding in calibration.'),
+    h('li', {}, 'Technique beats weight. No grinding in the re-entry ramp.'),
     h('li', {}, `Protein target: ${profileProteinRange()}/day. Sleep 7+ hours.`),
     h('li', {}, 'No barbell back squat or conventional deadlift in Block 1. RDL comes after form is ready.'),
   ));
