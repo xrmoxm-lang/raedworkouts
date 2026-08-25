@@ -1,3 +1,5 @@
+import { rejectedSkinSuggestion, suggestionForBlockBoundary } from './domain/skin-suggestions.mjs';
+
 /* ============================================================
    Raedworkouts — app.js
    Vanilla JS PWA. Pure-frontend logic + self-hosted cloud sync.
@@ -29,6 +31,15 @@ const h = (tag, attrs = {}, ...children) => {
   }
   return el;
 };
+const brandMark = () => h('svg', {
+  class: 'brand-mark', viewBox: '0 0 200 100', 'aria-hidden': 'true',
+}, h('g', { transform: 'translate(100 50)', fill: 'currentColor' },
+  h('rect', { x: '-84', y: '-5', width: '168', height: '10', rx: '5' }),
+  h('circle', { cx: '-46', cy: '0', r: '25' }),
+  h('circle', { cx: '46', cy: '0', r: '25' }),
+  h('circle', { cx: '-80', cy: '0', r: '12' }),
+  h('circle', { cx: '80', cy: '0', r: '12' }),
+));
 // ---- i18n ---------------------------------------------------
 const STRINGS = {
   en: {
@@ -80,6 +91,7 @@ const todayISO = () => new Date().toISOString().slice(0,10);
 const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
   t.innerHTML = '';
+  t.classList.remove('skin-suggestion');
   t.appendChild(document.createTextNode(msg));
   if (actionLabel && actionFn) {
     const btn = document.createElement('button');
@@ -456,7 +468,7 @@ const defaultState = () => ({
 
 const defaultSettings = () => ({
   theme: 'auto',               // auto | light | dark
-  color_theme: 'teal',         // teal | orange | green | red | amber
+  skin: 'hadid',               // hadid | waraq | rukham
   weight_unit: 'kg',           // kg | lb
   rest_seconds: 120,
   vibrate: true,
@@ -478,7 +490,9 @@ const defaultSettings = () => ({
   pending_registration: null,   // local-only retry data when first profile setup happens offline
   needs_pin_reauth: false,      // local-only: PIN exists server-side, but this browser needs the key
   pin_prompt_dismissed_at: '',
-  block_auto_color: true,
+  block_auto_color: true,      // whether a configured boundary suggestion is offered
+  block_skin_suggestions: {},  // deliberately unset until Raed assigns a skin per block
+  block_skin_rejections: {},   // { block: true }; rejection is remembered for that block
   lang: 'en',
 });
 
@@ -1201,7 +1215,7 @@ function renderWelcome() {
   }
   const wrap = h('div', { class: 'welcome-screen' },
     h('div', { class: 'welcome-head' },
-      h('div', { class: 'app-title big' }, h('span', { class: 'dot' }), h('span', {}, 'Raedworkouts')),
+      h('div', { class: 'app-title big' }, brandMark(), h('span', {}, 'Raedworkouts')),
       h('p', {}, 'Family training profiles. Offline-first, synced when reachable.'),
     )
   );
@@ -1240,7 +1254,6 @@ function openSetPinModal() {
   const pin1 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN', style: 'width:100%;margin:8px 0;' });
   const pin2 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: 'Repeat PIN', style: 'width:100%;margin:8px 0;' });
   const status = h('div', { class: 'tiny muted' }, '');
-  m.appendChild(h('h3', {}, 'Lock this profile'));
   m.appendChild(h('p', { class: 'muted' }, 'Set a PIN so only this profile can read or write its cloud row.'));
   m.appendChild(pin1);
   m.appendChild(pin2);
@@ -1326,34 +1339,54 @@ function renderReconnectBanner() {
 }
 
 // ---- Theme --------------------------------------------------
-const COLOR_THEMES = {
-  teal:   { label: 'Teal',   sw_light: '#0f766e', sw_dark: '#14b8a6' },
-  orange: { label: 'Orange', sw_light: '#ea580c', sw_dark: '#ff6b35' },
-  green:  { label: 'Green',  sw_light: '#16a34a', sw_dark: '#22c55e' },
-  red:    { label: 'Red',    sw_light: '#dc2626', sw_dark: '#ef4444' },
-  amber:  { label: 'Amber',  sw_light: '#d97706', sw_dark: '#f59e0b' },
+const SKINS = {
+  hadid: { label: 'حديد', sw_light: '#b8451a', sw_dark: '#e8622d', theme_dark: '#17130f' },
+  waraq: { label: 'ورق', sw_light: '#7c1f2e', sw_dark: '#743d4a', theme_dark: '#121110' },
+  rukham: { label: 'رخام', sw_light: '#2f4858', sw_dark: '#a8b8c0', theme_dark: '#121618' },
 };
-const BLOCK_COLORS = { 1: 'teal', 2: 'amber', 3: 'red' };
 
-function getAutoColor() {
-  const block = Math.min(state.current_block || 1, 3);
-  return BLOCK_COLORS[block] || 'teal';
+function activeSkin() {
+  return SKINS[settings.skin] ? settings.skin : 'hadid';
+}
+
+// This is the app's boundary decision path. It is intentionally non-mutating:
+// a proposal is not an acceptance, and persisted settings stay untouched here.
+export function resolveBlockSkinBoundary({ previousBlock, currentBlock, settings: persistedSettings }) {
+  return {
+    settings: persistedSettings,
+    suggestion: suggestionForBlockBoundary({
+      previousBlock,
+      currentBlock,
+      settings: persistedSettings,
+    }),
+  };
+}
+
+// The only state transitions from a surfaced suggestion are explicit responses.
+export function resolveSkinSuggestionResponse({ settings: persistedSettings, suggestion, response }) {
+  if (!suggestion) return persistedSettings;
+  if (response === 'accept') return { ...persistedSettings, skin: suggestion.skin };
+  if (response === 'reject') {
+    return {
+      ...persistedSettings,
+      block_skin_rejections: rejectedSkinSuggestion(persistedSettings.block_skin_rejections, suggestion.block),
+    };
+  }
+  return persistedSettings;
 }
 
 function applyTheme() {
   const t = settings.theme || 'auto';
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
-  // Apply color — auto derives from training block, manual overrides
-  const c = settings.block_auto_color !== false ? getAutoColor() : (settings.color_theme || 'teal');
-  if (c === 'teal') document.documentElement.removeAttribute('data-color');
-  else document.documentElement.setAttribute('data-color', c);
-  // Update meta theme-color (status bar)
-  const cInfo = COLOR_THEMES[c] || COLOR_THEMES.teal;
+  const skin = activeSkin();
+  document.documentElement.setAttribute('data-skin', skin);
+  // Status-bar values follow the selected skin; block transitions never call this.
+  const skinInfo = SKINS[skin];
   const metaLight = document.getElementById('theme-color-light');
   const metaDark = document.getElementById('theme-color-dark');
-  if (metaLight) metaLight.setAttribute('content', cInfo.sw_light);
-  if (metaDark) metaDark.setAttribute('content', '#0a0d10');  // matches --bg dark
+  if (metaLight) metaLight.setAttribute('content', skinInfo.sw_light);
+  if (metaDark) metaDark.setAttribute('content', skinInfo.theme_dark);
   // Toggle label — inline SVG icon (consistent line-icon set) + word
   const tt = $('#theme-toggle');
   if (tt) {
@@ -1371,6 +1404,42 @@ function cycleTheme() {
   settings.theme = order[(order.indexOf(settings.theme) + 1) % 3];
   saveLocal();
   applyTheme();
+}
+
+function closeSkinSuggestion() {
+  const el = $('#toast');
+  el.classList.remove('show', 'skin-suggestion');
+}
+
+function showSkinSuggestion(suggestion) {
+  const proposed = SKINS[suggestion.skin];
+  const current = SKINS[activeSkin()];
+  if (!proposed || !current) return;
+
+  const el = $('#toast');
+  clearTimeout(toast._timer);
+  el.innerHTML = '';
+  el.classList.add('skin-suggestion', 'show');
+  el.appendChild(h('div', { class: 'skin-suggestion-copy' },
+    `Block ${suggestion.block} is starting. Try ${proposed.label}?`
+  ));
+  el.appendChild(h('div', { class: 'skin-suggestion-actions' },
+    h('button', { type: 'button', class: 'btn tiny primary', onClick: () => {
+      // This is the only boundary path that applies a new skin: an explicit tap.
+      settings = resolveSkinSuggestionResponse({ settings, suggestion, response: 'accept' });
+      saveLocal();
+      applyTheme();
+      closeSkinSuggestion();
+      toast(`Skin set to ${proposed.label}.`);
+      if ($('#page-settings').classList.contains('active')) renderSettings();
+    } }, `Use ${proposed.label}`),
+    h('button', { type: 'button', class: 'btn tiny', onClick: () => {
+      settings = resolveSkinSuggestionResponse({ settings, suggestion, response: 'reject' });
+      saveLocal();
+      closeSkinSuggestion();
+      toast(`Keeping ${current.label} for block ${suggestion.block}.`);
+    } }, `Keep ${current.label}`),
+  ));
 }
 
 // ---- Programme resolver --------------------------------------
@@ -1590,7 +1659,7 @@ function scopedReplacementFor(session, exerciseId) {
 function renderWarmupPhase(activeSession) {
   const warmup = activeSession.warmup;
   const card = h('div', { class: 'card warmup-phase' },
-    h('div', { class: 'phase-kicker' }, 'PHASE 1 · WARM-UP'),
+    h('div', { class: 'phase-kicker' }, '⚠ PHASE 1 · WARM-UP'),
     h('h3', {}, 'Warm-up — cap 15 min'),
     h('p', { class: 'tiny muted' }, 'Treadmill first, then 10-rep drills. Exercise ramps come next.'),
   );
@@ -1659,18 +1728,27 @@ function startSession(session) {
     exercises,
   };
   focusExerciseIdx = null;
-  // Block transition detection — toast on first session of a new block
+  // A block transition may offer a configured skin, but cannot apply one.
   const prevBlock = state._last_toasted_block;
   const curBlock = state.current_block || 1;
-  if (prevBlock && prevBlock !== curBlock) {
-    const blockNames = { 1: 'foundation', 2: 'strength', 3: 'peak intensity' };
-    setTimeout(() => toast(`Block ${curBlock} — ${blockNames[curBlock] || 'new block'} phase begins.`, 4000), 800);
-    applyTheme();
-  }
+  const isBlockTransition = prevBlock != null && prevBlock !== curBlock;
+  const skinBoundary = resolveBlockSkinBoundary({
+    previousBlock: prevBlock,
+    currentBlock: curBlock,
+    settings,
+  });
+  const skinSuggestion = skinBoundary.suggestion;
   state._last_toasted_block = curBlock;
   saveLocal();
   router('home');
-  toast('Session started — let\'s go.');
+  if (skinSuggestion) showSkinSuggestion(skinSuggestion);
+  else {
+    toast('Session started — let\'s go.');
+    if (isBlockTransition) {
+      const blockNames = { 1: 'foundation', 2: 'strength', 3: 'peak intensity' };
+      setTimeout(() => toast(`Block ${curBlock} — ${blockNames[curBlock] || 'new block'} phase begins.`, 4000), 800);
+    }
+  }
 }
 
 function endSession() {
@@ -1885,7 +1963,7 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
       onClick: () => { scope = value; draw(); },
     }, label))));
     modal.appendChild(h('div', { class: `substitution-status ${status.severity}` },
-      h('strong', {}, status.severity === 'clean' ? 'Clean' : status.severity === 'warn' ? 'Check this' : 'Blocked without override'),
+      h('strong', {}, status.severity === 'clean' ? 'Clean' : status.severity === 'warn' ? '⚠ Check this' : 'Blocked without override'),
       h('div', { class: 'tiny' }, status.message),
       Object.keys(assessment.ledger_delta).length ? h('div', { class: 'tiny muted' }, `Ledger change: ${Object.entries(assessment.ledger_delta).map(([muscle, value]) => `${muscle} ${value > 0 ? '+' : ''}${value}`).join(' · ')}`) : null,
     ));
@@ -2333,7 +2411,7 @@ function renderExerciseCard(ex_id, exState) {
   // Action row: alternatives + add set + warmup helper
   if (planned.warmup) {
     body.appendChild(h('div', { class: 'warmup-block' },
-      h('strong', {}, 'Warm-up: '), warmupText(planned, sug.weight)
+      h('strong', {}, '⚠ Warm-up: '), warmupText(planned, sug.weight)
     ));
   }
 
@@ -3149,25 +3227,59 @@ function renderSettings() {
     h('summary', {}, 'Advanced settings'),
   );
 
-  // Accent color picker — 5 options as colored swatches
-  const colorRow = h('div', { class: 'setting-row' },
+  // The former accent picker is now the three adopted, whole-app skins.
+  const skinRow = h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Accent color'),
-      h('div', { class: 'desc' }, 'Changes buttons + highlights. The dark/light theme stays the same.'),
+      h('div', { class: 'name' }, 'Skin'),
+      h('div', { class: 'desc' }, 'Changes the full adopted palette. Theme mode stays separate.'),
     ),
-    h('div', { class: 'color-picker' },
-      Object.entries(COLOR_THEMES).map(([key, info]) =>
+    h('div', { class: 'skin-picker', role: 'group', 'aria-label': 'Skin' },
+      Object.entries(SKINS).map(([key, info]) =>
         h('button', {
           type: 'button',
-          class: 'color-swatch' + (settings.color_theme === key ? ' active' : ''),
+          class: 'skin-swatch' + (activeSkin() === key ? ' active' : ''),
           title: info.label,
+          'aria-label': info.label,
+          'aria-pressed': activeSkin() === key ? 'true' : 'false',
           style: `background: linear-gradient(135deg, ${info.sw_light} 0%, ${info.sw_light} 50%, ${info.sw_dark} 50%, ${info.sw_dark} 100%);`,
-          onClick: () => { settings.color_theme = key; saveLocal(); applyTheme(); renderSettings(); }
+          onClick: () => { settings.skin = key; saveLocal(); applyTheme(); renderSettings(); }
         })
       )
     ),
   );
-  adv.appendChild(colorRow);
+  adv.appendChild(skinRow);
+
+  adv.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' },
+      h('div', { class: 'name' }, 'Block skin suggestions'),
+      h('div', { class: 'desc' }, 'Offers a configured skin at a block boundary. It never changes the skin by itself.'),
+    ),
+    h('button', { class: 'btn tiny' + (settings.block_auto_color !== false ? ' primary' : ''), onClick: () => {
+      settings.block_auto_color = settings.block_auto_color === false;
+      saveLocal();
+      renderSettings();
+    } }, settings.block_auto_color !== false ? 'On' : 'Off'),
+  ));
+
+  const suggestionOptions = (block) => {
+    const select = h('select', {
+      'aria-label': `Suggested skin for block ${block}`,
+      onChange: (event) => {
+        settings.block_skin_suggestions = { ...(settings.block_skin_suggestions || {}) };
+        if (event.target.value) settings.block_skin_suggestions[block] = event.target.value;
+        else delete settings.block_skin_suggestions[block];
+        saveLocal();
+      },
+    },
+    h('option', { value: '' }, 'Unset'),
+    Object.entries(SKINS).map(([key, info]) => h('option', { value: key }, info.label)));
+    select.value = settings.block_skin_suggestions?.[block] || '';
+    return h('label', { class: 'block-skin-select' }, `Block ${block}`, select);
+  };
+  adv.appendChild(h('div', { class: 'block-skin-config' },
+    h('div', { class: 'tiny muted' }, 'Suggestion mapping — intentionally unset by default.'),
+    [1, 2, 3].map(suggestionOptions),
+  ));
 
 
   // PR summary toggle
