@@ -43,7 +43,8 @@ function seededSettings() {
     music_platform: 'none',
     block_auto_color: false,
     block_skin_suggestions: {}, block_skin_rejections: {},
-    lang: 'en',
+    lang: 'ar', locale_version: 1,
+    runner_video_open: true,
   };
 }
 
@@ -67,7 +68,15 @@ async function openStartedRunner(page) {
   // Before it exists, the old post-start home still supplies the real failing
   // scroll measurement below.
   const skipWarmup = page.locator('[data-runner-skip-warmup]');
-  if (await skipWarmup.count()) await skipWarmup.click();
+  if (await skipWarmup.count()) {
+    // Skip remains available but deliberately quiet.  The only bottom-bar
+    // action is positive completion, and it cannot run until warm-up is done.
+    await expect(skipWarmup).toHaveCount(1);
+    const completeWarmup = page.locator('[data-runner-complete-warmup]');
+    await expect(completeWarmup).toHaveCount(1);
+    await expect(completeWarmup).toBeDisabled();
+    await skipWarmup.click();
+  }
 
   // Choose the actual longest rendered exercise from the active programme,
   // rather than baking a row count into this gate.
@@ -88,13 +97,19 @@ async function recordRunnerGeometry(page, state) {
     // Test-only positive control: this never reaches the application files.
     // It proves the local-overflow assertion still catches clipped content.
     await page.evaluate(() => {
-      const main = document.querySelector('.runner-main');
-      if (!main || main.querySelector('[data-runner-overflow-fixture]')) return;
-      const fixture = document.createElement('div');
-      fixture.dataset.runnerOverflowFixture = 'true';
-      fixture.textContent = 'runner overflow fixture';
-      fixture.style.cssText = 'flex:0 0 900px; height:900px; width:100%;';
-      main.appendChild(fixture);
+      const list = document.querySelector('[data-runner-set-list]');
+      const current = list?.querySelector('.runner-set-row.current');
+      if (!list || !current || list.querySelector('[data-runner-overflow-fixture]')) return;
+      // Test-only positive control: enough real-shaped rows to make the list
+      // scroll, then its scroll position deliberately hides the actual current
+      // row. Production files never receive this fixture or an env hook.
+      for (let i = 0; i < 8; i += 1) {
+        const fixture = current.cloneNode(true);
+        fixture.classList.remove('current');
+        fixture.dataset.runnerOverflowFixture = 'true';
+        list.appendChild(fixture);
+      }
+      list.scrollTop = list.scrollHeight;
     });
   }
 
@@ -102,6 +117,8 @@ async function recordRunnerGeometry(page, state) {
     const shell = document.querySelector('.runner-shell');
     const main = document.querySelector('.runner-main');
     const panel = document.querySelector('[data-runner-set-panel]');
+    const list = document.querySelector('[data-runner-set-list]');
+    const currentRow = list?.querySelector('.runner-set-row.current');
     const dimensions = (element) => ({
       clientHeight: element.clientHeight,
       scrollHeight: element.scrollHeight,
@@ -112,25 +129,57 @@ async function recordRunnerGeometry(page, state) {
       .map((element) => ({ element, rect: element.getBoundingClientRect() }))
       .filter(({ rect }) => rect.width > 0 && rect.height > 0 && rect.top >= window.innerHeight)
       .map(({ element, rect }) => `${element.tagName.toLowerCase()}.${[...element.classList].join('.') || 'none'}@${Math.round(rect.top)}px`);
+    const listRect = list.getBoundingClientRect();
+    const currentRect = currentRow.getBoundingClientRect();
+    const fixedZones = {
+      shell,
+      topbar: shell.querySelector('.runner-topbar'),
+      main,
+      card: shell.querySelector('.runner-card'),
+      panel,
+      cue: shell.querySelector('.runner-cue'),
+      lastTime: shell.querySelector('.runner-last-time'),
+      actions: shell.querySelector('.runner-bottom-actions'),
+      bottomBar: shell.querySelector('.runner-bottom-bar'),
+    };
     return {
       viewport: window.innerHeight,
+      documentHeight: document.documentElement.scrollHeight,
+      documentLayers: {
+        html: dimensions(document.documentElement),
+        body: dimensions(document.body),
+        page: dimensions(document.querySelector('#page-runner')),
+      },
       shell: dimensions(shell),
       main: dimensions(main),
       panel: dimensions(panel),
+      list: dimensions(list),
+      fixedZones: Object.fromEntries(Object.entries(fixedZones)
+        .filter(([, element]) => element)
+        .map(([name, element]) => [name, dimensions(element)])),
+      current: {
+        top: Math.round(currentRect.top), bottom: Math.round(currentRect.bottom),
+        listTop: Math.round(listRect.top), listBottom: Math.round(listRect.bottom),
+        fullyVisible: currentRect.top >= listRect.top && currentRect.bottom <= listRect.bottom,
+      },
       belowFold,
     };
   });
 
   const line = (name, value) =>
     `${name} client=${value.clientHeight}px scroll=${value.scrollHeight}px spare=${value.clientHeight - value.scrollHeight}px`;
-  console.log(`PHASE4_RUNNER_GEOMETRY ${state}: viewport=${geometry.viewport}px shell=${geometry.shell.clientHeight}px viewportMargin=${geometry.viewport - geometry.shell.clientHeight}px`);
-  console.log(`PHASE4_RUNNER_GEOMETRY ${state}: ${line('shell', geometry.shell)} ${line('main', geometry.main)} ${line('setPanel', geometry.panel)}`);
+  console.log(`PHASE4_RUNNER_GEOMETRY ${state}: document=${geometry.documentHeight}px viewport=${geometry.viewport}px shell=${geometry.shell.clientHeight}px viewportMargin=${geometry.viewport - geometry.shell.clientHeight}px`);
+  console.log(`PHASE4_RUNNER_DOCUMENT_LAYERS ${state}: html=${geometry.documentLayers.html.clientHeight}/${geometry.documentLayers.html.scrollHeight} body=${geometry.documentLayers.body.clientHeight}/${geometry.documentLayers.body.scrollHeight} page=${geometry.documentLayers.page.clientHeight}/${geometry.documentLayers.page.scrollHeight}`);
+  console.log(`PHASE4_RUNNER_GEOMETRY ${state}: ${line('shell', geometry.shell)} ${line('main', geometry.main)} ${line('setPanel', geometry.panel)} ${line('setList', geometry.list)}`);
+  console.log(`PHASE4_RUNNER_CURRENT_SET ${state}: row=${geometry.current.top}-${geometry.current.bottom}px list=${geometry.current.listTop}-${geometry.current.listBottom}px visible=${geometry.current.fullyVisible}`);
   console.log(`PHASE4_RUNNER_BELOW_FOLD ${state}: ${JSON.stringify(geometry.belowFold)}`);
 
   expect(Math.abs(geometry.shell.clientHeight - geometry.viewport), `${state} shell must fill the viewport`).toBeLessThanOrEqual(3);
-  for (const [name, value] of Object.entries({ shell: geometry.shell, main: geometry.main, setPanel: geometry.panel })) {
+  expect(geometry.documentHeight, `${state} document must not scroll`).toBeLessThanOrEqual(geometry.viewport);
+  for (const [name, value] of Object.entries(geometry.fixedZones)) {
     expect(value.scrollHeight, `${state} ${name} must not hide vertical content`).toBeLessThanOrEqual(value.clientHeight);
   }
+  expect(geometry.current.fullyVisible, `${state} current set must be visible without list scrolling`).toBe(true);
   expect(geometry.belowFold, `${state} runner must not place content below the viewport`).toEqual([]);
 }
 
@@ -151,17 +200,17 @@ async function requireLongestExerciseRunner(page) {
   return runner;
 }
 
-test('Phase 4 runner contains all content at 390x844 with video collapsed', async ({ page }) => {
+test('Phase 4 runner contains all fixed content at 390x844 with video collapsed', async ({ page }) => {
   await openStartedRunner(page);
+  await page.locator('[data-runner-video-toggle]').click();
   await recordRunnerGeometry(page, 'video=collapsed');
   await requireLongestExerciseRunner(page);
   console.log('PHASE4_RUNNER_COLLAPSED_PASSED');
 });
 
-test('Phase 4 runner contains all content at 390x844 with video expanded', async ({ page }) => {
+test('Phase 4 runner contains all fixed content at 390x844 with video expanded by default', async ({ page }) => {
   await openStartedRunner(page);
   const videoToggle = page.locator('[data-runner-video-toggle]');
-  if (await videoToggle.count()) await videoToggle.click();
   await recordRunnerGeometry(page, 'video=expanded');
   const runner = await requireLongestExerciseRunner(page);
   await expect(videoToggle).toHaveCount(1);
@@ -172,13 +221,13 @@ test('Phase 4 runner contains all content at 390x844 with video expanded', async
 test('Phase 4 runner persists its video and cue switches per profile', async ({ page }) => {
   await openStartedRunner(page);
   await requireLongestExerciseRunner(page);
-  await page.getByRole('button', { name: 'Workout settings' }).click();
+  await page.locator('[data-runner-settings-button]').click();
   await page.locator('[data-runner-video-setting]').click();
   await page.locator('[data-runner-cues-setting]').click();
-  await page.getByRole('button', { name: 'تم' }).click();
+  await page.locator('[data-runner-settings-close]').click();
   await page.reload({ waitUntil: 'domcontentloaded' });
   const runner = await requireLongestExerciseRunner(page);
-  await expect(runner.locator('[data-runner-video][data-expanded="true"]')).toHaveCount(1);
+  await expect(runner.locator('[data-runner-video][data-expanded="false"]')).toHaveCount(1);
   await expect(runner.locator('.runner-cue')).toHaveCount(0);
   console.log('PHASE4_RUNNER_PREFERENCES_PASSED');
 });
@@ -186,18 +235,18 @@ test('Phase 4 runner persists its video and cue switches per profile', async ({ 
 test('Phase 4 runner records a skipped warm-up, uses swipe only for exercise navigation, and leaves without ending', async ({ page }) => {
   await openStartedRunner(page);
   const runner = await requireLongestExerciseRunner(page);
-  const beforeSwipe = await runner.locator('.runner-progress > bdi').textContent();
-  const [beforeIndex, total] = beforeSwipe.split('/').map((part) => Number(part.trim()));
+  const beforeIndex = Number(await runner.getAttribute('data-runner-exercise-index'));
+  const total = Number(await runner.getAttribute('data-runner-exercise-total'));
 
-  const swipeForward = beforeIndex < total;
+  const swipeForward = beforeIndex < total - 1;
   await runner.locator('.runner-main').dispatchEvent('pointerdown', { clientX: swipeForward ? 320 : 80, clientY: 280 });
   await runner.locator('.runner-main').dispatchEvent('pointerup', { clientX: swipeForward ? 80 : 320, clientY: 280 });
-  const afterSwipe = await runner.locator('.runner-progress > bdi').textContent();
-  const [afterIndex, afterTotal] = afterSwipe.split('/').map((part) => Number(part.trim()));
+  const afterIndex = Number(await runner.getAttribute('data-runner-exercise-index'));
+  const afterTotal = Number(await runner.getAttribute('data-runner-exercise-total'));
   expect(afterTotal, 'a swipe must stay inside the same session').toBe(total);
   expect(afterIndex, 'a horizontal swipe must move to an adjacent exercise').toBe(beforeIndex + (swipeForward ? 1 : -1));
 
-  await page.getByRole('button', { name: 'Leave workout' }).click();
+  await page.locator('[data-runner-leave-button]').click();
   await expect(page.locator('[data-home-overview]')).toHaveCount(1);
   await expect(page.locator('[data-home-continue]')).toHaveCount(1);
   const persisted = await page.evaluate((user) => {

@@ -1,5 +1,6 @@
 import { rejectedSkinSuggestion, suggestionForBlockBoundary } from './domain/skin-suggestions.mjs';
 import { assessSubstitution } from './domain/substitutions.js';
+import { format as localeFormat, text as localeText } from './locale.js';
 
 /* ============================================================
    Raedworkouts — app.js
@@ -24,11 +25,14 @@ const h = (tag, attrs = {}, ...children) => {
     else if (k.startsWith('on') && typeof attrs[k] === 'function')
       el.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
     else if (k === 'html') el.innerHTML = attrs[k];
-    else if (attrs[k] != null && attrs[k] !== false) el.setAttribute(k, attrs[k]);
+    else if (attrs[k] != null && attrs[k] !== false) {
+      const value = /^(?:title|placeholder|aria-label)$/.test(k) ? localizeText(attrs[k]) : attrs[k];
+      el.setAttribute(k, value);
+    }
   }
   for (const c of children.flat()) {
     if (c == null || c === false) continue;
-    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    el.appendChild(typeof c === 'string' ? localizedTextNode(c) : c);
   }
   return el;
 };
@@ -43,68 +47,46 @@ const brandMark = () => h('svg', {
   h('circle', { cx: '80', cy: '0', r: '12' }),
 ));
 // ---- i18n ---------------------------------------------------
-const STRINGS = {
-  en: {
-    start_session: 'Start Session', finish_session: '✓ Finish & save session',
-    rest_day: '🛋️ Rest day', gym_day: '🏋️ Today is', session_done: 'Session done.',
-    next: 'Next:', streak: 'STREAK', this_week: 'THIS WEEK', tonnage: 'TONNAGE',
-    settings: 'Settings', history: 'History', library: 'Library', home: 'Home', help: 'Help',
-    save: 'Save', cancel: 'Cancel', wipe_data: 'Wipe all data',
-    theme: 'Theme', language: 'Language', music: 'Music',
-    force_session: 'Force next session', missed_day: 'Missed a day? Override which session starts next.',
-    working_sets: 'working sets', last_time: '📊 Last time',
-    warmup: 'Warm-up', add_set: '+ Set', swap: '⇄ Swap', done: 'Done',
-    sessions_4wk: 'sessions / 4 wks', kg_this_week: 'kg this week',
-    foundation: 'foundation', strength: 'strength', peak: 'peak',
-    block: 'Block', week: 'Week', of: 'of',
-    auto_color: 'Auto color (by block)', syncing: 'Syncing…', sync_ok: 'Synced',
-    welcome: '👋 Welcome', welcome_desc: "What's your name? Keeps your workout data separate.",
-    start_arrow: 'Start →', enter_name: 'Enter your name.',
-    runner_video: 'Video', runner_cues: 'Cues', runner_log_set: 'Log set',
-    runner_skip_warmup: 'Skip warm-up', runner_rest: 'Rest', runner_last_time: 'Last time',
-    runner_next_exercise: 'Next exercise',
-  },
-  ar: {
-    start_session: 'ابدأ التمرين', finish_session: '✓ حفظ وإنهاء التمرين',
-    rest_day: '🛋️ يوم راحة', gym_day: '🏋️ اليوم هو', session_done: 'انتهى التمرين.',
-    next: 'التالي:', streak: 'السلسلة', this_week: 'هذا الأسبوع', tonnage: 'الحمولة',
-    settings: 'الإعدادات', history: 'السجل', library: 'المكتبة', home: 'الرئيسية', help: 'مساعدة',
-    save: 'حفظ', cancel: 'إلغاء', wipe_data: 'مسح كل البيانات',
-    theme: 'المظهر', language: 'اللغة', music: 'الموسيقى',
-    force_session: 'تحديد الجلسة التالية', missed_day: 'غبت يوم؟ اختر الجلسة التالية يدوياً.',
-    working_sets: 'سيت', last_time: '📊 آخر مرة',
-    warmup: 'إحماء', add_set: '+ سيت', swap: '⇄ بديل', done: 'تم',
-    sessions_4wk: 'جلسات / 4 أسابيع', kg_this_week: 'كغ هذا الأسبوع',
-    foundation: 'التأسيس', strength: 'القوة', peak: 'الذروة',
-    block: 'بلوك', week: 'أسبوع', of: 'من',
-    auto_color: 'لون تلقائي (حسب البلوك)', syncing: 'جارٍ المزامنة…', sync_ok: 'تمت المزامنة',
-    welcome: '👋 أهلاً', welcome_desc: 'ما اسمك؟ يحفظ بياناتك منفصلة عن الآخرين.',
-    start_arrow: 'ابدأ ←', enter_name: 'أدخل اسمك.',
-    runner_video: 'الشرح', runner_cues: 'التلميحات', runner_log_set: 'سجّل المجموعة',
-    runner_skip_warmup: 'تخطَّ الإحماء', runner_rest: 'راحة', runner_last_time: 'آخر مرة',
-    runner_next_exercise: 'التمرين التالي',
-  },
+// Every renderer supplies an English source/key to this single locale map.
+// Arabic text is the default; English exercise names and numeric runs are
+// isolated below so punctuation cannot jump across an RTL sentence.
+const activeLanguage = () => settings?.lang || 'ar';
+const t = (key) => localeText(key, activeLanguage());
+const tf = (key, values) => localeFormat(key, values, activeLanguage());
+const localizeText = (value) => typeof value === 'string' ? localeText(value, activeLanguage()) : value;
+const localizedTextNode = (value) => {
+  const localized = localizeText(value);
+  const needsIsolation = activeLanguage() === 'ar' && /[A-Za-z0-9]/.test(localized) && !/[\u0600-\u06FF]/.test(localized);
+  if (!needsIsolation) return document.createTextNode(localized);
+  const bdi = document.createElement('bdi');
+  bdi.className = 'ltr-run';
+  bdi.textContent = localized;
+  return bdi;
 };
-const t = (key) => STRINGS[settings?.lang || 'en']?.[key] ?? STRINGS.en[key] ?? key;
+const setUiText = (el, value) => { el.textContent = localizeText(value); };
 
 function applyLang() {
-  const lang = settings.lang || 'en';
+  const lang = activeLanguage();
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.title = lang === 'ar' ? 'رائد للتمارين' : 'Raedworkouts';
+  $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  $$('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  $$('[data-i18n-aria-label]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
 }
 
 const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-const fmtTime = (d) => new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+const fmtTime = (d) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 const todayISO = () => new Date().toISOString().slice(0,10);
 const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
   t.innerHTML = '';
   t.classList.remove('skin-suggestion');
-  t.appendChild(document.createTextNode(msg));
+  t.appendChild(localizedTextNode(msg));
   if (actionLabel && actionFn) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = actionLabel;
+    setUiText(btn, actionLabel);
     btn.addEventListener('click', () => { t.classList.remove('show'); actionFn(); });
     t.appendChild(btn);
   }
@@ -483,7 +465,8 @@ const defaultSettings = () => ({
   notifications: true,         // browser notifications when rest ends (req permission)
   focus_mode: true,            // one-exercise-at-a-time during active session
   show_cues: true,             // live-session control; defaults to useful form cues
-  runner_video_open: false,    // persisted per profile; runner video starts collapsed
+  runner_video_open: true,     // persisted per profile; Raed wants the explanation open by default
+  runner_video_default_version: 1,
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
   programme_variant: 'ppl_3x',  // fullbody_2x | ppl_3x
   pending_variant: null,       // legacy queue value; cleared on boot/switch
@@ -502,7 +485,8 @@ const defaultSettings = () => ({
   block_auto_color: true,      // whether a configured boundary suggestion is offered
   block_skin_suggestions: {},  // deliberately unset until Raed assigns a skin per block
   block_skin_rejections: {},   // { block: true }; rejection is remembered for that block
-  lang: 'en',
+  lang: 'ar',
+  locale_version: 1,
 });
 
 let state = defaultState();
@@ -549,11 +533,13 @@ function ensureProfile() {
   if (!state.profile.created_at) state.profile.created_at = new Date().toISOString();
 }
 function registerLocalProfile(profile) {
+  const previous = getLocalProfiles().find(p => String(p.user_id).toLowerCase() === String(profile.user_id).toLowerCase());
   const list = getLocalProfiles().filter(p => String(p.user_id).toLowerCase() !== String(profile.user_id).toLowerCase());
   list.push({
     user_id: profile.user_id,
     display_name: profile.display_name || profile.user_id,
     experience: profile.experience || 'detrained',
+    has_pin: typeof profile.has_pin === 'boolean' ? profile.has_pin : (previous?.has_pin ?? Boolean(settings.user_key)),
     updated_at: new Date().toISOString(),
   });
   localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(list));
@@ -657,6 +643,16 @@ function loadLocal() {
   if (activeUser) {
     try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(stateKey(activeUser)) || '{}') }; } catch (e) {}
     try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(settingsKey(activeUser)) || '{}') }; } catch (e) {}
+    // Existing profiles predate the Arabic-default requirement.  Preserve an
+    // explicit post-Phase-4 choice, but migrate prior settings once.
+    if (!settings.locale_version) {
+      settings.lang = 'ar';
+      settings.locale_version = 1;
+    }
+    if (!settings.runner_video_default_version) {
+      settings.runner_video_open = true;
+      settings.runner_video_default_version = 1;
+    }
     settings.user_id = settings.user_id || activeUser;
     activeUser = settings.user_id;
     setActiveUser(activeUser);
@@ -760,10 +756,10 @@ function isNetworkError(err) {
 }
 function pinErrorMessage(err) {
   const status = syncErrorStatus(err);
-  if (status === 401) return 'Wrong PIN. Try again.';
-  if (status === 429) return 'Too many tries — wait 15 min.';
-  if (isNetworkError(err)) return "Can't reach the server — check connection.";
-  return 'Could not verify PIN.';
+  if (status === 401) return t('wrong_pin');
+  if (status === 429) return t('too_many_tries');
+  if (isNetworkError(err)) return t('cant_reach_server');
+  return t('pin_could_not_verify');
 }
 async function retryPendingRegistration() {
   const pending = settings.pending_registration;
@@ -774,7 +770,9 @@ async function retryPendingRegistration() {
       body: JSON.stringify({ user_id: pending.user_id || settings.user_id, pin: pending.pin, _auth_token: settings.sync_key }),
     });
     settings.user_id = res.user_id || settings.user_id;
-    settings.user_key = res.user_key || await deriveUserKey(settings.user_id, pending.pin);
+    // A PIN-free profile deliberately has no derived user key.  Deriving one
+    // from an empty string would turn the optional PIN into an invisible PIN.
+    settings.user_key = pending.pin ? (res.user_key || await deriveUserKey(settings.user_id, pending.pin)) : '';
     settings.pending_registration = null;
     settings.needs_pin_reauth = false;
     setActiveUser(settings.user_id);
@@ -946,7 +944,7 @@ function setSyncStatus(kind, text) {
   const el = $('#sync-status');
   if (!el) return;
   el.className = 'sync-status ' + kind;
-  el.textContent = text;
+  setUiText(el, text);
 }
 
 async function testCloudConnection() {
@@ -997,10 +995,29 @@ async function loadWelcomeProfiles() {
     if (!settings.user_id) renderWelcome();
   }
 }
-function selectProfile(profile) {
+export function validateRegistrationPin(pin, repeatedPin) {
+  const first = String(pin || '').trim();
+  const second = String(repeatedPin || '').trim();
+  if (!first && !second) return { valid: true, pin: '', has_pin: false };
+  if (!/^\d{4}$/.test(first)) return { valid: false, error: 'Use a 4 digit PIN.' };
+  if (first !== second) return { valid: false, error: 'PINs do not match.' };
+  return { valid: true, pin: first, has_pin: true };
+}
+
+export function profileEntryMode(profile) {
+  if (profile?.has_pin === true) return 'pin';
+  return Object.hasOwn(profile || {}, 'has_pin') ? 'direct' : 'register';
+}
+
+async function selectProfile(profile) {
   welcomeSelectedProfile = profile;
   welcomePinMessage = '';
-  welcomeMode = profile.has_pin ? 'pin' : 'register';
+  const mode = profileEntryMode(profile);
+  if (mode === 'direct') {
+    await signInWithoutPin(profile);
+    return;
+  }
+  welcomeMode = mode;
   renderWelcome();
 }
 function finishLocalSignIn(userId, profile, userKey = '') {
@@ -1009,6 +1026,7 @@ function finishLocalSignIn(userId, profile, userKey = '') {
     display_name: profile?.display_name || userId,
     experience: profile?.experience || 'returning',
     bodyweight_kg: profile?.bodyweight_kg ?? null,
+    has_pin: typeof profile?.has_pin === 'boolean' ? profile.has_pin : Boolean(userKey),
     created_at: new Date().toISOString(),
   }};
   setActiveUser(userId);
@@ -1016,6 +1034,37 @@ function finishLocalSignIn(userId, profile, userKey = '') {
   syncDirty = false;
   clearDirtyMarker(userId);
   render();
+}
+async function signInWithoutPin(profile) {
+  const previousSettings = settings;
+  const userId = profile.user_id || profile.display_name;
+  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId, user_key: '' };
+  state = { ...defaultState(), profile: {
+    display_name: profile.display_name || userId,
+    experience: profile.experience || 'returning',
+    bodyweight_kg: profile.bodyweight_kg ?? null,
+    has_pin: false,
+    created_at: new Date().toISOString(),
+  }};
+  setActiveUser(userId);
+  try {
+    await pullFromCloud();
+    persistLocal();
+    applyTheme();
+    render();
+  } catch (error) {
+    settings = previousSettings;
+    if (syncErrorStatus(error) === 401) {
+      welcomeSelectedProfile = { ...profile, has_pin: true };
+      welcomePinMessage = 'This profile requires its PIN.';
+      welcomeMode = 'pin';
+      renderWelcome();
+      return;
+    }
+    if (!isNetworkError(error)) throw error;
+    finishLocalSignIn(userId, { ...profile, has_pin: false });
+    toast('Opened locally. Cloud sync will reconnect when available.', 3500);
+  }
 }
 async function verifyPin(profile, pin) {
   const userId = profile.user_id;
@@ -1065,9 +1114,9 @@ async function registerProfile(profile, pin, bodyweight) {
   try {
     const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify(body) });
     const userId = res.user_id || profile.user_id;
-    const userKey = res.user_key || await deriveUserKey(userId, pin);
+    const userKey = pin ? (res.user_key || await deriveUserKey(userId, pin)) : '';
     claimed = true;
-    finishLocalSignIn(userId, { ...profile, bodyweight_kg: bodyweight ?? profile.bodyweight_kg }, userKey);
+    finishLocalSignIn(userId, { ...profile, has_pin: Boolean(pin), bodyweight_kg: bodyweight ?? profile.bodyweight_kg }, userKey);
     state.profile.experience = profile.experience || state.profile.experience || 'returning';
     if (bodyweight) {
       state.profile.bodyweight_kg = bodyweight;
@@ -1101,13 +1150,13 @@ function renderPinPad(profile) {
   const submit = async () => {
     if (checking || pin.length !== 4) return;
     checking = true;
-    status.textContent = 'Checking...';
+    setUiText(status, 'Checking...');
     try {
       await verifyPin(profile, pin);
     } catch (e) {
       pin = '';
       checking = false;
-      status.textContent = pinErrorMessage(e);
+      setUiText(status, pinErrorMessage(e));
       dots.classList.add('shake');
       setTimeout(() => dots.classList.remove('shake'), 350);
       refresh();
@@ -1145,20 +1194,20 @@ function renderRegisterPanel(profile) {
   return h('div', { class: 'register-panel card' },
     h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
     h('h2', {}, profile.display_name || profile.user_id),
-    h('p', { class: 'muted' }, 'Create a PIN. Your workout data stays separate.'),
+    h('p', { class: 'muted' }, 'PIN is optional. Your workout data stays separate.'),
     h('label', {}, 'Experience', exp),
-    h('label', {}, 'PIN', pin1),
+    h('label', {}, 'PIN (optional)', pin1),
     h('label', {}, 'Repeat PIN', pin2),
     h('label', {}, 'Bodyweight', bw),
     status,
     h('button', { class: 'btn primary full', onClick: async () => {
       const p1 = pin1.value.trim();
       const p2 = pin2.value.trim();
-      if (!/^\d{4}$/.test(p1)) { status.textContent = 'Use a 4 digit PIN.'; return; }
-      if (p1 !== p2) { status.textContent = 'PINs do not match.'; return; }
-      status.textContent = 'Creating profile...';
+      const pinResult = validateRegistrationPin(p1, p2);
+      if (!pinResult.valid) { setUiText(status, pinResult.error); return; }
+      setUiText(status, 'Creating profile...');
       try {
-        await registerProfile({ ...profile, experience: exp.value }, p1, parseFloat(bw.value) || null);
+        await registerProfile({ ...profile, experience: exp.value }, pinResult.pin, parseFloat(bw.value) || null);
       } catch (e) {
         const statusCode = syncErrorStatus(e);
         if (statusCode === 409 || /pin_already_set/.test(e.message || '')) {
@@ -1169,17 +1218,17 @@ function renderRegisterPanel(profile) {
           return;
         }
         if (statusCode === 403 || /not_allowlisted/.test(e.message || '')) {
-          status.textContent = 'Ask Raed to add this name first.';
+          setUiText(status, 'Ask Raed to add this name first.');
           return;
         }
         if (!isNetworkError(e)) {
-          status.textContent = e.message || 'Could not create profile.';
+          setUiText(status, e.message || 'Could not create profile.');
           return;
         }
         const localId = profile.user_id || (profile.display_name || '').trim();
-        const userKey = await deriveUserKey(localId, p1);
-        finishLocalSignIn(localId, { ...profile, experience: exp.value, bodyweight_kg: parseFloat(bw.value) || null }, userKey);
-        settings.pending_registration = { user_id: localId, pin: p1 };
+        const userKey = pinResult.has_pin ? await deriveUserKey(localId, pinResult.pin) : '';
+        finishLocalSignIn(localId, { ...profile, has_pin: pinResult.has_pin, experience: exp.value, bodyweight_kg: parseFloat(bw.value) || null }, userKey);
+        settings.pending_registration = { user_id: localId, pin: pinResult.pin };
         saveLocal({ sync: false });
         toast('Offline profile created. It will connect when the server is reachable.', 3500);
       }
@@ -1277,9 +1326,9 @@ function openSetPinModal() {
     h('button', { class: 'btn primary', style: 'flex:1;', onClick: async () => {
       const p1 = pin1.value.trim();
       const p2 = pin2.value.trim();
-      if (!/^\d{4}$/.test(p1)) { status.textContent = 'Use a 4 digit PIN.'; return; }
-      if (p1 !== p2) { status.textContent = 'PINs do not match.'; return; }
-      status.textContent = 'Saving...';
+      if (!/^\d{4}$/.test(p1)) { setUiText(status, 'Use a 4 digit PIN.'); return; }
+      if (p1 !== p2) { setUiText(status, 'PINs do not match.'); return; }
+      setUiText(status, 'Saving...');
       try {
         const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify({ user_id: settings.user_id, pin: p1, _auth_token: settings.sync_key }) });
         settings.user_id = res.user_id || settings.user_id;
@@ -1290,7 +1339,7 @@ function openSetPinModal() {
         toast('PIN set.');
         render();
       } catch (e) {
-        status.textContent = /pin_already_set|409/.test(e.message || '') ? 'PIN already exists. Switch profile and sign in.' : 'Could not set PIN.';
+        setUiText(status, /pin_already_set|409/.test(e.message || '') ? 'PIN already exists. Switch profile and sign in.' : 'Could not set PIN.');
       }
     }}, 'Set PIN'),
   ));
@@ -1307,16 +1356,16 @@ function openReconnectPinModal() {
   const submit = async () => {
     const value = pin.value.trim();
     if (checking) return;
-    if (!/^\d{4}$/.test(value)) { status.textContent = 'Use a 4 digit PIN.'; return; }
+    if (!/^\d{4}$/.test(value)) { setUiText(status, 'Use a 4 digit PIN.'); return; }
     checking = true;
-    status.textContent = 'Reconnecting...';
+    setUiText(status, 'Reconnecting...');
     try {
       await verifyReconnectPin(value);
       overlay.classList.remove('show');
     } catch (e) {
       checking = false;
       pin.value = '';
-      status.textContent = pinErrorMessage(e);
+      setUiText(status, pinErrorMessage(e));
       pin.focus();
     }
   };
@@ -1385,9 +1434,9 @@ export function resolveSkinSuggestionResponse({ settings: persistedSettings, sug
 }
 
 function applyTheme() {
-  const t = settings.theme || 'auto';
-  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', t);
+  const mode = settings.theme || 'auto';
+  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', mode);
   const skin = activeSkin();
   document.documentElement.setAttribute('data-skin', skin);
   // Status-bar values follow the selected skin; block transitions never call this.
@@ -1405,7 +1454,7 @@ function applyTheme() {
       dark: S + '<path d="M20 13.2A7.5 7.5 0 1 1 10.8 4a6 6 0 0 0 9.2 9.2z"/></svg>',
       light: S + '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>',
     };
-    tt.innerHTML = (icons[t] || icons.auto) + '<span>' + (t === 'auto' ? 'Auto' : (t === 'dark' ? 'Dark' : 'Light')) + '</span>';
+    tt.innerHTML = (icons[mode] || icons.auto) + '<span>' + t(mode) + '</span>';
   }
 }
 function cycleTheme() {
@@ -2089,6 +2138,21 @@ function updateRunnerSet(exerciseId, setIndex, property, value) {
   saveLocal();
 }
 
+function addRunnerSet(exerciseId) {
+  const exerciseState = state.active_session?.exercises?.[exerciseId];
+  if (!exerciseState) return;
+  const lastWorking = [...exerciseState.sets].reverse().find((set) => !set.is_warmup);
+  exerciseState.sets.push({
+    is_warmup: false,
+    weight: lastWorking?.weight ?? suggestNextWeight(exerciseId, exerciseState.planned).weight,
+    reps: lastWorking?.reps ?? workingRepTarget(exerciseState.planned),
+    effort: null,
+    completed: false,
+  });
+  saveLocal();
+  render();
+}
+
 function toggleRunnerSet(exerciseId, setIndex) {
   const exerciseState = state.active_session?.exercises?.[exerciseId];
   const set = exerciseState?.sets?.[setIndex];
@@ -2150,7 +2214,7 @@ function renderRunnerSettings() {
         onClick: () => { settings.show_cues = !settings.show_cues; saveLocal(); render(); renderRunnerSettings(); },
       }, settings.show_cues ? 'ظاهر' : 'مخفي'),
     ),
-    h('button', { type: 'button', class: 'btn ghost full', onClick: () => $('#modal-overlay').classList.remove('show') }, 'تم'),
+    h('button', { type: 'button', class: 'btn ghost full', 'data-runner-settings-close': 'true', onClick: () => $('#modal-overlay').classList.remove('show') }, 'تم'),
   ));
   $('#modal-overlay').classList.add('show');
 }
@@ -2176,6 +2240,10 @@ function renderRunnerWarmup(activeSession) {
   const warmup = activeSession.warmup;
   const drills = warmup?.drills || [];
   const complete = generalWarmupComplete(warmup);
+  const session = getActiveProgramme()?.sessions?.find((item) => item.id === activeSession.session_id);
+  // Raed wants one press-play affordance while warming up only.  It is kept
+  // out of the lifting runner rather than merely hidden there.
+  const spotify = session?.playlists?.spotify?.[0] || null;
   return h('div', { class: 'runner-warmup', 'data-runner-warmup': 'true', dir: 'rtl' },
     h('div', { class: 'runner-exercise-title' },
       h('div', { class: 'runner-overline' }, 'المرحلة الأولى'),
@@ -2195,9 +2263,9 @@ function renderRunnerWarmup(activeSession) {
       onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
     }, isolate(drill.movement), h('span', {}, isolate(`${drill.reps} reps`), drill.completed ? ' ✓' : '')))),
     h('div', { class: 'runner-warmup-actions' },
-      h('button', { type: 'button', class: 'btn ghost', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
-      h('button', { type: 'button', class: 'btn primary', disabled: !complete, onClick: () => completeRunnerWarmup() }, complete ? 'ابدأ التمرين' : 'أكمل الإحماء'),
+      h('button', { type: 'button', class: 'btn ghost', 'data-runner-skip-warmup': 'true', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
     ),
+    spotify ? h('a', { class: 'runner-warmup-spotify', href: spotify.url, target: '_blank', rel: 'noopener' }, t('warmup_spotify')) : null,
   );
 }
 
@@ -2213,18 +2281,15 @@ function renderRunner() {
   const exercise = getAllExercises().find((item) => item.id === actualId);
   let swipeStart = null;
   const shell = h('section', {
-    class: 'runner-shell', dir: 'rtl', 'data-session-runner': 'true',
+    class: 'runner-shell' + (active.phase === 'warmup' ? ' runner-shell-warmup' : ''), dir: 'rtl', 'data-session-runner': 'true',
     'data-runner-phase': active.phase === 'warmup' ? 'warmup' : 'lifting',
+    'data-runner-exercise-index': String(index),
+    'data-runner-exercise-total': String(entries.length),
   });
   shell.appendChild(h('header', { class: 'runner-topbar' },
-    h('button', { type: 'button', class: 'runner-icon-button', 'aria-label': 'Leave workout', onClick: () => router('home') }, '✕'),
-    h('button', { type: 'button', class: 'runner-top-nav', 'aria-label': 'Previous exercise', disabled: index === 0, onClick: () => moveRunnerExercise(-1) }, '→'),
-    h('div', { class: 'runner-progress' },
-      h('bdi', {}, `${index + 1} / ${entries.length}`),
-      h('div', { class: 'runner-progress-track', 'aria-hidden': 'true' }, h('span', { style: `width:${entries.length ? ((index + 1) / entries.length) * 100 : 0}%` })),
-    ),
-    h('button', { type: 'button', class: 'runner-top-nav', 'aria-label': 'Next exercise', disabled: index >= entries.length - 1, onClick: () => moveRunnerExercise(1) }, '←'),
-    h('button', { type: 'button', class: 'runner-icon-button', 'aria-label': 'Workout settings', onClick: renderRunnerSettings }, '⚙'),
+    h('button', { type: 'button', class: 'runner-icon-button', 'data-runner-settings-button': 'true', 'aria-label': 'Workout settings', onClick: renderRunnerSettings }, '⚙'),
+    h('div', { class: 'runner-active-status' }, t('runner_active_started').replace('{time}', fmtTime(active.started_at))),
+    h('button', { type: 'button', class: 'runner-icon-button', 'data-runner-leave-button': 'true', 'aria-label': 'Leave workout', onClick: () => router('home') }, '✕'),
   ));
 
   const middle = h('main', {
@@ -2240,19 +2305,25 @@ function renderRunner() {
     },
     onPointercancel: () => { swipeStart = null; },
   });
+  const card = h('section', { class: 'runner-card' });
 
   if (active.phase === 'warmup' && active.warmup) {
-    middle.appendChild(renderRunnerWarmup(active));
+    card.appendChild(renderRunnerWarmup(active));
+    middle.appendChild(card);
     shell.appendChild(middle);
     shell.appendChild(h('footer', { class: 'runner-bottom-bar' },
-      h('button', { type: 'button', class: 'btn primary full', 'data-runner-skip-warmup': 'true', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
+      h('button', {
+        type: 'button', class: 'btn primary full', 'data-runner-complete-warmup': 'true',
+        disabled: !generalWarmupComplete(active.warmup), onClick: () => completeRunnerWarmup(),
+      }, 'أكمل الإحماء'),
     ));
     root.appendChild(shell);
     return;
   }
 
   if (!exercise || !exerciseState) {
-    middle.appendChild(h('div', { class: 'runner-empty' }, isolate('No exercise is available in this session.')));
+    card.appendChild(h('div', { class: 'runner-empty' }, isolate('No exercise is available in this session.')));
+    middle.appendChild(card);
     shell.appendChild(middle);
     root.appendChild(shell);
     return;
@@ -2270,9 +2341,9 @@ function renderRunner() {
   const videos = buildExerciseVideos(actualId, exercise);
   const workingSets = exerciseState.sets.filter((set) => !set.is_warmup);
 
-  middle.appendChild(h('div', { class: 'runner-exercise-title', ...runnerLongPress(exerciseId, exerciseState) },
+  card.appendChild(h('div', { class: 'runner-exercise-title', ...runnerLongPress(exerciseId, exerciseState) },
     h('h1', {}, isolate(exercise.name)),
-    h('p', {}, `${exercise.name_ar || exercise.primary?.[0] || ''} · `, isolate(`${exerciseState.planned.sets} sets`)),
+    h('p', {}, `${exercise.name_ar || exercise.primary?.[0] || ''} · `, h('bdi', {}, String(exerciseState.planned.sets)), ` ${t('exercise_sets')}`),
   ));
   const video = h('section', {
     class: 'runner-video' + (settings.runner_video_open ? ' expanded' : ''),
@@ -2286,17 +2357,9 @@ function renderRunner() {
       ? buildVideoTile(videos[0], { className: 'runner-video-thumb' })
       : h('span', { class: 'muted' }, isolate('No saved video for this exercise.'))));
   }
-  middle.appendChild(video);
+  card.appendChild(video);
 
-  middle.appendChild(h('section', { class: 'runner-set-panel', 'data-runner-set-panel': 'true' },
-    h('div', { class: 'runner-current-set-label' }, 'المجموعة الحالية'),
-    h('div', { class: 'runner-set-columns', 'aria-hidden': 'true' },
-      h('span', {}, 'رقم'),
-      h('span', {}, 'الوزن'),
-      h('span', {}, 'كغ'),
-      h('span', {}, 'التكرار'),
-      h('span', {}, 'تم'),
-    ),
+  const setList = h('div', { class: 'runner-set-list', 'data-runner-set-list': 'true' },
     exerciseState.sets.map((set, setIndex) => {
       const warmupCount = exerciseState.sets.slice(0, setIndex + 1).filter((item) => item.is_warmup).length;
       const workingNumber = setIndex + 1 - exerciseState.sets.slice(0, setIndex + 1).filter((item) => item.is_warmup).length;
@@ -2305,20 +2368,35 @@ function renderRunner() {
         class: 'runner-set-row' + (setIndex === currentIndex ? ' current' : '') + (set.completed ? ' done' : ''),
         'data-runner-set-row': String(setIndex),
       },
-      h('span', { class: 'runner-set-number' }, isolate(set.is_warmup ? `W${warmupCount}` : String(workingNumber))),
-      h('input', { type: 'number', dir: 'ltr', step: '0.5', inputmode: 'decimal', 'aria-label': `Weight for set ${setIndex + 1}`, value: set.weight ?? suggested.weight, onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'weight', event.target.value === '' ? '' : Number(event.target.value)) }),
-      h('span', { class: 'runner-unit' }, isolate('kg')),
-      h('input', { type: 'number', dir: 'ltr', step: '1', inputmode: 'numeric', 'aria-label': `Reps for set ${setIndex + 1}`, value: set.reps ?? workingRepTarget(exerciseState.planned), onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'reps', event.target.value === '' ? '' : Number(event.target.value)) }),
-      h('button', { type: 'button', class: 'runner-set-check', 'aria-label': `Log set ${setIndex + 1}`, onClick: () => toggleRunnerSet(exerciseId, setIndex) }, set.completed ? '✓' : '○'),
-      isFinal && setIndex === currentIndex ? h('div', { class: 'runner-effort', dir: 'ltr' }, effortPicker(set, () => { saveLocal(); render(); })) : null,
-    );
+      h('span', { class: 'runner-set-number' }, isolate(set.is_warmup ? tf('runner_warmup_set', { set: warmupCount }) : String(workingNumber))),
+      h('input', { type: 'number', dir: 'ltr', step: '0.5', inputmode: 'decimal', 'aria-label': tf('runner_weight_for_set', { set: setIndex + 1 }), value: set.weight ?? suggested.weight, onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'weight', event.target.value === '' ? '' : Number(event.target.value)) }),
+      h('span', { class: 'runner-unit' }, t('kg')),
+      h('input', { type: 'number', dir: 'ltr', step: '1', inputmode: 'numeric', 'aria-label': tf('runner_reps_for_set', { set: setIndex + 1 }), value: set.reps ?? workingRepTarget(exerciseState.planned), onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'reps', event.target.value === '' ? '' : Number(event.target.value)) }),
+      h('button', { type: 'button', class: 'runner-set-check', 'aria-label': tf('runner_log_set_number', { set: setIndex + 1 }), onClick: () => toggleRunnerSet(exerciseId, setIndex) }, set.completed ? '✓' : '○'),
+      isFinal && setIndex === currentIndex ? h('div', { class: 'runner-effort' }, effortPicker(set, () => { saveLocal(); render(); })) : null,
+      );
     }),
+  );
+  card.appendChild(h('section', { class: 'runner-set-panel', 'data-runner-set-panel': 'true' },
+    h('div', { class: 'runner-current-set-label' }, 'المجموعة الحالية'),
+    h('div', { class: 'runner-set-columns', 'aria-hidden': 'true' },
+      h('span', {}, 'رقم'),
+      h('span', {}, 'الوزن'),
+      h('span', {}, 'كغ'),
+      h('span', {}, 'التكرار'),
+      h('span', {}, 'تم'),
+    ),
+    setList,
   ));
-  if (settings.show_cues && exercise.cue) middle.appendChild(h('p', { class: 'runner-cue' }, isolate(exercise.cue)));
+  if (settings.show_cues && exercise.cue) card.appendChild(h('p', { class: 'runner-cue' }, isolate(exercise.cue)));
   const lastWorking = last?.sets?.filter((set) => !set.is_warmup && set.completed) || [];
-  middle.appendChild(h('div', { class: 'runner-last-time' }, isolate(`${t('runner_last_time')} · `), isolate(lastWorking.length ? `${lastWorking.at(-1).weight} kg × ${lastWorking.at(-1).reps}` : '—')));
-  middle.appendChild(h('button', { type: 'button', class: 'runner-rest', onClick: () => startRest(settings.rest_seconds) }, isolate(`⏱ ${String(Math.floor(settings.rest_seconds / 60))}:${String(settings.rest_seconds % 60).padStart(2, '0')} · ${t('runner_rest')}`)));
+  card.appendChild(h('div', { class: 'runner-last-time' }, t('runner_last_time'), ' · ', h('bdi', {}, lastWorking.length ? `${lastWorking.at(-1).weight} ${t('kg')} × ${lastWorking.at(-1).reps}` : '—')));
+  middle.appendChild(card);
   shell.appendChild(middle);
+  shell.appendChild(h('div', { class: 'runner-bottom-actions' },
+    h('button', { type: 'button', class: 'runner-rest', onClick: () => startRest(settings.rest_seconds) }, h('bdi', {}, `⏱ ${String(Math.floor(settings.rest_seconds / 60))}:${String(settings.rest_seconds % 60).padStart(2, '0')}`), ' · ', t('runner_rest')),
+    h('button', { type: 'button', class: 'runner-add-set', 'data-runner-add-set': 'true', onClick: () => addRunnerSet(exerciseId) }, t('runner_add_set')),
+  ));
   const runnerAction = sessionComplete
     ? h('button', { type: 'button', class: 'btn primary runner-log-button', onClick: endSession }, isolate(t('finish_session')))
     : currentExerciseComplete
@@ -3124,7 +3202,6 @@ function renderHistory() {
       );
       expanded.appendChild(row);
     });
-    if (sess.notes) expanded.appendChild(h('div', { class: 'cue', style: 'margin-top:8px;' }, h('strong', {}, 'Notes: '), sess.notes));
     const fallbackSessionName = ({ session_a: 'Session A', session_b: 'Session B', ppl_push: 'Push', ppl_pull: 'Pull', ppl_legs: 'Legs' })[sess.session_id] || sess.session_id;
     card.appendChild(h('div', { onClick: () => { expanded.style.display = expanded.style.display === 'none' ? 'block' : 'none'; } },
       h('div', { class: 'date' }, fmtDate(sess.date) + ' · ' + (sess.session_name || fallbackSessionName)),

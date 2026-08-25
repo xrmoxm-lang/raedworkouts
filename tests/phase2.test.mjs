@@ -95,7 +95,6 @@ test('session UI keeps the removal list out and wires one-thumb logging, cue con
   assert.match(appSource, /isFinalWorkingSet && !set\.effort/);
   assert.match(appSource, /Finish this exercise’s ramp set first/);
   assert.doesNotMatch(appSource, /Last session not fully logged/);
-  assert.doesNotMatch(appSource, /Session notes/);
   assert.match(styleSource, /grid-template-columns:\s*30px minmax\(72px, 1fr\) minmax\(64px, 0\.8fr\) 48px/);
 });
 

@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="color-scheme" content="light dark" />
-  <title>Raedworkouts</title>
-  <meta name="description" content="Family training PWA — Raed, Bassam, Abdullah. Progressive overload, offline-first, self-hosted sync." />
+  <title>رائد للتمارين</title>
+  <meta name="description" content="تطبيق رائد للتمارين: تقدّم تدريجي، يعمل دون اتصال، ومزامنة ذاتية." />
   <meta id="theme-color-light" name="theme-color" content="#b8451a" media="(prefers-color-scheme: light)" />
   <meta id="theme-color-dark" name="theme-color" content="#17130f" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Raedworkouts" />
+  <meta name="apple-mobile-web-app-title" content="رائد للتمارين" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon-192.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="./icon-192.svg" />
@@ -21,13 +21,13 @@
   <header class="app-header">
     <div class="app-title">
       <svg class="brand-mark" viewBox="0 0 200 130" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M29 50V74M35 42V82M165 42V82M171 50V74M36 62H164"/></svg>
-      <span>Raedworkouts</span>
+      <span data-i18n="app_name">رائد للتمارين</span>
     </div>
     <div class="header-actions">
-      <button id="gym-launch" class="header-btn" title="Open IN2 Fitness" aria-label="Open IN2 Fitness">
+      <button id="gym-launch" class="header-btn" data-i18n-title="open_gym" data-i18n-aria-label="open_gym" title="افتح النادي" aria-label="افتح النادي">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"/><path d="M21 21l-1-1"/><path d="M3 3l1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></svg>
       </button>
-      <button id="theme-toggle" class="theme-toggle">Auto</button>
+      <button id="theme-toggle" class="theme-toggle" data-i18n="auto">تلقائي</button>
     </div>
   </header>
 
@@ -42,18 +42,18 @@
   </main>
 
   <nav class="tab-bar">
-    <button class="tab" data-route="home" aria-label="Home"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9.3V20h13V9.3"/><path d="M9.5 20v-5.5h5V20"/></svg></span><span class="label">Home</span></button>
-    <button class="tab" data-route="library" aria-label="Library"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.2A2.2 2.2 0 0 1 6.2 17H20"/><path d="M6.2 2H20v20H6.2A2.2 2.2 0 0 1 4 19.8V4.2A2.2 2.2 0 0 1 6.2 2z"/></svg></span><span class="label">Library</span></button>
-    <button class="tab" data-route="history" aria-label="History"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/></svg></span><span class="label">History</span></button>
-    <button class="tab" data-route="settings" aria-label="Settings"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label">Settings</span></button>
-    <button class="tab" data-route="help" aria-label="Help"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span><span class="label">Help</span></button>
+    <button class="tab" data-route="home" data-i18n-aria-label="home" aria-label="الرئيسية"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9.3V20h13V9.3"/><path d="M9.5 20v-5.5h5V20"/></svg></span><span class="label" data-i18n="home">الرئيسية</span></button>
+    <button class="tab" data-route="library" data-i18n-aria-label="library" aria-label="المكتبة"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.2A2.2 2.2 0 0 1 6.2 17H20"/><path d="M6.2 2H20v20H6.2A2.2 2.2 0 0 1 4 19.8V4.2A2.2 2.2 0 0 1 6.2 2z"/></svg></span><span class="label" data-i18n="library">المكتبة</span></button>
+    <button class="tab" data-route="history" data-i18n-aria-label="history" aria-label="السجل"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/></svg></span><span class="label" data-i18n="history">السجل</span></button>
+    <button class="tab" data-route="settings" data-i18n-aria-label="settings" aria-label="الإعدادات"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label" data-i18n="settings">الإعدادات</span></button>
+    <button class="tab" data-route="help" data-i18n-aria-label="help" aria-label="المساعدة"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span><span class="label" data-i18n="help">المساعدة</span></button>
   </nav>
 
   <!-- Floating rest timer -->
   <div id="rest-timer" class="rest-timer" style="display:none;">
     <span class="rt-ico">⏱</span>
     <span id="rest-timer-text" class="rt-time">2:00</span>
-    <button id="rest-cancel" class="rt-cancel" aria-label="Cancel rest">✕</button>
+    <button id="rest-cancel" class="rt-cancel" data-i18n-aria-label="cancel_rest" aria-label="ألغِ الراحة">✕</button>
   </div>
 
   <!-- Modal -->

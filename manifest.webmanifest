@@ -1,7 +1,9 @@
 {
-  "name": "Raedworkouts",
-  "short_name": "Raedworkouts",
-  "description": "Raed's personal training app — full body 2x/week.",
+  "name": "رائد للتمارين",
+  "short_name": "رائد",
+  "description": "تطبيق رائد الشخصي للتمارين والتقدّم التدريجي.",
+  "lang": "ar",
+  "dir": "rtl",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
