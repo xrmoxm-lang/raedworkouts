@@ -99,7 +99,7 @@ function applyLang() {
   const lang = activeLanguage();
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  document.title = lang === 'ar' ? 'رائد للتمارين' : 'Raedworkouts';
+  document.title = 'Raedworkouts';
   $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   $$('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
   $$('[data-i18n-aria-label]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
@@ -1629,8 +1629,8 @@ function getLastTwoPerformances(exercise_id) {
   return out;
 }
 function effectiveStartKg(planned) {
-  const base = Number(planned.start_kg) || 0;
-  if (!base) return 0;
+  const base = Number(planned.start_kg);
+  if (!Number.isFinite(base) || base <= 0) return null;
   const exp = state.profile?.experience || 'returning';
   // D19: a detrained lifter starts from real logged history whenever it exists.
   // The reference seed is not deliberately scaled down for Raed's re-entry.
@@ -1655,6 +1655,19 @@ function roundToGymIncrement(value, step) {
 function fmtKgValue(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
 }
+function hasWorkingWeight(value) {
+  const weight = Number(value);
+  return Number.isFinite(weight) && weight > 0;
+}
+function displaySuggestedWeight(value) {
+  return hasWorkingWeight(value) ? `${fmtKgValue(value)} ${t('kg')}` : '—';
+}
+function suggestedWeightPlaceholder(value) {
+  return hasWorkingWeight(value) ? fmtKgValue(value) : '';
+}
+function editableWeightValue(value) {
+  return hasWorkingWeight(value) ? Number(value) : '';
+}
 // Compound ramp, sourced: 50% x 6-10 then 70% x 4-6 (ML L11160/L11162, PPL L:1454/1457).
 function twoSetWarmupFrom(weight, step) {
   return [
@@ -1665,6 +1678,7 @@ function twoSetWarmupFrom(weight, step) {
 function warmupText(planned, suggestedWeight) {
   if (!planned.warmup) return '';
   if (/^2\s+sets/i.test(planned.warmup)) {
+    if (!hasWorkingWeight(suggestedWeight)) return '';
     const warmups = twoSetWarmupFrom(suggestedWeight);
     return `2 sets: ${fmtKgValue(warmups[0].weight)}kg×10, ${fmtKgValue(warmups[1].weight)}kg×6`;
   }
@@ -1677,12 +1691,21 @@ function suggestNextWeight(exercise_id, planned) {
   const ex = getAllExercises().find(e => e.id === exercise_id);
   const startKg = effectiveStartKg(planned);
   if (!ex) return { weight: startKg, note: 'First exposure — use the seeded load, then log the real result.' };
-  if (!last2.length) return { weight: startKg, note: `⚡ Re-entry seed: ${startKg} kg. Let completed reps find the right level; do not grind.` };
+  if (!last2.length) {
+    return hasWorkingWeight(startKg)
+      ? { weight: startKg, note: `⚡ Re-entry seed: ${startKg} kg. Let completed reps find the right level; do not grind.` }
+      : { weight: null, note: '' };
+  }
   const latest = last2[0];
   const topReps = parseInt(String(planned.reps).split('-').pop(), 10) || 10;
   // Find the heaviest working set
   const workingSets = (latest.sets || []).filter(s => !s.is_warmup && s.weight && s.reps && s.completed);
-  if (!workingSets.length) return { weight: latest.sets?.[0]?.weight || planned.start_kg, note: 'Use the last logged working load and complete the prescribed reps.' };
+  if (!workingSets.length) {
+    const historicWeight = (latest.sets || []).map((set) => set.weight).find(hasWorkingWeight);
+    return hasWorkingWeight(historicWeight)
+      ? { weight: Number(historicWeight), note: 'Use the last logged working load and complete the prescribed reps.' }
+      : { weight: null, note: '' };
+  }
   const lastTopSet = workingSets[workingSets.length - 1];
   const allHitTarget = workingSets.every(s => s.reps >= topReps);
   const finalEffort = lastTopSet.effort || null;
@@ -1814,19 +1837,22 @@ function startSession(session) {
     const replacementId = scopedReplacementFor(session, plan.exercise_id);
     const effectivePlan = replacementId === plan.exercise_id ? plan : { ...plan, exercise_id: replacementId };
     const sug = suggestNextWeight(replacementId, effectivePlan);
+    const suggestedWorkingWeight = editableWeightValue(sug.weight);
     const sets = [];
     // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle`
     if (plan.is_first_of_muscle && plan.warmup) {
-      if (/^2\s+sets/i.test(plan.warmup)) {
+      if (/^2\s+sets/i.test(plan.warmup) && hasWorkingWeight(sug.weight)) {
         twoSetWarmupFrom(sug.weight).forEach(warm =>
           sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
         );
-      } else if (/^1\s+light\s+set/i.test(plan.warmup)) {
+      } else if (/^1\s+light\s+set/i.test(plan.warmup) && hasWorkingWeight(sug.weight)) {
         sets.push({ is_warmup: true, weight: roundToGymIncrement(sug.weight * 0.5), reps: 10, effort: null, completed: false });
       }
     }
     for (let i = 0; i < plan.sets; i++) {
-      sets.push({ is_warmup: false, weight: sug.weight, reps: workingRepTarget(effectivePlan), effort: null, completed: false });
+      // A suggestion is a placeholder, never an already-entered prescription.
+      // In particular, a new catalogue movement has no made-up 0 kg default.
+      sets.push({ is_warmup: false, weight: suggestedWorkingWeight, reps: workingRepTarget(effectivePlan), effort: null, completed: false });
     }
     exercises[plan.exercise_id] = {
       planned: effectivePlan,
@@ -2098,7 +2124,9 @@ function swapExercise(exercise_id, alt_id) {
   // Recalc suggested weight for the new exercise
   const altPlanned = { ...ex.planned, exercise_id: alt_id };
   const sug = suggestNextWeight(alt_id, altPlanned);
-  ex.sets.forEach(s => { if (!s.completed && !s.is_warmup) s.weight = sug.weight; });
+  ex.sets.forEach((set) => {
+    if (!set.completed && !set.is_warmup) set.weight = editableWeightValue(sug.weight);
+  });
   saveLocal();
   render();
   toast(tf('swapped_to', { name: getAllExercises().find(e => e.id === alt_id)?.name || alt_id }));
@@ -2203,7 +2231,7 @@ function addRunnerSet(exerciseId) {
   const lastWorking = [...exerciseState.sets].reverse().find((set) => !set.is_warmup);
   exerciseState.sets.push({
     is_warmup: false,
-    weight: lastWorking?.weight ?? suggestNextWeight(exerciseId, exerciseState.planned).weight,
+    weight: editableWeightValue(lastWorking?.weight),
     reps: lastWorking?.reps ?? workingRepTarget(exerciseState.planned),
     effort: null,
     completed: false,
@@ -2220,6 +2248,10 @@ function toggleRunnerSet(exerciseId, setIndex) {
   const workingSets = exerciseState.sets.filter((item) => !item.is_warmup);
   const isFinalWorkingSet = !set.is_warmup && set === workingSets[workingSets.length - 1];
   if (!set.completed) {
+    if (!set.is_warmup && (!hasWorkingWeight(set.weight) || !Number.isFinite(Number(set.reps)) || Number(set.reps) < 1)) {
+      toast(t('required'));
+      return;
+    }
     if (isFinalWorkingSet && !set.effort) {
       toast('Final set: tap easy, medium, or very hard first.');
       return;
@@ -2428,7 +2460,13 @@ function renderRunner() {
         'data-runner-set-row': String(setIndex),
       },
       h('span', { class: 'runner-set-number' }, isolate(set.is_warmup ? tf('runner_warmup_set', { set: warmupCount }) : String(workingNumber))),
-      h('input', { type: 'number', dir: 'ltr', step: '0.5', inputmode: 'decimal', 'aria-label': tf('runner_weight_for_set', { set: setIndex + 1 }), value: set.weight ?? suggested.weight, onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'weight', event.target.value === '' ? '' : Number(event.target.value)) }),
+      h('input', {
+        type: 'number', dir: 'ltr', step: '0.5', inputmode: 'decimal',
+        'aria-label': tf('runner_weight_for_set', { set: setIndex + 1 }),
+        value: editableWeightValue(set.weight),
+        placeholder: suggestedWeightPlaceholder(suggested.weight),
+        onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'weight', event.target.value === '' ? '' : Number(event.target.value)),
+      }),
       h('span', { class: 'runner-unit' }, t('kg')),
       h('input', { type: 'number', dir: 'ltr', step: '1', inputmode: 'numeric', 'aria-label': tf('runner_reps_for_set', { set: setIndex + 1 }), value: set.reps ?? workingRepTarget(exerciseState.planned), onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'reps', event.target.value === '' ? '' : Number(event.target.value)) }),
       h('button', { type: 'button', class: 'runner-set-check', 'aria-label': tf('runner_log_set_number', { set: setIndex + 1 }), onClick: () => toggleRunnerSet(exerciseId, setIndex) }, set.completed ? '✓' : '○'),
@@ -2704,7 +2742,7 @@ function renderHome() {
             h('div', { class: 'meta' },
               h('span', { class: 'muscle-tag' }, muscleLabel(ex?.primary?.[0])),
               ` ${p.sets} × ${p.reps} · `,
-              h('strong', {}, sug.weight + ' kg'),
+              h('strong', { 'data-suggested-weight': 'true' }, displaySuggestedWeight(sug.weight)),
             ),
           ),
         ),
@@ -2784,8 +2822,8 @@ function renderExerciseCard(ex_id, exState) {
       h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
       h('input', {
         type: 'number', step: '0.5', inputmode: 'decimal',
-        placeholder: String(sug.weight),
-        value: set.weight ?? '',
+        placeholder: suggestedWeightPlaceholder(sug.weight),
+        value: editableWeightValue(set.weight),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onInput: (e) => { set.weight = e.target.value === '' ? '' : parseFloat(e.target.value); saveLocal(); }
       }),
@@ -2800,6 +2838,10 @@ function renderExerciseCard(ex_id, exState) {
         class: 'set-check' + (set.completed ? ' checked' : ''),
         onClick: () => {
           if (!set.completed) {
+            if (!isWarm && (!hasWorkingWeight(set.weight) || !Number.isFinite(Number(set.reps)) || Number(set.reps) < 1)) {
+              toast(t('required'));
+              return;
+            }
             if (isFinalWorkingSet && !set.effort) {
               toast('Final set: tap easy, medium, or very hard first.');
               return;
@@ -2840,7 +2882,7 @@ function renderExerciseCard(ex_id, exState) {
   const actions = h('div', { class: 'ex-actions' },
     h('button', { class: 'btn tiny', onClick: () => {
       const lastWorking = [...exState.sets].reverse().find(s => !s.is_warmup);
-      exState.sets.push({ is_warmup: false, weight: lastWorking?.weight ?? sug.weight, reps: workingRepTarget(planned), effort: null, completed: false });
+      exState.sets.push({ is_warmup: false, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
       saveLocal(); render();
     }}, '+ Set'),
     h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, tf('rest_seconds', {
@@ -2940,13 +2982,13 @@ function addExerciseToSession(exercise_id) {
   if (!ex) return;
   // Default planned spec for an ad-hoc add
   const planned = {
-    exercise_id, sets: 3, reps: '10', start_kg: 0, rpe: '8',
+    exercise_id, sets: 3, reps: '10', rpe: '8',
     is_first_of_muscle: false,
   };
   const sug = suggestNextWeight(exercise_id, planned);
   const sets = [];
   for (let i = 0; i < planned.sets; i++) {
-    sets.push({ is_warmup: false, weight: sug.weight, reps: workingRepTarget(planned), effort: null, completed: false });
+    sets.push({ is_warmup: false, weight: editableWeightValue(sug.weight), reps: workingRepTarget(planned), effort: null, completed: false });
   }
   state.active_session.exercises[exercise_id] = { planned, sets };
   saveLocal();
@@ -3809,7 +3851,7 @@ function renderHelp() {
       sess.exercises.map(plan => {
         const ex = getAllExercises().find(e => e.id === plan.exercise_id);
         const sug = suggestNextWeight(plan.exercise_id, plan);
-        return h('li', {}, `${ex?.name || plan.exercise_id}: ${plan.sets} x ${plan.reps} @ ~${sug.weight} kg`);
+        return h('li', {}, `${ex?.name || plan.exercise_id}: ${plan.sets} x ${plan.reps} @ ${displaySuggestedWeight(sug.weight)}`);
       })
     ));
   });

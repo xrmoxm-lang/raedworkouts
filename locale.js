@@ -9,7 +9,8 @@ const pair = (en, ar) => Object.freeze({ en, ar });
 const programmeTiedPair = (en, ar) => Object.freeze({ en, ar, programme_tied: true });
 
 export const LOCALE = Object.freeze({
-  app_name: pair('Raedworkouts', 'رائد للتمارين'),
+  // Product name: a proper noun, never translated or transliterated.
+  app_name: pair('Raedworkouts', 'Raedworkouts'),
   // ARABIC-TERMS.md Round 2 — approved whole UI copy and templates.
   family_profiles_offline: pair('Family training profiles. Offline-first, synced when reachable.', 'ملفات العائلة. تعمل دون اتصال، وتُزامَن عند توفّره.'),
   loading_server_profiles: pair('Loading server profiles…', 'جارٍ تحميل الملفات من الخادم…'),
@@ -524,7 +525,7 @@ export const ALLOWED_PLAYLIST_TITLES = Object.freeze([
   'Beast Mode',
 ]);
 export const ALLOWED_PROPER_NOUNS = Object.freeze([
-  'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',
+  'Raedworkouts', 'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',
   'Apple Music', 'YT Music', 'Spotify', 'IN2', 'IN2 Fitness', '20IN2', 'App Store', 'iOS', 'JSON',
   'scope.bit://', 'shortcuts://run-shortcut',
 ]);

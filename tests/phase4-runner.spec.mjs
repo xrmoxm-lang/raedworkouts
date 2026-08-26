@@ -48,7 +48,7 @@ function seededSettings() {
   };
 }
 
-async function openStartedRunner(page) {
+async function openSeededHome(page) {
   await page.addInitScript(({ user, state, settings }) => {
     // This script also runs after reload. Seed once per test page so a reload
     // verifies persisted settings instead of recreating the original profile.
@@ -60,6 +60,10 @@ async function openStartedRunner(page) {
     sessionStorage.setItem('phase4-runner-seeded', 'true');
   }, { user: testUser, state: seededState(), settings: seededSettings() });
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+}
+
+async function openStartedRunner(page) {
+  await openSeededHome(page);
   const start = page.locator('#page-home button.btn.primary.full').first();
   await expect(start).toBeVisible();
   await start.click();
@@ -91,6 +95,31 @@ async function openStartedRunner(page) {
   }, testUser);
   await page.reload({ waitUntil: 'domcontentloaded' });
 }
+
+test('Phase 5 never presents an unseeded exercise as 0 kg or completes it without a real weight', async ({ page }) => {
+  await openSeededHome(page);
+  const home = page.locator('#page-home');
+  await expect(home, 'an unseeded plan must not prescribe a numeric zero weight').not.toContainText('0 kg');
+  await expect(home.locator('[data-suggested-weight]').first(), 'an unseeded planned weight is visibly unset').toHaveText('—');
+
+  await page.locator('#page-home button.btn.primary.full').first().click();
+  await page.locator('[data-runner-skip-warmup]').click();
+  const runner = page.locator('[data-session-runner]');
+  const firstWorkingRow = runner.locator('[data-runner-set-row]').first();
+  const weight = firstWorkingRow.locator('input[type="number"]').first();
+  await expect(weight, 'a suggested load must be a placeholder, never an input value').toHaveValue('');
+  await expect(weight, 'no-history exercise has no fictional numeric suggestion').toHaveAttribute('placeholder', '');
+
+  await firstWorkingRow.locator('.runner-set-check').click();
+  await expect(firstWorkingRow, 'a working row with no weight cannot be completed').not.toHaveClass(/\bdone\b/);
+  const persisted = await page.evaluate((user) => {
+    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
+    return JSON.parse(localStorage.getItem(key)).active_session;
+  }, testUser);
+  const working = Object.values(persisted.exercises).flatMap((exercise) => exercise.sets).filter((set) => !set.is_warmup);
+  expect(working.every((set) => set.weight === ''), 'a never-performed exercise never persists 0 as a working weight').toBe(true);
+  console.log('PHASE5_UNSEEDED_WEIGHT_RULE_PASSED');
+});
 
 async function recordRunnerGeometry(page, state) {
   if (process.env.PHASE4_FORCE_RUNNER_OVERFLOW === '1') {
