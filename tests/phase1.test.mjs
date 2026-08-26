@@ -112,8 +112,11 @@ function assertionFailure(assertion) {
   assert.fail('Expected the legacy behaviour to fail the preservation assertion');
 }
 
-test('catalogue migrates all 33 source exercises losslessly and exposes aliases/videos', () => {
-  assert.equal(rawExercises.length, 33);
+test('catalogue migrates every source exercise losslessly and exposes aliases/videos', () => {
+  assert.ok(
+    rawExercises.length >= 33,
+    `catalogue shrank below the 33 v15 shipped: ${rawExercises.length}`,
+  );
   assert.equal(catalogue.exercises.length, rawExercises.length);
   for (const raw of rawExercises) {
     const migrated = catalogue.get(raw.id);
@@ -185,12 +188,26 @@ test('warm-up decisions use ten-rep drills, a 50/70 compound ramp, and zero for 
   assert.deepEqual(programmedRepRange(exercise('lateral_raise_db')), { min: 10, max: 12 });
 });
 
-test('programme metadata uses 8–10 for compounds and 10–12 for isolation within the hard cap', () => {
-  const planned = [rawData.PROGRAMME, rawData.PROGRAMME_PPL].flatMap((programme) => programme.sessions.flatMap((session) => session.exercises));
+test('every programmed rep range respects the 12 ceiling and D18 compound floor of 8', () => {
+  // Phase 5 replaced the v15 PROGRAMME/PROGRAMME_PPL pair with one Upper/Lower
+  // programme carrying both blocks. Walk every block, not just the active one.
+  //
+  // This used to cross-check each programme row against the catalogue's own
+  // per-exercise range. That was two copies of one fact and they drifted the moment
+  // the real programme landed: `20` §8.4 programmes 33 of its 40 rows at 10-12,
+  // including compounds the catalogue recorded as 8-10. The programme row is the
+  // single source of truth for what is prescribed; the invariants are asserted here.
+  const planned = rawData.PROGRAMME.blocks.flatMap((block) => block.sessions.flatMap((session) => session.exercises));
+  assert.ok(planned.length > 0, 'the ceiling cannot be checked against an empty programme');
   for (const item of planned) {
-    const range = programmedRepRange(exercise(item.exercise_id));
-    assert.equal(item.reps, `${range.min}-${range.max}`, `${item.exercise_id} must use its v16 programmed range`);
-    assert.ok(range.max <= 12);
+    const [low, high] = String(item.reps).split('-').map(Number);
+    assert.ok(high <= 12, `${item.exercise_id} programs up to ${high} reps, above the locked ceiling of 12`);
+    assert.ok(low >= 1 && low <= high, `${item.exercise_id} has an incoherent rep range ${item.reps}`);
+    const ex = exercise(item.exercise_id);
+    const isCompound = ['lower_compound', 'hinge', 'upper_press', 'upper_pull'].includes(ex.canonical_pattern);
+    if (isCompound) {
+      assert.ok(low >= 8, `${item.exercise_id} programs ${item.reps}, below D18's compound floor of 8`);
+    }
   }
 });
 

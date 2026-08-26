@@ -110,3 +110,34 @@ Scope extension: three adopted skins across light, dark, and automatic modes; no
   CHECK: npm run test:arabic-dom
   EXPECT: PHASE4_ARABIC_DOM_PASSED
   EVIDENCE: UNVERIFIED — written against the current build to prove its pre-session Home wiring fails before the render-path fixes land.
+
+# Gates: v16 Phase 5 Upper/Lower programme
+
+Scope extension: the catalogue crosswalk, two-block Upper/Lower prescription, its substitution targets,
+and the independently recomputed weekly volume ledger. The research rep-range linter is read-only and
+lives at the repository root; it is never modified from this worktree.
+
+- [x] G21: Every catalogue record has exactly one primary muscle, including the Phase 5 additions
+  CHECK: node --test tests/phase5.test.mjs
+  EXPECT: PHASE5_CATALOGUE_PRIMARY_INVARIANT_PASSED
+  EVIDENCE: exit=0; PHASE5_CATALOGUE_PRIMARY_INVARIANT_PASSED; PHASE5_CATALOGUE_CROSSWALK_PASSED
+
+- [ ] G22: The adopted prescription's source CSV retains its active 12-rep ceiling
+  CHECK: (cd /Users/raedmohammed/RaedWorkoutsV2 && node research/lint-rep-ranges.mjs)
+  EXPECT: REP_RANGE_LINT_PASS
+  EVIDENCE: PENDING — read-only check against the adopted research source
+
+- [ ] G23: The real catalogue re-derives the locked 75 / 116.5 / 158 ledger and its 4-set floor
+  CHECK: node --test tests/phase5.test.mjs
+  EXPECT: PHASE5_LEDGER_REDERIVED
+  EVIDENCE: PENDING
+
+- [ ] G24: The complete Node suite keeps all pre-existing behaviour green after the programme port
+  CHECK: npm test
+  EXPECT: /# fail 0[\s\S]*CONTRAST_LINT_PASSED/
+  EVIDENCE: PENDING
+
+- [ ] G25: Main remains pinned at 4627432 while Phase 5 changes stay in this worktree
+  CHECK: test "$(git rev-parse main)" = "4627432fc5fce240503702bf040ada2e9f01b487" && git diff --stat main && printf 'MAIN_ANCHORED\n'
+  EXPECT: MAIN_ANCHORED
+  EVIDENCE: PENDING

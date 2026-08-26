@@ -1,6 +1,4 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
 import {
@@ -9,17 +7,11 @@ import {
   ALLOWED_PROPER_NOUN_ABBREVIATIONS,
   ALLOWED_PROPER_NOUNS,
   ALLOWED_WARMUP_DRILL_NAMES,
-  LOCALE,
 } from '../locale.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = pathToFileURL(path.join(repoRoot, 'index.html')).href;
 const testUser = 'phase4-arabic-dom';
-const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
-const dataSource = fs.readFileSync(path.join(repoRoot, 'data.js'), 'utf8');
-const dataSandbox = { window: {} };
-vm.createContext(dataSandbox);
-vm.runInContext(dataSource, dataSandbox, { filename: 'data.js' });
 
 test.use({
   browserName: 'chromium',
@@ -34,6 +26,7 @@ test.use({
 function seededState() {
   return {
     schema_version: 2,
+    programme_reference_migration_version: 1,
     current_week: 1,
     current_block: 1,
     profile: { display_name: 'اختبار', experience: 'returning', created_at: '2026-08-25T00:00:00.000Z' },
@@ -50,7 +43,6 @@ function seededSettings() {
     user_id: testUser,
     user_key: '',
     theme: 'light', skin: 'hadid',
-    programme_variant: 'ppl_3x',
     focus_mode: true, show_cues: true,
     rest_seconds: 120, vibrate: false, notifications: false,
     music_platform: 'none',
@@ -69,58 +61,8 @@ const allowedLatinRuns = [
   'Spotify',
 ].sort((a, b) => b.length - a.length);
 const allowedProperNounAbbreviations = ALLOWED_PROPER_NOUN_ABBREVIATIONS;
-const deferredProgrammeEntries = new Map();
-const addDeferredProgrammeEntry = (value, source) => {
-  if (typeof value !== 'string' || !value.trim() || !/[A-Za-z]/.test(value)) return;
-  if (!deferredProgrammeEntries.has(value)) deferredProgrammeEntries.set(value, new Set());
-  deferredProgrammeEntries.get(value).add(source);
-};
-for (const programme of [dataSandbox.window.RW?.PROGRAMME, dataSandbox.window.RW?.PROGRAMME_PPL]) {
-  if (!programme) continue;
-  addDeferredProgrammeEntry(programme.block_name, 'programme block name');
-  for (const note of programme.notes || []) addDeferredProgrammeEntry(note, 'programme note');
-  for (const session of programme.sessions || []) {
-    addDeferredProgrammeEntry(session.day, 'programme session day');
-    addDeferredProgrammeEntry(session.name, 'programme session name');
-    addDeferredProgrammeEntry(session.mood, 'programme session mood');
-  }
-}
-// Help contains two programme descriptions which are not data.js values, but
-// are just as D6-bound. They remain visible and explicitly reported below.
-const deferredProgrammeUiRuns = [
-  LOCALE.programme_tied_ppl_help?.en,
-  LOCALE.programme_tied_fullbody_help?.en,
-]
-  .filter((value) => /[A-Za-z]/.test(value));
-const deferredProgrammeVariantEntries = new Map();
-for (const match of appSource.matchAll(/(?:^|\n)\s*(\w+):\s*\{\s*label:\s*'([^']+)',\s*desc:\s*'([^']+)',\s*programme_tied:\s*true\s*\}/g)) {
-  const [, key, label, description] = match;
-  deferredProgrammeVariantEntries.set(label, `app.js programme variant ${key} label`);
-  deferredProgrammeVariantEntries.set(description, `app.js programme variant ${key} description`);
-}
-if (deferredProgrammeVariantEntries.size !== 4) {
-  throw new Error('G20 could not read every programme-tied VARIANTS label and description from app.js');
-}
-// Preserve the complete deferred source text.  Renderers may split a session
-// name across sibling elements, but those pieces still originate in this one
-// data.js source string.
-const deferredProgrammeSources = [...new Set([
-  ...deferredProgrammeEntries.keys(),
-  ...deferredProgrammeUiRuns,
-  ...deferredProgrammeVariantEntries.keys(),
-])].sort((a, b) => b.length - a.length);
-
 function logDeferredProgramme() {
-  console.log(`PHASE4_ARABIC_DOM_DEFERRED count=${deferredProgrammeEntries.size}`);
-  for (const [value, sources] of [...deferredProgrammeEntries.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    console.log(`DEFERRED — awaits the Upper/Lower port (D6) (${[...sources].join(', ')}): ${JSON.stringify(value)}`);
-  }
-  for (const value of deferredProgrammeUiRuns.sort((a, b) => a.localeCompare(b))) {
-    console.log(`DEFERRED — awaits the Upper/Lower port (D6) (programme-tied Help copy): ${JSON.stringify(value)}`);
-  }
-  for (const [value, source] of [...deferredProgrammeVariantEntries.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    console.log(`DEFERRED — awaits the Upper/Lower port (D6) (${source}): ${JSON.stringify(value)}`);
-  }
+  console.log('PHASE4_ARABIC_DOM_DEFERRED count=0');
 }
 
 async function scanVisibleLatin(page, screen) {
@@ -195,7 +137,7 @@ async function scanVisibleLatin(page, screen) {
       offenders: [...found].sort((a, b) => a.localeCompare(b)),
       deferred: [...deferredFound].sort((a, b) => a.localeCompare(b)),
     };
-  }, { allowed: allowedLatinRuns, abbreviations: allowedProperNounAbbreviations, deferred: deferredProgrammeSources });
+  }, { allowed: allowedLatinRuns, abbreviations: allowedProperNounAbbreviations, deferred: [] });
   console.log(`PHASE4_ARABIC_DOM screen=${screen} offending=${JSON.stringify(result.offenders)} deferred=${JSON.stringify(result.deferred)}`);
   return result.offenders.map((text) => ({ screen, text }));
 }
@@ -221,8 +163,8 @@ async function visitTab(page, route) {
 
 test('Phase 4 Arabic UI renders no undeclared visible Latin text on every reachable screen', async ({ page }) => {
   const findings = [];
-  // A green DOM scan must remain explicit about the D6 programme material it
-  // permits. This mirrors the source verifier rather than hiding exceptions.
+  // Round 5 translated the live Upper/Lower programme. Keep the zero count
+  // explicit so future programme data cannot be silently treated as deferred.
   logDeferredProgramme();
   await openSignedInArabicApp(page);
 

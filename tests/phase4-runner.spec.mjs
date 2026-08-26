@@ -21,6 +21,7 @@ test.use({
 function seededState() {
   return {
     schema_version: 2,
+    programme_reference_migration_version: 1,
     current_week: 1,
     current_block: 1,
     profile: { display_name: 'Runner test', experience: 'returning', created_at: '2026-08-25T00:00:00.000Z' },
@@ -37,7 +38,6 @@ function seededSettings() {
     user_id: testUser,
     user_key: '',
     theme: 'light', skin: 'hadid',
-    programme_variant: 'ppl_3x',
     focus_mode: true, show_cues: true,
     rest_seconds: 120, vibrate: false, notifications: false,
     music_platform: 'none',

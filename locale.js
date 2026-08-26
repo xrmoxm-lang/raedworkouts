@@ -468,6 +468,18 @@ export const LOCALE = Object.freeze({
   cue_standing_calf: pair('Full stretch at the bottom (1 sec pause), full contraction at top.', 'مدّ كامل في الأسفل مع وقفة ثانية، وانقباض كامل في الأعلى.'),
   cue_seated_calf: pair('Targets soleus. Slow, controlled — calves love volume.', 'يستهدف النعلية. ببطء وتحكم — السمانة تحب الحجم.'),
   cue_ab: pair("Curl spine, don't hinge at hips. Exhale at peak contraction.", 'لف العمود الفقري، لا تنحنِ من الورك. ازفر عند أقصى انقباض.'),
+
+  // ARABIC-TERMS.md Round 5 — the adopted Upper/Lower programme.
+  programme_upper_a: pair('Upper A', 'علوي أ'),
+  programme_lower_a: pair('Lower A', 'سفلي أ'),
+  programme_upper_b: pair('Upper B', 'علوي ب'),
+  programme_lower_b: pair('Lower B', 'سفلي ب'),
+  programme_block_a: pair('Upper/Lower — Block A (Weeks 1–4)', 'علوي/سفلي — الكتلة أ (أسابيع 1–4)'),
+  programme_block_b: pair('Upper/Lower — Block B (Weeks 5–8)', 'علوي/سفلي — الكتلة ب (أسابيع 5–8)'),
+  programme_note_history_rotation: pair('The next session is selected from completed-session history, never from the weekday.', 'الجلسة التالية تُختار من سجلّ ما أكملته، لا من يوم الأسبوع.'),
+  programme_note_block_b: pair('Block B retains the same primary compounds and rotates only the listed isolation slots.', 'الكتلة ب تُبقي المركّبات الأساسية كما هي، ولا تبدّل إلا تمارين العزل المذكورة.'),
+  programme_note_history_seed: pair('Seed each first working weight from logged history where it exists; the ramp probe is the fallback, not the default.', 'ابدأ كل وزن عمل أول من سجلّك حين يوجد؛ والتدرّج الاستكشافي بديل عند غيابه لا الأصل.'),
+  programme_note_reentry: pair('Weeks 1–2 are a re-entry ramp: cap effort and eccentric volume, never deliberately under-load a detrained lifter.', 'الأسبوعان 1–2 تدرّج عودة: قيّد الجهد وحجم الحركة السالبة، ولا تُنقص الوزن عمدًا على من ترك التدريب وعاد.'),
 });
 
 const englishIndex = new Map(Object.entries(LOCALE).map(([key, value]) => [value.en, key]));
@@ -482,24 +494,34 @@ export function format(key, values, lang = 'ar') {
   return text(key, lang).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? `{${name}}`);
 }
 
-// The allow-list is intentionally limited to the two Phase 4 exceptions.
-// The verifier compares these names to data.js, so a stale or empty list fails.
+// Exercise names, warm-up drill names, playlist titles, and proper nouns are
+// the only visible Latin exceptions. The verifier compares each list to the
+// live data, so a stale, broad, or empty exception list fails loudly.
 export const ALLOWED_EXERCISE_NAMES = Object.freeze([
   'Incline Chest Press (Machine)', 'Chest Press Machine', 'Chest Fly Machine', 'Pec Deck', 'Incline Dumbbell Press', 'Cable Fly (Crossover)',
   'Shoulder Press (Machine/DB)', 'Lateral Raise (DB)', 'Lateral Raise (Cable)', 'Seated Dip Machine', 'Tricep Pushdown (Cable)', 'Overhead Rope Tricep Extension',
   'Lat Pulldown', 'Lat Pulldown (Neutral Grip)', 'T-Bar Row', 'Low Row Machine', 'Seated Cable Row', 'Face Pull (Cable)', 'Rear Delt Fly Machine',
   'Biceps Curl (DB or Cable)', 'Hammer Curl', 'Reverse Curl', 'Leg Press', 'Hack Squat', 'Leg Extension', 'Prone Leg Curl', 'Standing Leg Curl',
-  'Seated Leg Curl', 'Hip Thrust (Machine or BB)', 'Romanian Deadlift (Week 3+)', 'Standing Calf Raise', 'Seated Calf Raise', 'Ab Crunch (Machine or Cable)',
+  'Seated Leg Curl', 'Hip Thrust (Machine or BB)', 'Romanian Deadlift', 'Standing Calf Raise', 'Seated Calf Raise', 'Cable Crunch',
+  // Phase 5's Upper/Lower core movements and named substitutions. These are
+  // catalogue names, not translated UI copy, and must stay in sync with data.
+  'Reverse-Grip Lat Pulldown', 'Assisted Dip', 'Single-Arm Rope Triceps Extension', 'Lying Leg Curl', 'Goblet Squat', 'DB Walking Lunge',
+  'Hanging Leg Raise', 'EZ Bar Curl', 'Machine Lateral Raise', 'Bicycle Crunch', 'DB Incline Curl', 'Single-Leg Leg Extension',
+  'Leg Press Toe Press', 'Machine Crunch', 'Flat DB Press', 'Hammer Strength Press', '2-Grip Lat Pulldown', 'Machine Pulldown',
+  'Machine Shoulder Press', 'Standing DB Press', 'Chest-Supported DB Row', 'Machine Row', 'Cable EZ Curl', 'Machine Squat',
+  'Barbell RDL', '45 Degree Hyperextension', 'Glute-Ham Raise', 'DB Standing Calf Raise', 'Crunch', 'Machine Incline Press',
+  'Incline Smith Press', 'Reverse-Grip Assisted Pull-up', 'Single-Arm Pulldown', 'Decline DB Press', 'Single-Arm DB Row', 'Bayesian Cable Curl',
+  'Cable Reverse Flye', 'DB Single-Leg Hip Thrust', 'Leg-Extension-Machine Hip Thrust', 'DB Leg Curl', 'Reverse Lunge', 'DB Step-Up',
+  'Reverse Crunch', 'Roman Chair Crunch', 'EZ Bar Skull Crusher', 'Plate-Weighted Crunch',
 ]);
 export const ALLOWED_WARMUP_DRILL_NAMES = Object.freeze([
   'Arm swings', 'Arm circles', 'Cable external rotation',
   'Front/back leg swings', 'Side/side leg swings',
 ]);
 export const ALLOWED_PLAYLIST_TITLES = Object.freeze([
-  'Beast Mode', 'Power Workout', 'Workout Twerkout', 'Workout — Heavy Lifting',
-  'Hip-Hop Gym', 'Hard Rap Workout', 'Pure Workout', 'Hip-Hop Workout', 'Pump Up',
-  'Mood Booster', 'Rock Hard', 'Locker Room', 'Workout Rock', 'Pop Workout',
-  'Rock Workout', 'Cardio', 'Heavy Lifting', 'Pull Day', 'Leg Day',
+  // Upper/Lower currently ships this one exact Spotify title. It remains
+  // English so the hand-off matches Spotify; retired PPL titles stay out.
+  'Beast Mode',
 ]);
 export const ALLOWED_PROPER_NOUNS = Object.freeze([
   'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',

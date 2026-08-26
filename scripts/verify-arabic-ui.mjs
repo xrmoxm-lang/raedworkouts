@@ -68,7 +68,22 @@ const requiredTerms = {
 for (const [key, expected] of Object.entries(requiredTerms)) {
   require(LOCALE[key]?.ar === expected, `locale.${key} differs from ARABIC-TERMS.md: ${LOCALE[key]?.ar ?? '(missing)'}`);
 }
-require(LOCALE.programme_tied_block_one_rule?.programme_tied === true, 'the Block 1 help rule must remain marked programme-tied for D6');
+require(LOCALE.programme_tied_block_one_rule?.programme_tied === true, 'the archived Block 1 help rule must remain marked programme-tied until its wording is reviewed');
+const requiredProgrammeTerms = {
+  programme_upper_a: 'علوي أ',
+  programme_lower_a: 'سفلي أ',
+  programme_upper_b: 'علوي ب',
+  programme_lower_b: 'سفلي ب',
+  programme_block_a: 'علوي/سفلي — الكتلة أ (أسابيع 1–4)',
+  programme_block_b: 'علوي/سفلي — الكتلة ب (أسابيع 5–8)',
+  programme_note_history_rotation: 'الجلسة التالية تُختار من سجلّ ما أكملته، لا من يوم الأسبوع.',
+  programme_note_block_b: 'الكتلة ب تُبقي المركّبات الأساسية كما هي، ولا تبدّل إلا تمارين العزل المذكورة.',
+  programme_note_history_seed: 'ابدأ كل وزن عمل أول من سجلّك حين يوجد؛ والتدرّج الاستكشافي بديل عند غيابه لا الأصل.',
+  programme_note_reentry: 'الأسبوعان 1–2 تدرّج عودة: قيّد الجهد وحجم الحركة السالبة، ولا تُنقص الوزن عمدًا على من ترك التدريب وعاد.',
+};
+for (const [key, expected] of Object.entries(requiredProgrammeTerms)) {
+  require(LOCALE[key]?.ar === expected, `locale.${key} differs from ARABIC-TERMS.md Round 5: ${LOCALE[key]?.ar ?? '(missing)'}`);
+}
 
 const sandbox = { window: {} };
 vm.createContext(sandbox);
@@ -89,12 +104,6 @@ const requireMapped = (value, source) => {
   if (key) translatedKeys.add(key);
   else noteMissing(unmappedData, normalized, source);
 };
-const deferProgramme = (value, source) => {
-  if (typeof value !== 'string') return;
-  const normalized = value.trim();
-  if (normalized && latinRun.test(normalized)) noteMissing(deferredProgramme, normalized, source);
-};
-
 for (const exercise of rw?.EXERCISES || []) {
   require(allowedNames.has(exercise.name), `exercise allow-list is stale or incomplete: ${exercise.name}`);
   requireMapped(exercise.cue, `cue for ${exercise.name}`);
@@ -107,14 +116,22 @@ for (const [id, muscle] of Object.entries(rw?.MUSCLES || {})) {
   require(typeof muscle.ar === 'string' && muscle.ar.trim(), `muscle ${id} is missing its Arabic label`);
   require(!arabicDigits.test(muscle.ar || ''), `muscle ${id} uses Arabic-Indic numerals: ${muscle.ar}`);
 }
-for (const programme of [rw?.PROGRAMME, rw?.PROGRAMME_PPL]) {
+const programmeSessions = (programme) => (
+  Array.isArray(programme?.blocks)
+    ? programme.blocks.flatMap((block) => block?.sessions || [])
+    : (programme?.sessions || [])
+);
+for (const programme of [rw?.PROGRAMME]) {
   if (!programme) continue;
-  deferProgramme(programme.block_name, 'programme block name');
-  for (const note of programme.notes || []) deferProgramme(note, 'programme note');
-  for (const session of programme.sessions || []) {
-    deferProgramme(session.day, 'programme session day');
-    deferProgramme(session.name, 'programme session name');
-    deferProgramme(session.mood, 'programme session mood');
+  requireMapped(programme.block_name, 'programme block name');
+  for (const note of programme.notes || []) requireMapped(note, 'programme note');
+  for (const block of programme.blocks || []) {
+    requireMapped(block.block_name, `programme block ${block.id || block.block} name`);
+  }
+  for (const session of programmeSessions(programme)) {
+    requireMapped(session.day, 'programme session day');
+    requireMapped(session.name, 'programme session name');
+    requireMapped(session.mood, 'programme session mood');
     for (const platform of Object.values(session.playlists || {})) {
       for (const playlist of platform) {
         actualPlaylistTitles.add(playlist.label);
@@ -188,7 +205,7 @@ console.log(`ARABIC_UI_TRANSLATED entries=${translatedKeys.size}`);
 console.log(`ARABIC_UI_ALLOW_LISTED exerciseNames=${allowedNames.size} warmupDrills=${allowedDrills.size} playlistTitles=${allowedPlaylists.size} properNouns=${allowedProperNouns.size} properNounAbbreviations=${allowedProperNounAbbreviations.size} westernNumerals=enabled kg=enabled`);
 console.log(`ARABIC_UI_DEFERRED count=${deferredProgramme.size}`);
 for (const [value, sources] of [...deferredProgramme.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-  console.log(`DEFERRED — awaits the Upper/Lower port (D6) (${[...sources].join(', ')}): ${JSON.stringify(value)}`);
+  console.log(`DEFERRED — requires approved Arabic wording after the Upper/Lower port (${[...sources].join(', ')}): ${JSON.stringify(value)}`);
 }
 
 if (failures.length) {

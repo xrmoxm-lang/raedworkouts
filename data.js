@@ -73,6 +73,7 @@ const EXERCISES = [
     id: 'chest_press_machine',
     name: 'Chest Press Machine',
     name_ar: 'بنش آلة',
+    aliases: ['Machine Chest Press'],
     primary: ['chest'],
     secondary: ['shoulders', 'triceps'],
     pattern: 'horizontal_push',
@@ -109,6 +110,7 @@ const EXERCISES = [
     id: 'incline_db_press',
     name: 'Incline Dumbbell Press',
     name_ar: 'بنش مايل دمبل',
+    aliases: ['DB Incline Press', 'DB Incline Press (15–30°)'],
     primary: ['upper_chest'],
     secondary: ['shoulders', 'triceps'],
     pattern: 'horizontal_push',
@@ -133,6 +135,7 @@ const EXERCISES = [
     id: 'shoulder_press_machine',
     name: 'Shoulder Press (Machine/DB)',
     name_ar: 'ضغط أكتاف',
+    aliases: ['Seated DB Shoulder Press'],
     primary: ['shoulders'],
     secondary: ['triceps', 'upper_chest'],
     pattern: 'vertical_push',
@@ -145,6 +148,7 @@ const EXERCISES = [
     id: 'lateral_raise_db',
     name: 'Lateral Raise (DB)',
     name_ar: 'رفعة جانبية دمبل',
+    aliases: ['DB Lateral Raise'],
     primary: ['side_delts'],
     secondary: [],
     pattern: 'isolation_push',
@@ -157,6 +161,7 @@ const EXERCISES = [
     id: 'lateral_raise_cable',
     name: 'Lateral Raise (Cable)',
     name_ar: 'رفعة جانبية كيبل',
+    aliases: ['Cable Lateral Raise'],
     primary: ['side_delts'],
     secondary: [],
     pattern: 'isolation_push',
@@ -181,6 +186,7 @@ const EXERCISES = [
     id: 'tricep_pushdown',
     name: 'Tricep Pushdown (Cable)',
     name_ar: 'ضغط ترايسبس كيبل',
+    aliases: ['Triceps Pressdown'],
     primary: ['triceps'],
     secondary: [],
     pattern: 'isolation_push',
@@ -193,6 +199,7 @@ const EXERCISES = [
     id: 'overhead_rope',
     name: 'Overhead Rope Tricep Extension',
     name_ar: 'تمديد ترايسبس فوق الرأس',
+    aliases: ['Overhead Cable Triceps Extension', 'Overhead Cable Extension'],
     primary: ['triceps'],
     secondary: [],
     pattern: 'isolation_push',
@@ -219,6 +226,7 @@ const EXERCISES = [
     id: 'lat_pulldown_neutral',
     name: 'Lat Pulldown (Neutral Grip)',
     name_ar: 'سحب علوي قبضة محايدة',
+    aliases: ['Neutral-Grip Lat Pulldown'],
     primary: ['back'],
     secondary: ['biceps'],
     pattern: 'vertical_pull',
@@ -231,6 +239,7 @@ const EXERCISES = [
     id: 'tbar_row',
     name: 'T-Bar Row',
     name_ar: 'سحب تي بار',
+    aliases: ['Chest-Supported T-Bar Row'],
     primary: ['back'],
     secondary: ['rear_delts', 'biceps'],
     pattern: 'horizontal_pull',
@@ -267,6 +276,7 @@ const EXERCISES = [
     id: 'face_pull',
     name: 'Face Pull (Cable)',
     name_ar: 'سحب الوجه',
+    aliases: ['Seated Face Pull'],
     primary: ['rear_delts'],
     secondary: ['upper_back'],
     pattern: 'isolation_pull',
@@ -279,6 +289,7 @@ const EXERCISES = [
     id: 'rear_delt_fly',
     name: 'Rear Delt Fly Machine',
     name_ar: 'تفتيح خلفي',
+    aliases: ['Reverse Pec Deck'],
     primary: ['rear_delts'],
     secondary: ['upper_back'],
     pattern: 'isolation_pull',
@@ -291,6 +302,7 @@ const EXERCISES = [
     id: 'biceps_curl',
     name: 'Biceps Curl (DB or Cable)',
     name_ar: 'باي سبس',
+    aliases: ['DB Supinated Curl'],
     primary: ['biceps'],
     secondary: ['forearms'],
     pattern: 'isolation_pull',
@@ -401,6 +413,7 @@ const EXERCISES = [
     id: 'hip_thrust',
     name: 'Hip Thrust (Machine or BB)',
     name_ar: 'دفع الورك',
+    aliases: ['Barbell Hip Thrust'],
     primary: ['glutes'],
     secondary: ['hamstrings'],
     pattern: 'compound_hinge',
@@ -411,8 +424,9 @@ const EXERCISES = [
   },
   {
     id: 'rdl',
-    name: 'Romanian Deadlift (Week 3+)',
+    name: 'Romanian Deadlift',
     name_ar: 'الرفعة الرومانية',
+    aliases: ['DB Romanian Deadlift', 'Romanian Deadlift (Week 3+)'],
     primary: ['hamstrings'],
     secondary: ['glutes', 'back'],
     pattern: 'compound_hinge',
@@ -447,26 +461,97 @@ const EXERCISES = [
   },
   {
     id: 'ab_crunch',
-    name: 'Ab Crunch (Machine or Cable)',
+    name: 'Cable Crunch',
     name_ar: 'بطن',
+    aliases: ['Ab Crunch (Machine or Cable)'],
     primary: ['abs'],
     secondary: [],
     pattern: 'isolation_core',
     mohannad: ['vBhXL83WbII'],
     jeff_nippard: 'https://www.youtube.com/watch?v=1G0y8D5rFDc',
-    alternatives: [],
+    alternatives: ['machine_crunch'],
     cue: 'Curl spine, don\'t hinge at hips. Exhale at peak contraction.',
   },
 ];
 
-// ---- Programme: 12 weeks, 3 blocks of 4 weeks --------------
+// ---- Phase 5 Upper/Lower catalogue expansion ----------------
+// These records deliberately have no guessed video. A new exercise renders
+// “no video yet” until Raed enters or source-links a clip.
+const phase5Exercise = ({ id, name, primary, secondary = [], pattern, aliases = [], alternatives = [] }) => ({
+  id,
+  name,
+  name_ar: '',
+  aliases,
+  primary: [primary],
+  secondary,
+  pattern,
+  mohannad: [],
+  jeff_nippard: '',
+  alternatives,
+  cue: '',
+});
+
+EXERCISES.push(
+  // The fourteen programme movements which were not in the v15 library.
+  phase5Exercise({ id: 'reverse_grip_lat_pulldown', name: 'Reverse-Grip Lat Pulldown', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'vertical_pull' }),
+  phase5Exercise({ id: 'assisted_dip', name: 'Assisted Dip', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'compound_push' }),
+  phase5Exercise({ id: 'single_arm_rope_triceps_extension', name: 'Single-Arm Rope Triceps Extension', primary: 'triceps', pattern: 'isolation_push' }),
+  phase5Exercise({ id: 'lying_leg_curl', name: 'Lying Leg Curl', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring' }),
+  phase5Exercise({ id: 'goblet_squat', name: 'Goblet Squat', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
+  phase5Exercise({ id: 'db_walking_lunge', name: 'DB Walking Lunge', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
+  phase5Exercise({ id: 'hanging_leg_raise', name: 'Hanging Leg Raise', primary: 'abs', pattern: 'isolation_core' }),
+  phase5Exercise({ id: 'ez_bar_curl', name: 'EZ Bar Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
+  phase5Exercise({ id: 'machine_lateral_raise', name: 'Machine Lateral Raise', primary: 'side_delts', pattern: 'isolation_push' }),
+  phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', pattern: 'isolation_core' }),
+  phase5Exercise({ id: 'db_incline_curl', name: 'DB Incline Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
+  phase5Exercise({ id: 'single_leg_leg_extension', name: 'Single-Leg Leg Extension', primary: 'quads', pattern: 'isolation_quad' }),
+  phase5Exercise({ id: 'leg_press_toe_press', name: 'Leg Press Toe Press', primary: 'calves', pattern: 'isolation_calf' }),
+  phase5Exercise({ id: 'machine_crunch', name: 'Machine Crunch', primary: 'abs', pattern: 'isolation_core', alternatives: ['ab_crunch'] }),
+
+  // Every named §8.4 substitute resolves through the same catalogue and
+  // therefore through the substitution ledger. None is a fuzzy video match.
+  phase5Exercise({ id: 'flat_db_press', name: 'Flat DB Press', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'horizontal_push' }),
+  phase5Exercise({ id: 'hammer_strength_press', name: 'Hammer Strength Press', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'horizontal_push' }),
+  phase5Exercise({ id: 'two_grip_lat_pulldown', name: '2-Grip Lat Pulldown', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'vertical_pull' }),
+  phase5Exercise({ id: 'machine_pulldown', name: 'Machine Pulldown', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'vertical_pull' }),
+  phase5Exercise({ id: 'machine_shoulder_press', name: 'Machine Shoulder Press', primary: 'shoulders', secondary: ['triceps', 'chest'], pattern: 'vertical_push' }),
+  phase5Exercise({ id: 'standing_db_press', name: 'Standing DB Press', primary: 'shoulders', secondary: ['triceps', 'chest'], pattern: 'vertical_push' }),
+  phase5Exercise({ id: 'chest_supported_db_row', name: 'Chest-Supported DB Row', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'horizontal_pull' }),
+  phase5Exercise({ id: 'machine_row', name: 'Machine Row', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'horizontal_pull' }),
+  phase5Exercise({ id: 'cable_ez_curl', name: 'Cable EZ Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
+  phase5Exercise({ id: 'machine_squat', name: 'Machine Squat', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
+  phase5Exercise({ id: 'barbell_rdl', name: 'Barbell RDL', primary: 'hamstrings', secondary: ['glutes', 'back'], pattern: 'compound_hinge' }),
+  phase5Exercise({ id: 'degree_45_hyperextension', name: '45 Degree Hyperextension', primary: 'hamstrings', secondary: ['glutes', 'back'], pattern: 'compound_hinge' }),
+  phase5Exercise({ id: 'glute_ham_raise', name: 'Glute-Ham Raise', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring' }),
+  phase5Exercise({ id: 'db_standing_calf_raise', name: 'DB Standing Calf Raise', primary: 'calves', pattern: 'isolation_calf' }),
+  phase5Exercise({ id: 'crunch', name: 'Crunch', primary: 'abs', pattern: 'isolation_core' }),
+  phase5Exercise({ id: 'machine_incline_press', name: 'Machine Incline Press', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'horizontal_push' }),
+  phase5Exercise({ id: 'incline_smith_press', name: 'Incline Smith Press', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'horizontal_push' }),
+  phase5Exercise({ id: 'reverse_grip_assisted_pullup', name: 'Reverse-Grip Assisted Pull-up', primary: 'back', secondary: ['biceps'], pattern: 'vertical_pull' }),
+  phase5Exercise({ id: 'single_arm_pulldown', name: 'Single-Arm Pulldown', primary: 'back', secondary: ['biceps'], pattern: 'vertical_pull' }),
+  phase5Exercise({ id: 'decline_db_press', name: 'Decline DB Press', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'horizontal_push' }),
+  phase5Exercise({ id: 'single_arm_db_row', name: 'Single-Arm DB Row', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'horizontal_pull' }),
+  phase5Exercise({ id: 'bayesian_cable_curl', name: 'Bayesian Cable Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
+  phase5Exercise({ id: 'cable_reverse_flye', name: 'Cable Reverse Flye', primary: 'rear_delts', secondary: ['upper_back'], pattern: 'isolation_pull' }),
+  phase5Exercise({ id: 'db_single_leg_hip_thrust', name: 'DB Single-Leg Hip Thrust', primary: 'glutes', secondary: ['hamstrings'], pattern: 'compound_hinge' }),
+  phase5Exercise({ id: 'leg_extension_machine_hip_thrust', name: 'Leg-Extension-Machine Hip Thrust', primary: 'glutes', secondary: ['hamstrings'], pattern: 'compound_hinge' }),
+  phase5Exercise({ id: 'db_leg_curl', name: 'DB Leg Curl', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring' }),
+  phase5Exercise({ id: 'reverse_lunge', name: 'Reverse Lunge', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
+  phase5Exercise({ id: 'db_step_up', name: 'DB Step-Up', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
+  phase5Exercise({ id: 'reverse_crunch', name: 'Reverse Crunch', primary: 'abs', pattern: 'isolation_core' }),
+  phase5Exercise({ id: 'roman_chair_crunch', name: 'Roman Chair Crunch', primary: 'abs', pattern: 'isolation_core' }),
+  phase5Exercise({ id: 'ez_bar_skull_crusher', name: 'EZ Bar Skull Crusher', primary: 'triceps', pattern: 'isolation_push' }),
+  phase5Exercise({ id: 'plate_weighted_crunch', name: 'Plate-Weighted Crunch', primary: 'abs', pattern: 'isolation_core' }),
+);
+
+// ---- v15 programme archive (not exported or scheduled) ------
 // Block 1 (Weeks 1-4) = trimmed full-body for calibration.
 // Block 2 (Weeks 5-8) = adds volume + RDL + pec deck.
 // Block 3 (Weeks 9-12) = peak. Week 12 = deload.
 //
 // Format per session: { day, name, exercises: [{exercise_id, sets, reps, start_kg, rpe, is_first_of_muscle}] }
 // `is_first_of_muscle` triggers the warmup prompt.
-const PROGRAMME = {
+const PROGRAMME_V15_FULLBODY_ARCHIVE = {
   block: 1,
   block_name: 'Block 1 — Re-entry (Weeks 1–4)',
   weeks: 4,
@@ -541,10 +626,8 @@ const PROGRAMME = {
   ],
 };
 
-// ---- PPL programme (3 days/week alternative) ----------------
-// Activates when settings.programme_variant === 'ppl_3x'.
-// Same Block 1 calibration philosophy, just split across 3 sessions.
-const PROGRAMME_PPL = {
+// ---- v15 PPL archive (not exported or scheduled) -------------
+const PROGRAMME_V15_PPL_ARCHIVE = {
   block: 1,
   block_name: 'Block 1 — Re-entry (Weeks 1–4) — PPL 3×',
   weeks: 4,
@@ -637,6 +720,178 @@ const PROGRAMME_PPL = {
   ],
 };
 
+// ---- Phase 5 Upper/Lower programme --------------------------
+// §8.4 is transcribed by exact catalogue name/alias only. This is not a fuzzy
+// matcher: an absent source name throws while data.js loads, and the Phase 5
+// crosswalk test pins the two dangerous non-pairings separately.
+const catalogueIdFor = (sourceName) => {
+  const exercise = EXERCISES.find((entry) => entry.name === sourceName || (entry.aliases || []).includes(sourceName));
+  if (!exercise) throw new Error(`Phase 5 programme references an unmapped catalogue source: ${sourceName}`);
+  return exercise.id;
+};
+
+const rawProgrammeRow = (order, exercise, ramp_sets, work_sets, rep_lo, rep_hi, rpe, rest_min, superset_group, sub1, sub2) => ({
+  order,
+  exercise,
+  ramp_sets,
+  work_sets,
+  rep_lo,
+  rep_hi,
+  rpe_set1: rpe[0],
+  rpe_set2: rpe[1],
+  rpe_set3: rpe[2] ?? null,
+  rest_min,
+  superset_group: superset_group || null,
+  sub1,
+  sub2,
+});
+
+const programmeRow = (source) => ({
+  ...source,
+  exercise_id: catalogueIdFor(source.exercise),
+  sub1_label: source.sub1,
+  sub2_label: source.sub2,
+  sub1: catalogueIdFor(source.sub1),
+  sub2: catalogueIdFor(source.sub2),
+  // v16 runner compatibility while it transitions to the explicit columns.
+  sets: source.work_sets,
+  reps: `${source.rep_lo}-${source.rep_hi}`,
+  rpe: [source.rpe_set1, source.rpe_set2, source.rpe_set3].filter((value) => value != null).join(' / '),
+});
+
+const UPPER_LOWER_SESSION_ORDER = ['upper_a', 'lower_a', 'upper_b', 'lower_b'];
+const UPPER_LOWER_SESSION_META = {
+  upper_a: { name: 'Upper A', warmup_type: 'upper' },
+  lower_a: { name: 'Lower A', warmup_type: 'lower' },
+  upper_b: { name: 'Upper B', warmup_type: 'upper' },
+  lower_b: { name: 'Lower B', warmup_type: 'lower' },
+};
+const UPPER_LOWER_PLAYLISTS = {
+  spotify: [
+    { label: 'Beast Mode', url: 'https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP', vibe: 'Hip-hop heavy' },
+  ],
+};
+
+const UPPER_LOWER_BLOCK_A_ROWS = {
+  upper_a: [
+    rawProgrammeRow(1, 'Machine Chest Press', 2, 3, 8, 10, [7, 7, 8], 2.5, null, 'Flat DB Press', 'Hammer Strength Press'),
+    rawProgrammeRow(2, 'Neutral-Grip Lat Pulldown', 2, 3, 10, 12, [7, 8, 8], 2.5, null, '2-Grip Lat Pulldown', 'Machine Pulldown'),
+    rawProgrammeRow(3, 'Seated DB Shoulder Press', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Machine Shoulder Press', 'Standing DB Press'),
+    rawProgrammeRow(4, 'Chest-Supported T-Bar Row', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Chest-Supported DB Row', 'Machine Row'),
+    rawProgrammeRow(5, 'DB Supinated Curl', 1, 2, 10, 12, [8, 8], 0.0, 'A1', 'Cable EZ Curl', 'EZ Bar Curl'),
+    rawProgrammeRow(6, 'Single-Arm Rope Triceps Extension', 1, 2, 10, 12, [8, 8], 1.5, 'A2', 'Triceps Pressdown', 'Overhead Cable Extension'),
+    rawProgrammeRow(7, 'Cable Lateral Raise', 1, 3, 10, 12, [8, 8, 9], 1.5, null, 'Machine Lateral Raise', 'DB Lateral Raise'),
+  ],
+  lower_a: [
+    rawProgrammeRow(1, 'Leg Press', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'Machine Squat', 'Hack Squat'),
+    rawProgrammeRow(2, 'DB Romanian Deadlift', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'Barbell RDL', '45 Degree Hyperextension'),
+    rawProgrammeRow(3, 'Lying Leg Curl', 1, 3, 10, 12, [8, 8, 8], 1.5, null, 'Seated Leg Curl', 'Glute-Ham Raise'),
+    rawProgrammeRow(4, 'Leg Extension', 1, 3, 10, 12, [8, 8, 9], 1.5, null, 'Single-Leg Leg Extension', 'Goblet Squat'),
+    rawProgrammeRow(5, 'Standing Calf Raise', 1, 3, 10, 12, [8, 8, 9], 0.0, 'A1', 'DB Standing Calf Raise', 'Leg Press Toe Press'),
+    rawProgrammeRow(6, 'Cable Crunch', 0, 3, 10, 12, [8, 8, 9], 1.5, 'A2', 'Machine Crunch', 'Crunch'),
+  ],
+  upper_b: [
+    rawProgrammeRow(1, 'DB Incline Press', 2, 3, 8, 10, [7, 7, 8], 2.5, null, 'Machine Incline Press', 'Incline Smith Press'),
+    rawProgrammeRow(2, 'Reverse-Grip Lat Pulldown', 2, 3, 10, 12, [7, 8, 8], 2.5, null, 'Reverse-Grip Assisted Pull-up', 'Single-Arm Pulldown'),
+    rawProgrammeRow(3, 'Assisted Dip', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Decline DB Press', 'Machine Chest Press'),
+    rawProgrammeRow(4, 'Seated Cable Row', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Single-Arm DB Row', 'Chest-Supported T-Bar Row'),
+    rawProgrammeRow(5, 'DB Lateral Raise', 1, 3, 10, 12, [8, 8, 9], 0.0, 'A1', 'Cable Lateral Raise', 'Machine Lateral Raise'),
+    rawProgrammeRow(6, 'Hammer Curl', 1, 3, 10, 12, [8, 8, 8], 1.5, 'A2', 'DB Incline Curl', 'Bayesian Cable Curl'),
+    rawProgrammeRow(7, 'Reverse Pec Deck', 1, 2, 10, 12, [8, 9], 1.5, null, 'Seated Face Pull', 'Cable Reverse Flye'),
+  ],
+  lower_b: [
+    rawProgrammeRow(1, 'Goblet Squat', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'Hack Squat', 'Leg Press'),
+    rawProgrammeRow(2, 'Barbell Hip Thrust', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'DB Single-Leg Hip Thrust', 'Leg-Extension-Machine Hip Thrust'),
+    rawProgrammeRow(3, 'Seated Leg Curl', 1, 3, 10, 12, [8, 8, 8], 1.5, null, 'Lying Leg Curl', 'DB Leg Curl'),
+    rawProgrammeRow(4, 'DB Walking Lunge', 1, 3, 10, 10, [7, 8, 8], 2.0, null, 'Reverse Lunge', 'DB Step-Up'),
+    rawProgrammeRow(5, 'Seated Calf Raise', 1, 3, 10, 12, [8, 8, 9], 0.0, 'A1', 'Leg Press Toe Press', 'Standing Calf Raise'),
+    rawProgrammeRow(6, 'Hanging Leg Raise', 0, 3, 10, 12, [8, 8, 9], 1.5, 'A2', 'Reverse Crunch', 'Roman Chair Crunch'),
+  ],
+};
+
+const blockBEffortOverlay = (row) => {
+  const compound = row.rpe_set1 === 7;
+  return {
+    ...row,
+    rpe_set1: compound ? 7 : 8,
+    rpe_set2: compound ? 8 : 9,
+    rpe_set3: row.rpe_set3 == null ? null : (compound ? 8 : 9),
+  };
+};
+
+// §8.2 lists changed rows only. Every other row below first receives the
+// Block-B effort overlay, then remains otherwise identical to Block A.
+const UPPER_LOWER_BLOCK_B_OVERRIDES = {
+  upper_a: {
+    // D18 overrides `20` §8.2's rep-band drop here: 6–8 would put a compound below 8,
+    // and D18 is Raed's locked "ما ننزل عن ثمانية للمركبات". The lower-body first
+    // exercises still drop 10–12 → 8–10, which honours the intent without breaking the rule.
+    1: rawProgrammeRow(1, 'Machine Chest Press', 2, 3, 8, 10, [7, 8, 8], 2.5, null, 'Flat DB Press', 'Hammer Strength Press'),
+    5: rawProgrammeRow(5, 'EZ Bar Curl', 1, 2, 10, 12, [8, 9], 0.0, 'A1', 'Cable EZ Curl', 'DB Supinated Curl'),
+    6: rawProgrammeRow(6, 'Overhead Cable Triceps Extension', 1, 2, 10, 12, [8, 9], 1.5, 'A2', 'EZ Bar Skull Crusher', 'Triceps Pressdown'),
+    7: rawProgrammeRow(7, 'Machine Lateral Raise', 1, 3, 10, 12, [8, 9, 9], 1.5, null, 'Cable Lateral Raise', 'DB Lateral Raise'),
+  },
+  lower_a: {
+    1: rawProgrammeRow(1, 'Leg Press', 2, 3, 8, 10, [7, 8, 8], 2.5, null, 'Machine Squat', 'Hack Squat'),
+    4: rawProgrammeRow(4, 'Single-Leg Leg Extension', 1, 3, 10, 12, [8, 9, 9], 1.5, null, 'Leg Extension', 'Goblet Squat'),
+    6: rawProgrammeRow(6, 'Bicycle Crunch', 0, 3, 10, 12, [8, 9, 9], 1.5, 'A2', 'Cable Crunch', 'Machine Crunch'),
+  },
+  upper_b: {
+    // D18, same as upper_a above: 6–8 is below Raed's locked compound floor of 8.
+    1: rawProgrammeRow(1, 'DB Incline Press', 2, 3, 8, 10, [7, 8, 8], 2.5, null, 'Machine Incline Press', 'Incline Smith Press'),
+    5: rawProgrammeRow(5, 'Cable Lateral Raise', 1, 3, 10, 12, [8, 9, 9], 0.0, 'A1', 'Machine Lateral Raise', 'DB Lateral Raise'),
+    6: rawProgrammeRow(6, 'DB Incline Curl', 1, 3, 10, 12, [8, 9, 9], 1.5, 'A2', 'Hammer Curl', 'Bayesian Cable Curl'),
+    7: rawProgrammeRow(7, 'Seated Face Pull', 1, 2, 10, 12, [8, 9], 1.5, null, 'Reverse Pec Deck', 'Cable Reverse Flye'),
+  },
+  lower_b: {
+    1: rawProgrammeRow(1, 'Goblet Squat', 2, 3, 8, 10, [7, 8, 8], 2.5, null, 'Hack Squat', 'Leg Press'),
+    5: rawProgrammeRow(5, 'Leg Press Toe Press', 1, 3, 10, 12, [8, 9, 9], 0.0, 'A1', 'Seated Calf Raise', 'Standing Calf Raise'),
+    6: rawProgrammeRow(6, 'Machine Crunch', 0, 3, 10, 12, [8, 9, 9], 1.5, 'A2', 'Plate-Weighted Crunch', 'Hanging Leg Raise'),
+  },
+};
+
+const programmeSessionsFrom = (rowsBySession) => UPPER_LOWER_SESSION_ORDER.map((id) => ({
+  id,
+  ...UPPER_LOWER_SESSION_META[id],
+  playlists: UPPER_LOWER_PLAYLISTS,
+  exercises: rowsBySession[id].map(programmeRow),
+}));
+
+const UPPER_LOWER_BLOCK_A_SESSIONS = programmeSessionsFrom(UPPER_LOWER_BLOCK_A_ROWS);
+const UPPER_LOWER_BLOCK_B_SESSIONS = programmeSessionsFrom(Object.fromEntries(
+  UPPER_LOWER_SESSION_ORDER.map((sessionId) => [sessionId, UPPER_LOWER_BLOCK_A_ROWS[sessionId].map((row) =>
+    UPPER_LOWER_BLOCK_B_OVERRIDES[sessionId]?.[row.order] || blockBEffortOverlay(row)
+  )]),
+));
+
+const PROGRAMME = {
+  id: 'upper_lower',
+  block: 1,
+  block_name: 'Upper/Lower — Block A (Weeks 1–4)',
+  weeks: 8,
+  rotation_order: UPPER_LOWER_SESSION_ORDER,
+  weekly_layout: ['upper_a', 'lower_a', 'rest', 'upper_b', 'lower_b', 'rest', 'rest'],
+  three_day_fallback: {
+    sessions_per_week: 3,
+    rule: 'Continue the same session rotation; do not reshuffle the split.',
+  },
+  notes: [
+    'The next session is selected from completed-session history, never from the weekday.',
+    'Block B retains the same primary compounds and rotates only the listed isolation slots.',
+    // D13 + D19. The port dropped this and the phase-2 test caught it: Raed is
+    // detrained, not untrained, so first loads come from his logged history where it
+    // exists and the probe is only the fallback. Weeks 1-2 are a re-entry ramp that
+    // caps effort and eccentric volume — it does not withhold load.
+    'Seed each first working weight from logged history where it exists; the ramp probe is the fallback, not the default.',
+    'Weeks 1–2 are a re-entry ramp: cap effort and eccentric volume, never deliberately under-load a detrained lifter.',
+  ],
+  sessions: UPPER_LOWER_BLOCK_A_SESSIONS,
+  blocks: [
+    { id: 'A', block: 1, week_start: 1, week_end: 4, block_name: 'Upper/Lower — Block A (Weeks 1–4)', sessions: UPPER_LOWER_BLOCK_A_SESSIONS },
+    { id: 'B', block: 2, week_start: 5, week_end: 8, block_name: 'Upper/Lower — Block B (Weeks 5–8)', sessions: UPPER_LOWER_BLOCK_B_SESSIONS },
+  ],
+};
+
 // ---- v16 session warm-up phases -----------------------------
 // The general phase is deliberately short: treadmill first, then ten-rep
 // drills, then each exercise's own ramp rows. Upper never includes leg drills.
@@ -716,4 +971,4 @@ const MOTIVATIONAL_MESSAGES = [
 ];
 
 // Export to global scope for the app
-window.RW = { MUSCLES, EXERCISES, PROGRAMME, PROGRAMME_PPL, SESSION_WARMUPS, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };
+window.RW = { MUSCLES, EXERCISES, PROGRAMME, SESSION_WARMUPS, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };

@@ -67,12 +67,24 @@ test('D16/D17 effort is final-set-only, a brake, and never a load driver', () =>
 });
 
 test('D18 and D19 retain 8–10 compounds and a detrained history-first seed', () => {
-  const planned = [rawData.PROGRAMME, rawData.PROGRAMME_PPL]
-    .flatMap((programme) => programme.sessions.flatMap((session) => session.exercises));
+  const planned = rawData.PROGRAMME.blocks
+    .flatMap((block) => block.sessions.flatMap((session) => session.exercises));
+  assert.ok(planned.length > 0, 'D18 cannot be checked against an empty programme');
   for (const item of planned) {
     const exercise = catalogue.get(item.exercise_id);
     const isCompound = ['lower_compound', 'hinge', 'upper_press', 'upper_pull'].includes(exercise.canonical_pattern);
-    assert.equal(item.reps, isCompound ? '8-10' : '10-12', `${item.exercise_id} must use D18's programmed range`);
+    const [low, high] = String(item.reps).split('-').map(Number);
+    // D18 is a FLOOR, not an exact range. Raed's words are "ما ننزل عن ثمانية
+    // للمركبات، أحس ستة قليل" — never below eight, six feels too few. `22` §5
+    // restates it as exactly 8-10, but `20` §8.4 programmes 33 of 40 rows at 10-12
+    // including compounds, so the equality reading is contradicted by the programme
+    // Raed is actually running. Read as a floor, exactly two rows violated it and
+    // both were Block B's upper first exercises at 6-8; both are corrected in data.js.
+    if (isCompound) {
+      assert.ok(low >= 8, `${item.exercise_id} programs ${item.reps}, below D18's compound floor of 8`);
+    } else {
+      assert.ok(low >= 10 && high <= 12, `${item.exercise_id} isolation must stay within 10-12, got ${item.reps}`);
+    }
   }
   assert.match(rawData.ATHLETE.experience, /Detrained/i);
   assert.match(rawData.PROGRAMME.notes.join(' '), /logged history/i);

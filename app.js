@@ -1,5 +1,10 @@
 import { rejectedSkinSuggestion, suggestionForBlockBoundary } from './domain/skin-suggestions.mjs';
 import { assessSubstitution } from './domain/substitutions.js';
+import {
+  nextHistoryDrivenSession,
+  resolveProgrammeBlock,
+  runProgrammeReferenceMigrations,
+} from './domain/programme.js';
 import { format as localeFormat, text as localeText } from './locale.js';
 
 /* ============================================================
@@ -156,6 +161,7 @@ function lastWriteKey(userId) { return nsKey(userId, 'lastwrite'); }
 function lastRevKey(userId) { return nsKey(userId, 'lastrev'); }
 function preRestoreKey(userId) { return nsKey(userId, 'prerestore'); }
 function dirtyKey(userId) { return nsKey(userId, 'dirty'); }
+function programmeMigrationExportKey(userId) { return nsKey(userId, 'programme-migration-export'); }
 
 // ---- Final-set effort -----------------------------------------
 // D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
@@ -176,25 +182,6 @@ function effortPicker(set, onChange) {
       },
     }, level.label))
   );
-}
-
-// ---- Programme variants --------------------------------------
-// D6 replaces these v15 programme labels and descriptions with Upper/Lower.
-// Until then G20 treats every `programme_tied` value below as an explicit
-// deferral — never as an Arabic exception or an allow-listed English run.
-const VARIANTS = {
-  fullbody_2x: { label: 'Full-body 2×', desc: 'Tuesday + Saturday', programme_tied: true },
-  ppl_3x:      { label: 'Push/Pull/Legs 3×', desc: 'Push · Pull · Legs — any 3 days you choose', programme_tied: true },
-};
-function switchVariant(key) {
-  if (!VARIANTS[key]) return;
-  if ((settings.programme_variant || 'ppl_3x') === key) return;
-  settings.programme_variant = key;
-  settings.pending_variant = null;
-  state.forced_next_session = null;
-  saveLocal();
-  toast(tf('programme_changed', { name: VARIANTS[key].label }));
-  render();
 }
 
 // ---- Gym launcher (IN2 Fitness) ------------------------------
@@ -476,6 +463,9 @@ function isPRSet(exercise_id, kg, reps) {
 
 const defaultState = () => ({
   schema_version: 2,
+  // Independent of the event-log schema: D6 only migrates invalid planned
+  // session references, never historical session evidence.
+  programme_reference_migration_version: 1,
   current_week: 1,
   current_block: 1,
   profile: null,                // { display_name, experience, bodyweight_kg, created_at }
@@ -506,8 +496,6 @@ const defaultSettings = () => ({
   runner_video_open: true,     // persisted per profile; Raed wants the explanation open by default
   runner_video_default_version: 1,
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
-  programme_variant: 'ppl_3x',  // fullbody_2x | ppl_3x
-  pending_variant: null,       // legacy queue value; cleared on boot/switch
   show_pr_summary: true,       // show end-of-session PR review
   // Gym launcher: tries scheme first, falls back to App Store URL
   gym_launch_scheme: 'scope.bit://',                                  // bundle ID-based scheme attempt
@@ -673,13 +661,52 @@ function migrateLegacyStorage() {
   localStorage.removeItem(LEGACY_SETTINGS_KEY);
   localStorage.removeItem(LEGACY_LAST_WRITE_KEY);
 }
+
+/**
+ * D6 changes only the future programme rotation.  Before clearing an invalid
+ * v15 forced-next reference, retain a durable local copy and trigger the
+ * required timestamped JSON export.  The pure runner guarantees this adapter
+ * receives untouched state before it can migrate anything.
+ */
+function exportProgrammeMigration(record, userId) {
+  const payload = {
+    kind: 'programme_reference_migration',
+    user_id: userId,
+    exported_at: record.created_at,
+    state: record.state,
+  };
+  if (userId) localStorage.setItem(programmeMigrationExportKey(userId), JSON.stringify(payload));
+  downloadJson(record.filename, payload);
+}
+function migrateProgrammeReferencesAtBoot(userId) {
+  const result = runProgrammeReferenceMigrations(state, {
+    programme: RW.PROGRAMME,
+    exportState: (record) => exportProgrammeMigration(record, userId),
+  });
+  state = result.state;
+  if (result.status === 'read_only') {
+    console.error(`Programme migration skipped: ${result.message}`);
+    return result;
+  }
+  if (result.status === 'migrated' && result.ignored.length) {
+    console.info(`Programme migration ignored legacy planned references: ${result.ignored.join(', ')}`);
+  }
+  return result;
+}
 function loadLocal() {
   migrateLegacyStorage();
   activeUser = getActiveUser();
   state = defaultState();
   settings = defaultSettings();
   if (activeUser) {
-    try { state = { ...defaultState(), ...JSON.parse(localStorage.getItem(stateKey(activeUser)) || '{}') }; } catch (e) {}
+    let storedState = {};
+    try { storedState = JSON.parse(localStorage.getItem(stateKey(activeUser)) || '{}'); } catch (e) {}
+    state = { ...defaultState(), ...storedState };
+    // New profiles begin at version 1. A stored profile without this explicit
+    // marker predates D6 and must take the export-first reference migration.
+    if (!Object.prototype.hasOwnProperty.call(storedState, 'programme_reference_migration_version')) {
+      state.programme_reference_migration_version = 0;
+    }
     try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(settingsKey(activeUser)) || '{}') }; } catch (e) {}
     // Existing profiles predate the Arabic-default requirement.  Preserve an
     // explicit post-Phase-4 choice, but migrate prior settings once.
@@ -698,12 +725,15 @@ function loadLocal() {
   if (activeUser && !localStorage.getItem(lastWriteKey(activeUser)) && hasMeaningfulLocalData()) {
     localStorage.setItem(lastWriteKey(activeUser), new Date().toISOString());
   }
-  const hadPendingVariant = Boolean(settings.pending_variant);
-  settings.pending_variant = null;
+  // D6 replaces the selectable v15 programme variants. Stored values are
+  // deliberately retired rather than interpreted as new programme choices.
+  delete settings.programme_variant;
+  delete settings.pending_variant;
   // Always use the baked-in sync endpoint — no manual setup needed
   settings.sync_url = getSyncUrl();
   settings.sync_key = SYNC_KEY;
   if (settings.user_id) {
+    migrateProgrammeReferencesAtBoot(settings.user_id);
     ensureProfile();
     backfillSessionUids();
     syncDirty = readDirtyMarker(settings.user_id);
@@ -713,7 +743,6 @@ function loadLocal() {
   } else {
     syncDirty = false;
   }
-  if (hadPendingVariant && settings.user_id) localStorage.setItem(settingsKey(settings.user_id), JSON.stringify(settings));
 }
 function persistLocal() {
   if (!settings.user_id) return;
@@ -766,10 +795,14 @@ function applyRemotePayload(remote) {
   settings.user_key = localUserKey;
   settings.lang = settings.lang || localLang;
   settings.theme = settings.theme || localTheme;
-  settings.pending_variant = null;
+  delete settings.programme_variant;
+  delete settings.pending_variant;
   settings.sync_url = getSyncUrl();
   settings.sync_key = SYNC_KEY;
   setActiveUser(settings.user_id);
+  // A remote pre-D6 snapshot is subject to the exact same export-first
+  // migration as a locally loaded one.
+  migrateProgrammeReferencesAtBoot(settings.user_id);
   ensureProfile();
   backfillSessionUids();
   writeLastRev(remote.rev || remote.latest_rev, settings.user_id);
@@ -1546,55 +1579,35 @@ function showSkinSuggestion(suggestion) {
 
 // ---- Programme resolver --------------------------------------
 function getActiveProgramme() {
-  if (state.programme_overrides) return state.programme_overrides;
-  const v = settings.programme_variant || 'ppl_3x';
-  if (v === 'ppl_3x' && RW.PROGRAMME_PPL) return RW.PROGRAMME_PPL;
-  return RW.PROGRAMME;
+  const programme = state.programme_overrides || RW.PROGRAMME;
+  return resolveProgrammeBlock(programme, {
+    currentWeek: state.current_week,
+    currentBlock: state.current_block,
+  });
 }
-function getActiveVariant() {
-  return settings.programme_variant || 'ppl_3x';
+function getActiveProgrammeId() {
+  return getActiveProgramme().id;
 }
 
 // ---- Today's session resolver -------------------------------
+// The adopted programme is history-driven. A three-session week simply leaves
+// the fourth id next in this same order; weekdays never reshuffle the split.
 function getTodayPlannedSession() {
   const prog = getActiveProgramme();
   // Manual override — user forced a specific session (e.g. missed a day)
   if (state.forced_next_session) {
-    return prog.sessions.find(s => s.id === state.forced_next_session) || null;
+    const forced = prog.sessions.find((session) => session.id === state.forced_next_session);
+    if (forced) return forced;
+    // Defence in depth for a stale remote/local snapshot that has not yet
+    // reached the export-first boot migration. Never return undefined here.
+    console.warn(`Ignoring unknown forced session id: ${state.forced_next_session}`);
   }
-  if (getActiveVariant() === 'ppl_3x') {
-    return resolveNextPPLSession(prog).today;
-  }
-  // Full-body: Tuesday = 2, Saturday = 6
-  const dow = new Date().getDay();
-  if (dow === 2) return prog.sessions.find(s => s.id === 'session_a');
-  if (dow === 6) return prog.sessions.find(s => s.id === 'session_b');
-  return null;
+  return nextHistoryDrivenSession(prog, state.history || []).session;
 }
 function getNextPlannedSession() {
   const prog = getActiveProgramme();
-  if (getActiveVariant() === 'ppl_3x') {
-    return resolveNextPPLSession(prog).next;
-  }
-  const dow = new Date().getDay();
-  const daysToTue = (2 - dow + 7) % 7 || 7;
-  const daysToSat = (6 - dow + 7) % 7 || 7;
-  if (daysToTue <= daysToSat) return { session: prog.sessions.find(s => s.id === 'session_a'), in_days: daysToTue };
-  return { session: prog.sessions.find(s => s.id === 'session_b'), in_days: daysToSat };
-}
-function resolveNextPPLSession(prog) {
-  // Look at last completed PPL session in history; cycle to next.
-  const order = ['ppl_push', 'ppl_pull', 'ppl_legs'];
-  let lastIdx = -1;
-  for (let i = state.history.length - 1; i >= 0; i--) {
-    const sid = state.history[i].session_id;
-    const idx = order.indexOf(sid);
-    if (idx >= 0) { lastIdx = idx; break; }
-  }
-  const nextIdx = (lastIdx + 1) % order.length;
-  const nextSession = prog.sessions.find(s => s.id === order[nextIdx]);
-  // PPL: today's planned = next in cycle (no day-of-week binding)
-  return { today: nextSession, next: { session: nextSession, in_days: 0 } };
+  const resolved = nextHistoryDrivenSession(prog, state.history || []);
+  return { session: resolved.session, in_days: 0, rotation_index: resolved.index };
 }
 
 // ---- Smart suggestions -------------------------------------
@@ -1724,8 +1737,10 @@ function getWeeklyVolume() {
 
 // ---- Session warm-up phase ---------------------------------
 function warmupTypeForSession(session) {
-  const id = String(session?.id || '');
-  if (id.includes('legs') || id.includes('session_a') || id.includes('session_b')) return 'lower';
+  // D12 is data-led: both Upper sessions use the merged push+pull warm-up;
+  // both Lower sessions use the leg warm-up. The explicit fallback keeps an
+  // already-started archival session usable without inventing leg drills.
+  if (session?.warmup_type === 'lower' || ['lower_a', 'lower_b'].includes(session?.id)) return 'lower';
   return 'upper';
 }
 function createSessionWarmup(session) {
@@ -2019,7 +2034,7 @@ function recordSubstitution(exercise_id, alt_id, scope, assessment, override = n
   const entry = {
     id: newLocalId('sub'),
     user_key: String(settings.user_id || '').trim().toLowerCase(),
-    programme_id: getActiveVariant(),
+    programme_id: getActiveProgrammeId(),
     from_exercise_id: exercise_id,
     to_exercise_id: alt_id,
     scope,
@@ -2496,7 +2511,7 @@ function renderHome() {
     root.appendChild(h('div', { class: 'today-banner rest' },
       h('div', { class: 'tb-kicker' }, 'Rest day'),
       h('h2', {}, 'Next: ' + next.session.name.split(' — ')[0]),
-      h('p', {}, getActiveVariant() === 'ppl_3x' ? `${next.session.day} day · next in rotation` : `${next.session.day} · in ${next.in_days} day${next.in_days===1?'':'s'}`),
+      h('p', {}, `${next.session.day || next.session.name} · next in rotation`),
       h('div', { class: 'tb-meta' }, `Eat ${profileProteinRange()} protein · Sleep 7+ hrs`),
     ));
   }
@@ -2525,7 +2540,7 @@ function renderHome() {
   ));
 
   const shownSession = planned || next.session;
-  const shortSessionName = (session) => session.name.split(' — ')[0];
+  const shortSessionName = (session) => t(session.name.split(' — ')[0]);
 
   // Action button
   if (state.active_session) {
@@ -3464,27 +3479,18 @@ function renderSettings() {
   ));
   root.appendChild(profileCard);
 
-  // Programme
-  const progVariant = getActiveVariant();
+  // Programme — D6 has one adopted, history-driven Upper/Lower rotation.
+  // There is intentionally no old 2/3-day variant switch to reinterpret a
+  // logged PPL session as a different future programme.
+  const activeProgramme = getActiveProgramme();
   root.appendChild(h('div', { class: 'card' },
     h('h3', {}, 'Programme'),
     h('div', { class: 'setting-row' },
       h('div', { class: 'label' },
         h('div', { class: 'name' }, 'Training split'),
-        h('div', { class: 'desc' }, 'History and suggestions stay per exercise.'),
+        h('div', { class: 'desc' }, t('history_per_exercise')),
       ),
-      h('div', { class: 'variant-switch', style: 'margin:0;' },
-        h('button', {
-          type: 'button',
-          class: progVariant === 'fullbody_2x' ? 'active' : '',
-          onClick: () => switchVariant('fullbody_2x'),
-        }, '2-day'),
-        h('button', {
-          type: 'button',
-          class: progVariant === 'ppl_3x' ? 'active' : '',
-          onClick: () => switchVariant('ppl_3x'),
-        }, '3-day'),
-      ),
+      h('div', { class: 'tiny muted' }, activeProgramme.block_name),
     ),
   ));
 
@@ -3698,33 +3704,30 @@ function renderSettings() {
 
   // Force next session (missed a day override)
   const activeProg = getActiveProgramme();
-  const sessionKeys = activeProg ? activeProg.sessions.map(s => s.id) : [];
-  const fmtSessionKey = k => k.replace('session_', '').replace('ppl_', '').toUpperCase();
+  const programmeSessions = activeProg?.sessions || [];
+  // Session ids are storage keys, never user-facing copy.  Every label comes
+  // from the programme's localised name, never from its implementation id.
   adv.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Force next session'),
+      h('div', { class: 'name' }, t('force_session')),
       h('div', { class: 'desc' },
-        state.forced_next_session
-          ? `Forced: ${fmtSessionKey(state.forced_next_session)} — will clear after that session ends.`
-          : [t('missed_a_day'), ' — ', t('missed_day_override')]
+        [t('missed_a_day'), ' — ', t('missed_day_override')]
       ),
     ),
     h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
-      sessionKeys.map(key =>
+      programmeSessions.map((session) =>
         h('button', {
-          class: 'btn tiny' + (state.forced_next_session === key ? ' primary' : ''),
+          class: 'btn tiny' + (state.forced_next_session === session.id ? ' primary' : ''),
           onClick: () => {
-            state.forced_next_session = state.forced_next_session === key ? null : key;
+            state.forced_next_session = state.forced_next_session === session.id ? null : session.id;
             saveLocal();
             renderSettings();
-            toast(state.forced_next_session
-              ? 'Next session forced to ' + fmtSessionKey(key) + '.'
-              : 'Session override cleared.');
+            toast(t('saved'));
           }
-        }, fmtSessionKey(key))
+        }, session.name)
       ),
       state.forced_next_session
-        ? h('button', { class: 'btn tiny', onClick: () => { state.forced_next_session = null; saveLocal(); renderSettings(); toast('Cleared.'); } }, '✕ Clear')
+        ? h('button', { class: 'btn tiny', onClick: () => { state.forced_next_session = null; saveLocal(); renderSettings(); toast(t('saved')); } }, t('clear_button'))
         : null,
     ),
   ));
@@ -3785,21 +3788,21 @@ function renderHelp() {
   const root = $('#page-help');
   root.innerHTML = '';
   const prog = getActiveProgramme();
-  const variant = getActiveVariant();
   const sessions = prog.sessions || [];
   const firstSession = sessions[0];
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'How this works'),
-    h('div', { class: 'sub' }, `${state.profile?.display_name || settings.user_id} · ${VARIANTS[variant]?.label || 'Programme'}`),
+    h('div', { class: 'sub' },
+      h('bdi', { class: 'ltr-run' }, state.profile?.display_name || settings.user_id),
+      ' · ',
+      prog.block_name || t('programme'),
+    ),
   ));
   const card = h('div', { class: 'card onboard' });
   card.appendChild(h('h2', {}, 'How the app works'));
   card.appendChild(h('p', {}, 'Pick your profile, complete the warm-up phase, log the actual weight/reps, rate only the final set as easy, medium, or very hard, and finish. The app works offline first and syncs when the server is reachable.'));
   card.appendChild(h('h2', {}, 'Your programme'));
-  card.appendChild(h('p', {}, variant === 'ppl_3x'
-    ? t('programme_tied_ppl_help')
-    : t('programme_tied_fullbody_help')
-  ));
+  card.appendChild(h('p', {}, (prog.notes || [])[0] || ''));
   sessions.forEach(sess => {
     card.appendChild(h('h3', {}, sess.name));
     card.appendChild(h('ul', {},
@@ -3818,7 +3821,7 @@ function renderHelp() {
   card.appendChild(h('ul', {},
     h('li', {}, 'Technique beats weight. No grinding in the re-entry ramp.'),
     h('li', {}, t('help_protein_sleep')),
-    h('li', {}, t('programme_tied_block_one_rule')),
+    (prog.notes || []).map((note) => h('li', {}, note)),
   ));
   card.appendChild(h('h2', {}, 'Library & videos'));
   card.appendChild(h('p', {}, 'Exercises include Mohannad clips and a Jeff Nippard form link. You can add custom videos, hide videos from session view, edit JN links, and add custom exercises.'));
