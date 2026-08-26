@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs && node scripts/lint-contrast.mjs",
     "test:phase1": "node --test tests/phase1.test.mjs",
-    "test:runner": "playwright test tests/phase4-runner.spec.mjs"
+    "test:runner": "playwright test tests/phase4-runner.spec.mjs",
+    "test:arabic-dom": "playwright test tests/phase4-arabic-dom.spec.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.59.1"

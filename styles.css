@@ -96,6 +96,7 @@
 
 /* ===== Base ============================================== */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.ltr-run { direction: ltr; unicode-bidi: isolate; }
 html, body {
   margin: 0; padding: 0;
   background: var(--bg); color: var(--text);

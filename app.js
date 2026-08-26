@@ -54,16 +54,41 @@ const activeLanguage = () => settings?.lang || 'ar';
 const t = (key) => localeText(key, activeLanguage());
 const tf = (key, values) => localeFormat(key, values, activeLanguage());
 const localizeText = (value) => typeof value === 'string' ? localeText(value, activeLanguage()) : value;
+// Muscle labels are data labels, not freehand UI copy.  Rendering them through
+// this one resolver keeps Home, Library, Help, and legacy cards on data.js's
+// approved Arabic label when the locale is Arabic.
+const muscleLabel = (id) => {
+  const muscle = RW?.MUSCLES?.[id];
+  return (activeLanguage() === 'ar' ? muscle?.ar : muscle?.en) || muscle?.en || id;
+};
+const experienceLabel = (experience) => ({
+  beginner: t('new_to_gym'),
+  detrained: t('trained_before_reentering'),
+  returning: t('trained_before_coming_back'),
+  experienced: t('currently_training'),
+}[experience] || t('returning'));
+// Keep an approved technical URI together. The general run deliberately
+// leaves sentence punctuation outside <bdi>; the URI alternative prevents a
+// scheme such as scope.bit:// from being split into a false English fragment.
+const LTR_RUN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[A-Za-z0-9:/?&=._%+-]*|[A-Za-z0-9][A-Za-z0-9 .:×x/()+_-]*[A-Za-z0-9)]|[A-Za-z0-9]/g;
 const localizedTextNode = (value) => {
   const localized = localizeText(value);
-  const needsIsolation = activeLanguage() === 'ar' && /[A-Za-z0-9]/.test(localized) && !/[\u0600-\u06FF]/.test(localized);
-  if (!needsIsolation) return document.createTextNode(localized);
-  const bdi = document.createElement('bdi');
-  bdi.className = 'ltr-run';
-  bdi.textContent = localized;
-  return bdi;
+  if (typeof localized !== 'string' || activeLanguage() !== 'ar' || !/[A-Za-z0-9]/.test(localized)) return document.createTextNode(localized);
+  const fragment = document.createDocumentFragment();
+  let cursor = 0;
+  for (const match of localized.matchAll(LTR_RUN)) {
+    const index = match.index ?? 0;
+    if (index > cursor) fragment.appendChild(document.createTextNode(localized.slice(cursor, index)));
+    const bdi = document.createElement('bdi');
+    bdi.className = 'ltr-run';
+    bdi.textContent = match[0];
+    fragment.appendChild(bdi);
+    cursor = index + match[0].length;
+  }
+  if (cursor < localized.length) fragment.appendChild(document.createTextNode(localized.slice(cursor)));
+  return fragment;
 };
-const setUiText = (el, value) => { el.textContent = localizeText(value); };
+const setUiText = (el, value) => { el.replaceChildren(localizedTextNode(value)); };
 
 function applyLang() {
   const lang = activeLanguage();
@@ -75,8 +100,18 @@ function applyLang() {
   $$('[data-i18n-aria-label]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
 }
 
-const fmtDate = (d) => new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-const fmtTime = (d) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+const fmtDate = (d) => new Date(d).toLocaleDateString(
+  activeLanguage() === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US',
+  { weekday: 'short', month: 'short', day: 'numeric' },
+);
+const fmtTime = (d) => {
+  const parts = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(new Date(d));
+  const hour = parts.find((part) => part.type === 'hour')?.value || '';
+  const minute = parts.find((part) => part.type === 'minute')?.value || '';
+  const period = parts.find((part) => part.type === 'dayPeriod')?.value;
+  if (activeLanguage() === 'ar') return `${hour}:${minute} ${period === 'PM' ? 'م' : 'ص'}`;
+  return `${hour}:${minute} ${period || ''}`.trim();
+};
 const todayISO = () => new Date().toISOString().slice(0,10);
 const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
@@ -144,9 +179,12 @@ function effortPicker(set, onChange) {
 }
 
 // ---- Programme variants --------------------------------------
+// D6 replaces these v15 programme labels and descriptions with Upper/Lower.
+// Until then G20 treats every `programme_tied` value below as an explicit
+// deferral — never as an Arabic exception or an allow-listed English run.
 const VARIANTS = {
-  fullbody_2x: { label: 'Full-body 2×', desc: 'Tuesday + Saturday' },
-  ppl_3x:      { label: 'Push/Pull/Legs 3×', desc: 'Push · Pull · Legs — any 3 days you choose' },
+  fullbody_2x: { label: 'Full-body 2×', desc: 'Tuesday + Saturday', programme_tied: true },
+  ppl_3x:      { label: 'Push/Pull/Legs 3×', desc: 'Push · Pull · Legs — any 3 days you choose', programme_tied: true },
 };
 function switchVariant(key) {
   if (!VARIANTS[key]) return;
@@ -155,7 +193,7 @@ function switchVariant(key) {
   settings.pending_variant = null;
   state.forced_next_session = null;
   saveLocal();
-  toast('Programme: ' + VARIANTS[key].label);
+  toast(tf('programme_changed', { name: VARIANTS[key].label }));
   render();
 }
 
@@ -303,7 +341,7 @@ function buildExerciseVideos(exerciseId, ex, opts = {}) {
       id,
       url: 'https://www.youtube.com/shorts/' + id,
       label: 'M' + (i + 1),
-      title: 'Mohannad — video ' + (i + 1),
+      title: tf('mohannad_video', { n: i + 1 }),
     })),
     ...(jnUrl ? [{
       key: 'jn',
@@ -320,7 +358,7 @@ function buildExerciseVideos(exerciseId, ex, opts = {}) {
         id: ytIdFromUrl(url),
         url,
         label: isShort ? 'C' + (i + 1) : 'Custom',
-        title: 'Custom — video ' + (i + 1),
+        title: t('custom_video'),
         custom: true,
       };
     })
@@ -1187,7 +1225,7 @@ function renderRegisterPanel(profile) {
   const bw = h('input', { type: 'number', inputmode: 'decimal', step: '0.1', placeholder: 'Bodyweight kg (optional)', value: profile.bodyweight_kg ?? '' });
   const exp = h('select', {},
     ['beginner','returning','experienced'].map(v => h('option', { value: v, ...(profile.experience === v ? { selected: '' } : {}) },
-      v === 'beginner' ? 'New to the gym' : v === 'returning' ? 'Trained before, coming back' : 'Currently training'
+      experienceLabel(v)
     ))
   );
   const status = h('div', { class: 'tiny muted' }, '');
@@ -1285,18 +1323,24 @@ function renderWelcome() {
     wrap.appendChild(renderSomeoneElsePanel());
   } else {
     wrap.appendChild(h('div', { class: 'profile-grid' },
-      profiles.map(profile => h('button', {
-        type: 'button',
-        class: 'profile-tile',
-        onClick: () => selectProfile(profile),
-      },
-        h('span', { class: 'profile-initial' }, String(profile.display_name || profile.user_id || '?').slice(0,1).toUpperCase()),
-        h('span', { class: 'profile-name' }, profile.display_name || profile.user_id),
-        h('span', { class: 'profile-meta' }, `${profile.sessions || 0} sessions · ${profile.experience || 'returning'}${profile.has_pin ? ' · PIN' : ''}`),
-      ))
+      profiles.map(profile => {
+        const name = profile.display_name || profile.user_id;
+        const experience = profile.experience === 'detrained' ? 'returning' : (profile.experience || 'returning');
+        return h('button', {
+          type: 'button',
+          class: 'profile-tile',
+          onClick: () => selectProfile(profile),
+        },
+          h('span', { class: 'profile-initial' }, String(name || '?').slice(0,1).toUpperCase()),
+          h('span', { class: 'profile-name' }, profile.has_pin ? tf('profile_name_with_pin', { name }) : name),
+          h('span', { class: 'profile-meta' },
+            h('bdi', { class: 'ltr-run' }, String(profile.sessions || 0)), ' ', t('sessions'), ' · ', t(experience),
+          ),
+        );
+      })
     ));
     wrap.appendChild(h('button', { class: 'btn ghost full', onClick: () => { welcomeMode = 'other'; renderWelcome(); } }, 'Someone else?'));
-    if (welcomeLoading) wrap.appendChild(h('div', { class: 'tiny muted', style: 'text-align:center;margin-top:8px;' }, 'Loading server profiles...'));
+    if (welcomeLoading) wrap.appendChild(h('div', { class: 'tiny muted', style: 'text-align:center;margin-top:8px;' }, t('loading_server_profiles')));
   }
   root.appendChild(wrap);
 }
@@ -1479,7 +1523,7 @@ function showSkinSuggestion(suggestion) {
   el.innerHTML = '';
   el.classList.add('skin-suggestion', 'show');
   el.appendChild(h('div', { class: 'skin-suggestion-copy' },
-    `Block ${suggestion.block} is starting. Try ${proposed.label}?`
+    tf('new_block_switch_skin', { skin: proposed.label })
   ));
   el.appendChild(h('div', { class: 'skin-suggestion-actions' },
     h('button', { type: 'button', class: 'btn tiny primary', onClick: () => {
@@ -1488,15 +1532,15 @@ function showSkinSuggestion(suggestion) {
       saveLocal();
       applyTheme();
       closeSkinSuggestion();
-      toast(`Skin set to ${proposed.label}.`);
+      toast(t('saved'));
       if ($('#page-settings').classList.contains('active')) renderSettings();
-    } }, `Use ${proposed.label}`),
+    } }, t('change_it')),
     h('button', { type: 'button', class: 'btn tiny', onClick: () => {
       settings = resolveSkinSuggestionResponse({ settings, suggestion, response: 'reject' });
       saveLocal();
       closeSkinSuggestion();
-      toast(`Keeping ${current.label} for block ${suggestion.block}.`);
-    } }, `Keep ${current.label}`),
+      toast(t('keep_this_one'));
+    } }, t('keep_this_one')),
   ));
 }
 
@@ -2042,7 +2086,7 @@ function swapExercise(exercise_id, alt_id) {
   ex.sets.forEach(s => { if (!s.completed && !s.is_warmup) s.weight = sug.weight; });
   saveLocal();
   render();
-  toast('Swapped to ' + (getAllExercises().find(e => e.id === alt_id)?.name || alt_id));
+  toast(tf('swapped_to', { name: getAllExercises().find(e => e.id === alt_id)?.name || alt_id }));
 }
 
 // ---- Rest timer --------------------------------------------
@@ -2199,22 +2243,22 @@ function renderRunnerSettings() {
   const modal = $('#modal');
   modal.innerHTML = '';
   modal.appendChild(h('div', { class: 'runner-settings-sheet', dir: 'rtl' },
-    h('h3', {}, 'إعدادات التمرين'),
+    h('h3', {}, t('workout_settings')),
     h('div', { class: 'runner-setting-row' },
       h('span', {}, isolate(t('runner_video'))),
       h('button', {
         type: 'button', class: 'btn tiny' + (settings.runner_video_open ? ' primary' : ''), 'data-runner-video-setting': 'true',
         onClick: () => { settings.runner_video_open = !settings.runner_video_open; saveLocal(); render(); renderRunnerSettings(); },
-      }, settings.runner_video_open ? 'مفتوح' : 'مغلق'),
+      }, settings.runner_video_open ? t('on') : t('off')),
     ),
     h('div', { class: 'runner-setting-row' },
       h('span', {}, isolate(t('runner_cues'))),
       h('button', {
         type: 'button', class: 'btn tiny' + (settings.show_cues ? ' primary' : ''), 'data-runner-cues-setting': 'true',
         onClick: () => { settings.show_cues = !settings.show_cues; saveLocal(); render(); renderRunnerSettings(); },
-      }, settings.show_cues ? 'ظاهر' : 'مخفي'),
+      }, settings.show_cues ? t('on') : t('off')),
     ),
-    h('button', { type: 'button', class: 'btn ghost full', 'data-runner-settings-close': 'true', onClick: () => $('#modal-overlay').classList.remove('show') }, 'تم'),
+    h('button', { type: 'button', class: 'btn ghost full', 'data-runner-settings-close': 'true', onClick: () => $('#modal-overlay').classList.remove('show') }, t('done')),
   ));
   $('#modal-overlay').classList.add('show');
 }
@@ -2246,22 +2290,22 @@ function renderRunnerWarmup(activeSession) {
   const spotify = session?.playlists?.spotify?.[0] || null;
   return h('div', { class: 'runner-warmup', 'data-runner-warmup': 'true', dir: 'rtl' },
     h('div', { class: 'runner-exercise-title' },
-      h('div', { class: 'runner-overline' }, 'المرحلة الأولى'),
-      h('h1', {}, 'الإحماء'),
-      h('p', {}, 'المشي أولاً، ثم الحركات التحضيرية.'),
+      h('div', { class: 'runner-overline' }, t('phase_one')),
+      h('h1', {}, t('warmup')),
+      h('p', {}, t('warmup_explainer')),
     ),
     h('div', { class: 'runner-warmup-card' },
-      h('div', { class: 'runner-warmup-head' }, h('strong', {}, 'المشاية'), h('span', {}, '٥–١٠ دقائق')),
+      h('div', { class: 'runner-warmup-head' }, h('strong', {}, t('treadmill')), h('span', {}, h('bdi', { class: 'ltr-run' }, '5–10'), ' ', t('minutes'))),
       h('div', { class: 'runner-minute-picker' }, [5, 7, 10].map((minutes) => h('button', {
         type: 'button', class: warmup.treadmill_minutes === minutes ? 'active' : '',
         onClick: () => { warmup.treadmill_minutes = minutes; warmup.treadmill_done = true; saveLocal(); render(); },
-      }, isolate(`${minutes} min`)))),
+      }, h('bdi', { class: 'ltr-run' }, String(minutes)), ' ', t('minutes')))),
     ),
     h('div', { class: 'runner-drills' }, drills.map((drill) => h('button', {
       type: 'button', class: 'runner-drill' + (drill.completed ? ' done' : ''),
       disabled: !warmup.treadmill_done,
       onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
-    }, isolate(drill.movement), h('span', {}, isolate(`${drill.reps} reps`), drill.completed ? ' ✓' : '')))),
+    }, isolate(drill.movement), h('span', {}, h('bdi', { class: 'ltr-run' }, String(drill.reps)), ' ', t('reps_short'), drill.completed ? ' ✓' : '')))),
     h('div', { class: 'runner-warmup-actions' },
       h('button', { type: 'button', class: 'btn ghost', 'data-runner-skip-warmup': 'true', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
     ),
@@ -2315,7 +2359,7 @@ function renderRunner() {
       h('button', {
         type: 'button', class: 'btn primary full', 'data-runner-complete-warmup': 'true',
         disabled: !generalWarmupComplete(active.warmup), onClick: () => completeRunnerWarmup(),
-      }, 'أكمل الإحماء'),
+      }, t('runner_finish_warmup')),
     ));
     root.appendChild(shell);
     return;
@@ -2378,13 +2422,13 @@ function renderRunner() {
     }),
   );
   card.appendChild(h('section', { class: 'runner-set-panel', 'data-runner-set-panel': 'true' },
-    h('div', { class: 'runner-current-set-label' }, 'المجموعة الحالية'),
+    h('div', { class: 'runner-current-set-label' }, t('current_set')),
     h('div', { class: 'runner-set-columns', 'aria-hidden': 'true' },
-      h('span', {}, 'رقم'),
-      h('span', {}, 'الوزن'),
-      h('span', {}, 'كغ'),
-      h('span', {}, 'التكرار'),
-      h('span', {}, 'تم'),
+      h('span', {}, t('set_number')),
+      h('span', {}, t('set_weight')),
+      h('span', {}, h('bdi', { class: 'ltr-run' }, t('kg'))),
+      h('span', {}, t('set_reps')),
+      h('span', {}, t('done')),
     ),
     setList,
   ));
@@ -2398,7 +2442,7 @@ function renderRunner() {
     h('button', { type: 'button', class: 'runner-add-set', 'data-runner-add-set': 'true', onClick: () => addRunnerSet(exerciseId) }, t('runner_add_set')),
   ));
   const runnerAction = sessionComplete
-    ? h('button', { type: 'button', class: 'btn primary runner-log-button', onClick: endSession }, isolate(t('finish_session')))
+    ? h('button', { type: 'button', class: 'btn primary runner-log-button', onClick: endSession }, t('end_session'))
     : currentExerciseComplete
       ? h('button', {
         type: 'button', class: 'btn primary runner-log-button',
@@ -2419,7 +2463,7 @@ function renderHome() {
   const next = getNextPlannedSession();
   const streak = getStreak();
   const vol = getWeeklyVolume();
-  const dow = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  const dow = ['weekday_sunday','weekday_monday','weekday_tuesday','weekday_wednesday','weekday_thursday','weekday_friday','weekday_saturday'][new Date().getDay()];
 
   // Header — structured (accent carries state via the progress meter / top rule)
   if (state.active_session) {
@@ -2429,7 +2473,7 @@ function renderHome() {
     const pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
     const parts = a.session_name.split(' — ');
     root.appendChild(h('div', { class: 'today-banner active', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-kicker' }, 'In progress · started ' + fmtTime(a.started_at)),
+      h('div', { class: 'tb-kicker' }, tf('runner_active_started', { time: fmtTime(a.started_at) })),
       h('h2', {}, parts[0]),
       h('p', {}, parts[1] || 'Log every set as you go.'),
       h('div', { class: 'progress-meter' },
@@ -2443,10 +2487,10 @@ function renderHome() {
   } else if (planned) {
     const parts = planned.name.split(' — ');
     root.appendChild(h('div', { class: 'today-banner' },
-      h('div', { class: 'tb-kicker' }, dow + ' · Gym day'),
+      h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
       h('h2', {}, parts[0]),
       h('p', {}, parts[1] || planned.name),
-      h('div', { class: 'tb-meta' }, planned.exercises.length + ' exercises · ~70 min'),
+      h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ~', tf('home_minutes', { n: 70 })),
     ));
   } else {
     root.appendChild(h('div', { class: 'today-banner rest' },
@@ -2465,7 +2509,7 @@ function renderHome() {
   root.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
       h('div', { class: 'stat-num' }, String(streak)),
-      h('div', { class: 'stat-cap' }, 'Streak'),
+      h('div', { class: 'stat-cap' }, t('home_streak')),
       h('div', { class: 'stat-sub' }, 'sessions / 4 wks'),
     ),
     h('div', { class: 'stat-tile' },
@@ -2475,7 +2519,7 @@ function renderHome() {
     ),
     h('div', { class: 'stat-tile' },
       h('div', { class: 'stat-num' }, vol.totalKg.toLocaleString()),
-      h('div', { class: 'stat-cap' }, 'Tonnage'),
+      h('div', { class: 'stat-cap' }, t('home_tonnage')),
       h('div', { class: 'stat-sub' }, 'kg this week'),
     ),
   ));
@@ -2490,11 +2534,11 @@ function renderHome() {
     ));
   } else if (planned) {
     root.appendChild(h('button', { class: 'btn primary full', onClick: () => startSession(planned) },
-      '▶ Start ' + shortSessionName(planned)
+      '▶ ', tf('start_session_named', { session: shortSessionName(planned) })
     ));
   } else {
     root.appendChild(h('button', { class: 'btn primary full', onClick: () => startSession(next.session) },
-      '▶ Start ' + shortSessionName(next.session)
+      '▶ ', tf('start_session_named', { session: shortSessionName(next.session) })
     ));
   }
   if (!state.active_session && shownSession) {
@@ -2545,9 +2589,7 @@ function renderHome() {
 
     // Mood + playlist row
     if (session.mood) {
-      root.appendChild(h('div', { class: 'cue', style: 'margin-bottom:10px;' },
-        h('strong', {}, '🎯 Today\'s vibe: '), session.mood
-      ));
+      root.appendChild(h('div', { class: 'cue', style: 'margin-bottom:10px;' }, tf('todays_vibe', { text: session.mood })));
     }
     const platformPlaylists = getCurrentPlaylists(session);
     if (platformPlaylists && platformPlaylists.length) {
@@ -2617,7 +2659,7 @@ function renderHome() {
         h('button', { class: 'btn', style: 'flex:1;', onClick: () => { focusExerciseIdx = Math.max(0, curIdx - 1); render(); } }, '← Previous'),
         curIdx < total - 1
           ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { focusExerciseIdx = curIdx + 1; render(); } }, 'Next exercise →')
-          : h('button', { class: 'btn primary', style: 'flex:2;', onClick: endSession }, '✓ Finish session'),
+          : h('button', { class: 'btn primary', style: 'flex:2;', onClick: endSession }, t('end_session')),
       ));
     } else {
       exEntries.forEach(([ex_id, exState]) => {
@@ -2645,7 +2687,7 @@ function renderHome() {
           h('div', { class: 'ex-info' },
             h('h4', {}, `${i+1}. ${ex?.name || p.exercise_id}`),
             h('div', { class: 'meta' },
-              h('span', { class: 'muscle-tag' }, RW.MUSCLES[ex?.primary?.[0]]?.en || ''),
+              h('span', { class: 'muscle-tag' }, muscleLabel(ex?.primary?.[0])),
               ` ${p.sets} × ${p.reps} · `,
               h('strong', {}, sug.weight + ' kg'),
             ),
@@ -2660,7 +2702,7 @@ function renderExerciseCard(ex_id, exState) {
   const planned = exState.planned;
   const actualId = exState.swapped_to || ex_id;
   const ex = getAllExercises().find(e => e.id === actualId);
-  if (!ex) return h('div', {}, 'Unknown exercise: ' + actualId);
+  if (!ex) return h('div', {}, tf('unknown_exercise', { id: actualId }));
   const sug = suggestNextWeight(actualId, planned);
   const last = getLastPerformance(actualId);
   const allWorkingDone = exState.sets.filter(s => !s.is_warmup).every(s => s.completed);
@@ -2678,7 +2720,7 @@ function renderExerciseCard(ex_id, exState) {
     h('div', { class: 'ex-info' },
       h('h4', {}, settings.lang === 'ar' && ex.name_ar ? ex.name_ar : ex.name),
       h('div', { class: 'meta' },
-        ex.primary.map(m => h('span', { class: 'muscle-tag' }, RW.MUSCLES[m]?.en || m)),
+        ex.primary.map(m => h('span', { class: 'muscle-tag' }, muscleLabel(m))),
         ` ${planned.sets} × ${planned.reps}`,
       ),
     ),
@@ -2786,7 +2828,9 @@ function renderExerciseCard(ex_id, exState) {
       exState.sets.push({ is_warmup: false, weight: lastWorking?.weight ?? sug.weight, reps: workingRepTarget(planned), effort: null, completed: false });
       saveLocal(); render();
     }}, '+ Set'),
-    h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, '⏱ Rest ' + settings.rest_seconds + 's'),
+    h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, tf('rest_seconds', {
+      seconds: `${Math.floor(settings.rest_seconds / 60)}:${String(settings.rest_seconds % 60).padStart(2, '0')}`,
+    })),
     h('button', {
       class: 'btn tiny',
       onClick: () => showAltModal(ex_id, exState)
@@ -2819,7 +2863,7 @@ function showAltModal(ex_id, exState) {
         h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
         h('div', { class: 'ex-info' },
           h('h4', {}, alt.name),
-          h('div', { class: 'meta' }, (alt.primary || []).map(p => RW.MUSCLES[p]?.en).join(', '), ' · tap to inspect'),
+          h('div', { class: 'meta' }, (alt.primary || []).map(muscleLabel).join(', '), t('tap_inspect')),
         ),
       ),
     );
@@ -2853,7 +2897,7 @@ function showAltModal(ex_id, exState) {
       matched.forEach(x => list.appendChild(altCard(x, () => {
         addExerciseToSession(x.id);
         $('#modal-overlay').classList.remove('show');
-        toast('Added "' + x.name + '" to today.');
+        toast(tf('added_to_today', { name: x.name }));
       })));
       if (!matched.length) {
         list.appendChild(h('div', { class: 'tiny muted', style: 'padding:8px; text-align:center;' }, 'No matches.'));
@@ -2900,7 +2944,7 @@ function renderLibrary() {
   const allEx = getAllExercises();
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'Exercise library'),
-    h('div', { class: 'sub' }, allEx.length + ' exercises · tap any group to expand'),
+    h('div', { class: 'sub' }, tf('library_group_summary', { n: allEx.length })),
   ));
 
   let search = window._libSearch || '';
@@ -2964,7 +3008,7 @@ function renderLibrary() {
         ...(searching ? { open: '' } : {}),
       });
       subDetails.appendChild(h('summary', { class: 'lib-sub-summary' },
-        h('span', { class: 'label' }, section.info.en),
+        h('span', { class: 'label' }, muscleLabel(section.info.keys[0])),
         h('span', { class: 'count' }, section.exercises.length + ''),
       ));
       const grid = h('div', { class: 'lib-grid' });
@@ -2985,7 +3029,7 @@ function renderLibExerciseCard(ex) {
       h('div', { class: 'ex-info' },
         h('h4', {}, ex.name),
         h('div', { class: 'meta' },
-          h('span', { class: 'muscle-tag' }, RW.MUSCLES[ex.primary[0]]?.en || ''),
+          h('span', { class: 'muscle-tag' }, muscleLabel(ex.primary[0])),
           ' ' + (ex.name_ar || ''),
         ),
       ),
@@ -3075,8 +3119,8 @@ function openAddCustomExerciseModal() {
   m.innerHTML = '';
   // Form state captured locally
   const form = { name: '', name_ar: '', primary: 'chest', jeff_nippard: '', mohannad_url: '' };
-  const muscleOptions = Object.entries(RW.MUSCLES).map(([k, v]) =>
-    h('option', { value: k, ...(form.primary === k ? { selected: '' } : {}) }, v.en + ' (' + v.ar + ')')
+  const muscleOptions = Object.entries(RW.MUSCLES).map(([k]) =>
+    h('option', { value: k, ...(form.primary === k ? { selected: '' } : {}) }, muscleLabel(k))
   );
   m.appendChild(h('h3', {}, '➕ Add Custom Exercise'));
   m.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:12px;' },
@@ -3134,7 +3178,7 @@ function openAddCustomExerciseModal() {
         addCustomExercise(form);
         $('#modal-overlay').classList.remove('show');
         renderLibrary();
-        toast('Added "' + form.name + '" to your library.');
+        toast(tf('added_to_library', { name: form.name }));
       }
     }, 'Save'),
   ));
@@ -3146,7 +3190,9 @@ function renderHistory() {
   root.innerHTML = '';
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'History'),
-    h('div', { class: 'sub' }, state.history.length + ' sessions logged'),
+    h('div', { class: 'sub' }, state.history.length
+      ? tf('history_sessions_logged', { n: state.history.length })
+      : t('history_no_sessions_logged')),
   ));
 
   // Bodyweight quick add
@@ -3205,7 +3251,10 @@ function renderHistory() {
     const fallbackSessionName = ({ session_a: 'Session A', session_b: 'Session B', ppl_push: 'Push', ppl_pull: 'Pull', ppl_legs: 'Legs' })[sess.session_id] || sess.session_id;
     card.appendChild(h('div', { onClick: () => { expanded.style.display = expanded.style.display === 'none' ? 'block' : 'none'; } },
       h('div', { class: 'date' }, fmtDate(sess.date) + ' · ' + (sess.session_name || fallbackSessionName)),
-      h('h3', { style: 'margin:4px 0;' }, totalSets + ' sets · ' + Math.round(totalKg).toLocaleString() + ' kg total'),
+      h('h3', { style: 'margin:4px 0;' }, tf('history_total', {
+        sets: totalSets,
+        kg: Math.round(totalKg).toLocaleString(),
+      })),
       h('div', { class: 'summary' },
         Object.keys(sess.exercises).slice(0, 5).map(ex_id => {
           const ex = getAllExercises().find(e => e.id === ex_id);
@@ -3308,7 +3357,7 @@ async function openRestoreModal() {
       class: 'revision-row',
       onClick: () => {
         overlay.classList.remove('show');
-        restoreRevision(row.rev).catch(e => toast('Restore failed: ' + (e.message || 'unknown'), 3500));
+        restoreRevision(row.rev).catch(e => toast(tf('restore_failed', { message: e.message || 'unknown' }), 3500));
       }
     },
       h('span', {}, fmtDate(row.server_at || row.updated_at)),
@@ -3338,7 +3387,7 @@ async function importJsonFile(file) {
 }
 async function switchProfile() {
   if (syncDirty || readDirtyMarker(settings.user_id) || syncInFlightPromise) {
-    toast('Syncing before switch...', 1200);
+    toast(t('syncing_before_switch'), 1200);
     const ok = await flushSync();
     if (!ok || syncDirty || readDirtyMarker(settings.user_id)) {
       toast('Cannot switch until this profile is synced.');
@@ -3382,7 +3431,7 @@ function renderSettings() {
     onChange: (e) => { state.profile.experience = e.target.value; saveLocal(); renderSettings(); }
   },
     ['beginner','detrained','returning','experienced'].map(v => h('option', { value: v, ...(state.profile?.experience === v ? { selected: '' } : {}) },
-      v === 'beginner' ? 'New to the gym' : v === 'detrained' ? 'Trained before, re-entering' : v === 'returning' ? 'Trained before, coming back' : 'Currently training'
+      experienceLabel(v)
     ))
   );
   const bwInput = h('input', {
@@ -3406,7 +3455,7 @@ function renderSettings() {
     experienceSelect,
   ));
   profileCard.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Bodyweight'), h('div', { class: 'desc' }, `Protein target: ${profileProteinRange()}/day.`)),
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Bodyweight'), h('div', { class: 'desc' }, t('protein_target_settings'))),
     bwInput,
   ));
   profileCard.appendChild(h('div', { class: 'setting-row' },
@@ -3503,7 +3552,7 @@ function renderSettings() {
   const musicCard = h('div', { class: 'card' });
   musicCard.appendChild(h('h3', {}, '🎧 Music'));
   musicCard.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' },
-    'Pick your platform. The session screen will show pre-curated playlists for that service.'
+      t('pick_music_platform')
   ));
   musicCard.appendChild(h('div', { class: 'platform-picker' },
     Object.entries(PLATFORM_INFO).map(([key, info]) =>
@@ -3573,7 +3622,7 @@ function renderSettings() {
   if (configured) {
     syncFetch('/health', { timeoutMs: 8000 })
       .then(() => setSyncStatus('ok', 'Connected'))
-      .catch(() => setSyncStatus('err', 'Offline — tap Test below'));
+      .catch(() => setSyncStatus('err', t('offline')));
   }
 
   // Advanced settings (collapsed by default)
@@ -3617,7 +3666,7 @@ function renderSettings() {
 
   const suggestionOptions = (block) => {
     const select = h('select', {
-      'aria-label': `Suggested skin for block ${block}`,
+      'aria-label': tf('block_number', { n: block }),
       onChange: (event) => {
         settings.block_skin_suggestions = { ...(settings.block_skin_suggestions || {}) };
         if (event.target.value) settings.block_skin_suggestions[block] = event.target.value;
@@ -3628,7 +3677,7 @@ function renderSettings() {
     h('option', { value: '' }, 'Unset'),
     Object.entries(SKINS).map(([key, info]) => h('option', { value: key }, info.label)));
     select.value = settings.block_skin_suggestions?.[block] || '';
-    return h('label', { class: 'block-skin-select' }, `Block ${block}`, select);
+    return h('label', { class: 'block-skin-select' }, tf('block_number', { n: block }), select);
   };
   adv.appendChild(h('div', { class: 'block-skin-config' },
     h('div', { class: 'tiny muted' }, 'Suggestion mapping — intentionally unset by default.'),
@@ -3657,7 +3706,7 @@ function renderSettings() {
       h('div', { class: 'desc' },
         state.forced_next_session
           ? `Forced: ${fmtSessionKey(state.forced_next_session)} — will clear after that session ends.`
-          : 'Missed a day? Override which session starts next. Auto-resets after the session.'
+          : [t('missed_a_day'), ' — ', t('missed_day_override')]
       ),
     ),
     h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
@@ -3685,9 +3734,8 @@ function renderSettings() {
     h('div', { class: 'label' },
       h('div', { class: 'name' }, 'Gym launcher button URL'),
       h('div', { class: 'desc' },
-        'Default opens IN2 Fitness via scope.bit:// scheme, falls back to App Store. ',
-        'If that doesn\'t work, create an iOS Shortcut named "Open IN2" and paste: ',
-        h('code', {}, 'shortcuts://run-shortcut?name=Open%20IN2')
+        t('gym_launcher_default'),
+        tf('gym_launcher_shortcut', { name: t('open_in2') })
       ),
     ),
     h('input', {
@@ -3749,8 +3797,8 @@ function renderHelp() {
   card.appendChild(h('p', {}, 'Pick your profile, complete the warm-up phase, log the actual weight/reps, rate only the final set as easy, medium, or very hard, and finish. The app works offline first and syncs when the server is reachable.'));
   card.appendChild(h('h2', {}, 'Your programme'));
   card.appendChild(h('p', {}, variant === 'ppl_3x'
-    ? 'Push/Pull/Legs cycles by history. Pick any 3 days with 24h+ rest.'
-    : 'Full-body 2-day uses Session A and Session B. The app can still start either session when your week shifts.'
+    ? t('programme_tied_ppl_help')
+    : t('programme_tied_fullbody_help')
   ));
   sessions.forEach(sess => {
     card.appendChild(h('h3', {}, sess.name));
@@ -3763,14 +3811,14 @@ function renderHelp() {
     ));
   });
   card.appendChild(h('h2', {}, 'Weeks 1–2 = re-entry'));
-  card.appendChild(h('p', {}, `Your profile is "${state.profile?.experience || 'detrained'}". Logged history wins over a lower starter level. The final-set effort ranking is simple: easy, medium, or very hard — never a numeric rep estimate.`));
+  card.appendChild(h('p', {}, tf('profile_is_level', { level: experienceLabel(state.profile?.experience || 'detrained') }), ' ', t('help_history_effort')));
   card.appendChild(h('h2', {}, 'Progressive overload'));
   card.appendChild(h('p', {}, 'Completed reps drive every increase. Very hard blocks an earned increase; easy can bring a reps-earned increase forward by one complete exposure. Effort never raises load on its own.'));
   card.appendChild(h('h2', {}, 'The rules'));
   card.appendChild(h('ul', {},
     h('li', {}, 'Technique beats weight. No grinding in the re-entry ramp.'),
-    h('li', {}, `Protein target: ${profileProteinRange()}/day. Sleep 7+ hours.`),
-    h('li', {}, 'No barbell back squat or conventional deadlift in Block 1. RDL comes after form is ready.'),
+    h('li', {}, t('help_protein_sleep')),
+    h('li', {}, t('programme_tied_block_one_rule')),
   ));
   card.appendChild(h('h2', {}, 'Library & videos'));
   card.appendChild(h('p', {}, 'Exercises include Mohannad clips and a Jeff Nippard form link. You can add custom videos, hide videos from session view, edit JN links, and add custom exercises.'));
@@ -3859,7 +3907,7 @@ function init() {
       // Mid-session + screen visible → wait until you switch away (state is already
       // saved on every keystroke, so the reload never loses data).
       if (state.active_session && !document.hidden) {
-        toast('New version ready — updating when you switch away.', 3000);
+        toast(t('update_ready'), 3000);
         const onHide = () => {
           if (document.hidden) { document.removeEventListener('visibilitychange', onHide); doReload(); }
         };

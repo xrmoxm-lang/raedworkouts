@@ -95,3 +95,18 @@ Scope extension: three adopted skins across light, dark, and automatic modes; no
   CHECK: npm run test:runner
   EXPECT: PHASE4_RUNNER_SESSION_LIFECYCLE_PASSED
   EVIDENCE: external Playwright exit=0; 4 passed.
+
+- [ ] G18: An empty PIN creates a PIN-free profile while an existing PIN still gates that profile
+  CHECK: node --test tests/phase4.test.mjs
+  EXPECT: PHASE4_PIN_RULE_PASSED
+  EVIDENCE: local npm test exit=0; PHASE4_PIN_RULE_PASSED emitted after both PIN-direction assertions.
+
+- [ ] G19: The Arabic UI uses one locale map; declared English exceptions and each deferred legacy-programme value are printed on every successful run
+  CHECK: node scripts/verify-arabic-ui.mjs
+  EXPECT: ARABIC_UI_VERIFIED
+  EVIDENCE: local node exit=0; translated=238, exerciseNames=33, warmupDrills=5, playlistTitles=19, properNouns=2, deferred=26, then ARABIC_UI_VERIFIED.
+
+- [ ] G20: Every reachable rendered Arabic screen contains only declared Latin runs
+  CHECK: npm run test:arabic-dom
+  EXPECT: PHASE4_ARABIC_DOM_PASSED
+  EVIDENCE: UNVERIFIED — written against the current build to prove its pre-session Home wiring fails before the render-path fixes land.
