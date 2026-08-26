@@ -5,6 +5,10 @@ import {
   resolveProgrammeBlock,
   runProgrammeReferenceMigrations,
 } from './domain/programme.js';
+import {
+  localProfileIdFromV16SyncId,
+  v16SyncUserId,
+} from './domain/sync-identity.js';
 import { format as localeFormat, text as localeText } from './locale.js';
 
 /* ============================================================
@@ -151,6 +155,15 @@ function getSyncUrl() {
 }
 function encodeUserKey(userId) {
   return encodeURIComponent(String(userId || '').trim());
+}
+// Local profile IDs deliberately stay human-facing.  Only this resolver may
+// construct a server identity, and it always suffixes `-v16`; no v16 request
+// can therefore address Raed's v15 row by accident.
+function syncUserId(localUserId = settings.user_id) {
+  return v16SyncUserId(localUserId);
+}
+function syncUserQuery(localUserId = settings.user_id) {
+  return encodeURIComponent(syncUserId(localUserId));
 }
 function nsKey(userId, suffix) {
   return `raedworkouts.${encodeUserKey(userId)}.${suffix}.v1`;
@@ -615,7 +628,7 @@ function stripForSync(value, mode = 'state') {
   if (Array.isArray(value)) return value.map(v => stripForSync(v, mode));
   if (!value || typeof value !== 'object') return value;
   const deny = mode === 'settings'
-    ? new Set(['sync_key', 'sync_url', 'user_key', 'last_rev', 'pending_variant', 'pending_registration', 'needs_pin_reauth'])
+    ? new Set(['sync_key', 'sync_url', 'user_key', 'user_id', 'last_rev', 'pending_variant', 'pending_registration', 'needs_pin_reauth'])
     : new Set(['last_sync']);
   const out = {};
   Object.entries(value).forEach(([k, v]) => {
@@ -782,8 +795,12 @@ function saveLocal(opts = {}) {
   if (dirty) markDirty();
   if (sync && dirty && !suppressNextPush) schedulePush();
 }
-function applyRemotePayload(remote) {
-  const localUserId = settings.user_id || remote.user_id;
+function applyRemotePayload(remote, localUserId = settings.user_id) {
+  // The server correctly echoes its row id (`raed-v16`), but that is never a
+  // local profile id. Keeping the local identity here prevents remote sync
+  // metadata from leaking into localStorage, profile names, or later requests.
+  const localId = localUserId || settings.user_id;
+  if (!localId) throw new Error('Sync identity invariant failed: remote payload needs a local profile id');
   const localUserKey = settings.user_key || '';
   const localLang = settings.lang;
   const localTheme = settings.theme;
@@ -791,7 +808,7 @@ function applyRemotePayload(remote) {
   const remoteSettings = remote.settings_json || remote.settings || {};
   state = { ...defaultState(), ...remoteState };
   settings = { ...defaultSettings(), ...remoteSettings };
-  settings.user_id = remote.user_id || localUserId;
+  settings.user_id = localId;
   settings.user_key = localUserKey;
   settings.lang = settings.lang || localLang;
   settings.theme = settings.theme || localTheme;
@@ -799,7 +816,7 @@ function applyRemotePayload(remote) {
   delete settings.pending_variant;
   settings.sync_url = getSyncUrl();
   settings.sync_key = SYNC_KEY;
-  setActiveUser(settings.user_id);
+  setActiveUser(localId);
   // A remote pre-D6 snapshot is subject to the exact same export-first
   // migration as a locally loaded one.
   migrateProgrammeReferencesAtBoot(settings.user_id);
@@ -835,12 +852,18 @@ function pinErrorMessage(err) {
 async function retryPendingRegistration() {
   const pending = settings.pending_registration;
   if (!pending || !settings.user_id) return true;
+  // PIN-free profiles do not have a `/register` operation to retry. Their
+  // first successful `/state` write is the registration of the v16 row.
+  if (!pending.pin) {
+    settings.pending_registration = null;
+    persistLocal();
+    return true;
+  }
   try {
     const res = await syncFetch('/register', {
       method: 'POST',
-      body: JSON.stringify({ user_id: pending.user_id || settings.user_id, pin: pending.pin, _auth_token: settings.sync_key }),
+      body: JSON.stringify({ user_id: syncUserId(pending.user_id || settings.user_id), pin: pending.pin, _auth_token: settings.sync_key }),
     });
-    settings.user_id = res.user_id || settings.user_id;
     // A PIN-free profile deliberately has no derived user key.  Deriving one
     // from an empty string would turn the optional PIN into an invisible PIN.
     settings.user_key = pending.pin ? (res.user_key || await deriveUserKey(settings.user_id, pending.pin)) : '';
@@ -902,7 +925,7 @@ async function syncToCloud(opts = {}) {
   }
   const userIdAtStart = settings.user_id;
   const bodyObj = {
-    user_id: settings.user_id,
+    user_id: syncUserId(settings.user_id),
     state_json: syncStatePayload(),
     settings_json: syncSettingsPayload(),
     updated_at: new Date().toISOString(),
@@ -935,7 +958,7 @@ async function syncToCloud(opts = {}) {
       saveLocal._toastShown = false;
       return true;
     }
-    applyRemotePayload(response);
+    applyRemotePayload(response, userIdAtStart);
     applyTheme();
     render();
   } else if (rev) {
@@ -993,7 +1016,7 @@ async function pullFromCloud() {
   if (syncDirty || readDirtyMarker(settings.user_id)) return flushSync();
   let remote;
   try {
-    remote = await syncFetch('/state?user=' + encodeURIComponent(settings.user_id));
+    remote = await syncFetch('/state?user=' + syncUserQuery(settings.user_id));
   } catch (e) {
     // 404 = no row yet (first run / fresh user) — not an error, nothing to pull.
     if (/Sync 404/.test(e.message || '')) return false;
@@ -1004,7 +1027,7 @@ async function pullFromCloud() {
     return false;
   }
   if (remote && remote.state_json) {
-    applyRemotePayload(remote);
+    applyRemotePayload(remote, settings.user_id);
     setSyncStatus('ok', 'Pulled from cloud');
     return true;
   }
@@ -1040,27 +1063,72 @@ async function sha256Hex(text) {
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 async function deriveUserKey(userId, pin) {
-  return sha256Hex(`${String(userId).toLowerCase()}:${pin}`);
+  return sha256Hex(`${syncUserId(userId)}:${pin}`);
 }
+
+function hasLocalProfileCredential(userId) {
+  if (!userId) return false;
+  try {
+    const saved = JSON.parse(localStorage.getItem(settingsKey(userId)) || '{}');
+    return typeof saved.user_key === 'string' && saved.user_key.length > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+function profileWithLocalCredential(profile) {
+  const userId = profile?.user_id || profile?.display_name || '';
+  const hasLocalKey = hasLocalProfileCredential(userId);
+  const unverifiedPinHint = profile?.has_pin === true && !hasLocalKey && profile?.server_has_pin !== true;
+  return {
+    ...profile,
+    has_local_key: hasLocalKey,
+    // Do not display a PIN badge copied from an old/local hint when this
+    // origin has no credential to check. The required registration step still
+    // remains explicit rather than silently entering an unclaimed profile.
+    ...(unverifiedPinHint ? { has_pin: false, needs_registration: true } : {}),
+  };
+}
+
+// `/users` contains both long-lived v15 rows and the isolated v16 rows.  The
+// picker only trusts a `-v16` row as proof that this app has a server-side
+// PIN; bare rows are deliberately invisible to v16.
+function welcomeProfilesForV16(remoteRows = []) {
+  const profiles = new Map();
+  const add = (profile) => {
+    const local = profileWithLocalCredential(profile);
+    const key = String(local.user_id || '').toLocaleLowerCase();
+    if (key) profiles.set(key, local);
+  };
+  familyProfileSeeds().forEach(add);
+  getLocalProfiles().forEach(add);
+
+  for (const remote of remoteRows || []) {
+    const localId = localProfileIdFromV16SyncId(remote?.user_id);
+    if (!localId) continue;
+    const existing = profiles.get(localId.toLocaleLowerCase()) || { user_id: localId, display_name: localId };
+    add({
+      ...existing,
+      user_id: existing.user_id || localId,
+      display_name: remote.display_name || existing.display_name || localId,
+      experience: remote.experience || existing.experience || 'returning',
+      sessions: remote.sessions ?? existing.sessions ?? 0,
+      updated_at: remote.updated_at || existing.updated_at || null,
+      has_pin: remote.has_pin === true || existing.has_pin === true,
+      server_has_pin: remote.has_pin === true,
+    });
+  }
+  return [...profiles.values()];
+}
+
 async function loadWelcomeProfiles() {
   if (welcomeLoading) return;
   welcomeLoading = true;
   try {
     const rows = await syncFetch('/users', { timeoutMs: 8000 });
-    const merged = [...rows];
-    getLocalProfiles().forEach(local => {
-      if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
-    });
-    familyProfileSeeds().forEach(seed => {
-      if (!merged.some(p => String(p.user_id).toLowerCase() === String(seed.user_id).toLowerCase())) merged.push(seed);
-    });
-    welcomeProfiles = merged;
+    welcomeProfiles = welcomeProfilesForV16(rows);
   } catch (_) {
-    const merged = [...familyProfileSeeds()];
-    getLocalProfiles().forEach(local => {
-      if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
-    });
-    welcomeProfiles = merged;
+    welcomeProfiles = welcomeProfilesForV16();
   } finally {
     welcomeLoading = false;
     if (!settings.user_id) renderWelcome();
@@ -1076,7 +1144,12 @@ export function validateRegistrationPin(pin, repeatedPin) {
 }
 
 export function profileEntryMode(profile) {
-  if (profile?.has_pin === true) return 'pin';
+  const credentialExists = profile?.has_local_key === true || profile?.server_has_pin === true;
+  if (profile?.has_pin === true && credentialExists) return 'pin';
+  // A legacy/UI hint without a local key or a v16 server record has nothing
+  // to verify. Send the fresh install to optional-PIN registration instead.
+  if (profile?.has_pin === true) return 'register';
+  if (profile?.needs_registration === true) return 'register';
   return Object.hasOwn(profile || {}, 'has_pin') ? 'direct' : 'register';
 }
 
@@ -1126,7 +1199,7 @@ async function signInWithoutPin(profile) {
   } catch (error) {
     settings = previousSettings;
     if (syncErrorStatus(error) === 401) {
-      welcomeSelectedProfile = { ...profile, has_pin: true };
+      welcomeSelectedProfile = { ...profile, has_pin: true, server_has_pin: true };
       welcomePinMessage = 'This profile requires its PIN.';
       welcomeMode = 'pin';
       renderWelcome();
@@ -1143,8 +1216,8 @@ async function verifyPin(profile, pin) {
   const prev = settings;
   settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId, user_key: key };
   try {
-    const remote = await syncFetch('/state?user=' + encodeURIComponent(userId));
-    applyRemotePayload({ ...remote, user_id: remote.user_id || userId });
+    const remote = await syncFetch('/state?user=' + syncUserQuery(userId));
+    applyRemotePayload(remote, userId);
     toast('Signed in.');
     applyTheme();
     render();
@@ -1160,7 +1233,7 @@ async function verifyReconnectPin(pin) {
   const previousKey = settings.user_key;
   settings.user_key = key;
   try {
-    await syncFetch('/state?user=' + encodeURIComponent(userId));
+    await syncFetch('/state?user=' + syncUserQuery(userId));
     settings.needs_pin_reauth = false;
     settings.pending_registration = null;
     saveLocal({ sync: false, dirty: false });
@@ -1174,8 +1247,9 @@ async function verifyReconnectPin(pin) {
   }
 }
 async function registerProfile(profile, pin, bodyweight) {
+  const localUserId = profile.user_id || profile.display_name;
   const body = {
-    user_id: profile.user_id || profile.display_name,
+    user_id: syncUserId(localUserId),
     pin,
     _auth_token: SYNC_KEY,
   };
@@ -1183,9 +1257,12 @@ async function registerProfile(profile, pin, bodyweight) {
   let claimed = false;
   settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY };
   try {
-    const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify(body) });
-    const userId = res.user_id || profile.user_id;
-    const userKey = pin ? (res.user_key || await deriveUserKey(userId, pin)) : '';
+    // An empty PIN is a valid first-run choice. `/register` only creates a
+    // credential, so PIN-free profiles claim their independent v16 row via
+    // the state write below instead.
+    const res = pin ? await syncFetch('/register', { method: 'POST', body: JSON.stringify(body) }) : null;
+    const userId = localUserId;
+    const userKey = pin ? (res?.user_key || await deriveUserKey(userId, pin)) : '';
     claimed = true;
     finishLocalSignIn(userId, { ...profile, has_pin: Boolean(pin), bodyweight_kg: bodyweight ?? profile.bodyweight_kg }, userKey);
     state.profile.experience = profile.experience || state.profile.experience || 'returning';
@@ -1330,13 +1407,7 @@ function renderWelcome() {
   $$('.tab').forEach(t => t.classList.remove('active'));
   root.innerHTML = '';
   if (!welcomeProfiles && !welcomeLoading) loadWelcomeProfiles();
-  const profiles = welcomeProfiles || (() => {
-    const merged = [...familyProfileSeeds()];
-    getLocalProfiles().forEach(local => {
-      if (!merged.some(p => String(p.user_id).toLowerCase() === String(local.user_id).toLowerCase())) merged.push(local);
-    });
-    return merged;
-  })();
+  const profiles = welcomeProfiles || welcomeProfilesForV16();
   if (welcomePreselectUser) {
     const pre = profiles.find(p => String(p.user_id).toLowerCase() === welcomePreselectUser.toLowerCase());
     if (pre && welcomeMode === 'tiles') setTimeout(() => selectProfile(pre), 0);
@@ -1407,8 +1478,7 @@ function openSetPinModal() {
       if (p1 !== p2) { setUiText(status, 'PINs do not match.'); return; }
       setUiText(status, 'Saving...');
       try {
-        const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify({ user_id: settings.user_id, pin: p1, _auth_token: settings.sync_key }) });
-        settings.user_id = res.user_id || settings.user_id;
+        const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify({ user_id: syncUserId(settings.user_id), pin: p1, _auth_token: settings.sync_key }) });
         settings.user_key = res.user_key || await deriveUserKey(settings.user_id, p1);
         setActiveUser(settings.user_id);
         saveLocal({ sync: false, dirty: false });
@@ -3373,7 +3443,7 @@ function downloadJson(name, payload) {
 }
 async function downloadCloudExport() {
   try {
-    const payload = await syncFetch('/export?user=' + encodeURIComponent(settings.user_id));
+    const payload = await syncFetch('/export?user=' + syncUserQuery(settings.user_id));
     downloadJson(`${settings.user_id}-workouts-${todayISO()}.json`, payload);
   } catch (_) {
     downloadJson(`raedworkouts-${settings.user_id}-${todayISO()}.json`, exportPayload());
@@ -3384,7 +3454,7 @@ async function restoreRevision(rev) {
   if (!confirm('Restore this cloud snapshot? Current data is saved locally first and the restore becomes a new cloud revision.')) return;
   await quiesceSyncPipeline();
   stashPreRestore('revision ' + rev);
-  const snap = await syncFetch('/revision?user=' + encodeURIComponent(settings.user_id) + '&rev=' + encodeURIComponent(rev));
+  const snap = await syncFetch('/revision?user=' + syncUserQuery(settings.user_id) + '&rev=' + encodeURIComponent(rev));
   const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
   state = { ...defaultState(), ...(snap.state_json || {}) };
   settings = { ...defaultSettings(), ...(snap.settings_json || {}), ...keep };
@@ -3407,7 +3477,7 @@ async function openRestoreModal() {
   m.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:12px;', onClick: () => overlay.classList.remove('show') }, 'Close'));
   overlay.classList.add('show');
   try {
-    const rows = await syncFetch('/revisions?user=' + encodeURIComponent(settings.user_id) + '&limit=30');
+    const rows = await syncFetch('/revisions?user=' + syncUserQuery(settings.user_id) + '&limit=30');
     list.innerHTML = '';
     rows.forEach(row => list.appendChild(h('button', {
       type: 'button',

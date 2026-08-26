@@ -1,0 +1,19 @@
+# Parallel v16 deployment: publish this static worktree to its own Netlify
+# site. The current v15 site is never linked or updated by this configuration.
+[build]
+  publish = "."
+
+# The service-worker script itself must never sit behind a long-lived host
+# cache; browsers can only discover a new cache VERSION after they receive it.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# v16 ships stable asset filenames rather than hash-versioned bundles. A
+# reload must therefore revalidate the document and modules before the service
+# worker's offline fallback is considered.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

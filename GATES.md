@@ -141,3 +141,25 @@ lives at the repository root; it is never modified from this worktree.
   CHECK: test "$(git rev-parse main)" = "4627432fc5fce240503702bf040ada2e9f01b487" && git diff --stat main && printf 'MAIN_ANCHORED\n'
   EXPECT: MAIN_ANCHORED
   EVIDENCE: PENDING
+
+# Gates: v16 parallel deployment safety
+
+Scope extension: a separate HTTPS v16 PWA must have independent HP sync rows,
+must not block a fresh profile on a legacy PIN hint, and must retain a usable
+shell after the first online visit goes offline. v15's app and its bare server
+rows are explicitly out of scope and unreachable from the v16 client.
+
+- [x] G26: Every v16 server identity is namespaced and HP allowlist provisioning preserves bare v15 rows
+  CHECK: node --test tests/deploy-safe.test.mjs
+  EXPECT: /V16_SYNC_NAMESPACE_PASSED[\s\S]*V16_ALLOWLIST_ADDITIVE_PASSED/
+  EVIDENCE: exit=0; node test run locally; both additive namespace assertions emitted their success markers.
+
+- [ ] G27: A fresh browser origin reaches optional-PIN registration and emits only a namespaced v16 state write
+  CHECK: npm run test:deploy-safe
+  EXPECT: /V16_FRESH_PROFILE_NONBLOCKING_PASSED[\s\S]*V16_SYNC_NAMESPACE_BROWSER_PASSED[\s\S]*V16_VERIFIED_PIN_GATE_PASSED/
+  EVIDENCE: PENDING — Raed runs Playwright outside this sandbox.
+
+- [ ] G28: The separate HTTPS deployment installs the approved manifest/icons, receives current service-worker code, and reloads offline after first visit
+  CHECK: PWA_DEPLOY_URL=https://YOUR-SEPARATE-V16-SITE.netlify.app npm run test:pwa-deploy
+  EXPECT: PWA_DEPLOY_HTTPS_OFFLINE_PASSED
+  EVIDENCE: PENDING — requires the separate deployed HTTPS URL; the command fails loudly if PWA_DEPLOY_URL is unset or non-HTTPS.

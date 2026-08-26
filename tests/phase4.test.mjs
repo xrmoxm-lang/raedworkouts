@@ -25,6 +25,17 @@ test('failing-first: a plausible optional-PIN implementation bypasses an existin
   console.log(`PHASE4_PIN_FAILING_FIRST: direct entry bypassed an existing PIN. Assertion: ${legacyFailure.message}`);
 });
 
+// Fresh v16 origins have neither a local derived key nor a v16 server row.
+// A legacy `has_pin` hint alone is not a credential that this install can
+// verify, so routing it to the PIN keypad would lock the person out.
+test('failing-first: a seeded PIN hint without any credential reaches registration', () => {
+  assert.equal(
+    profileEntryMode({ has_pin: true, has_local_key: false, server_has_pin: false }),
+    'register',
+    'a fresh origin must never open an unsatisfiable PIN prompt',
+  );
+});
+
 test('PHASE4: empty PIN registration is valid while an existing PIN still gates entry', () => {
   assert.deepEqual(validateRegistrationPin('', ''), { valid: true, pin: '', has_pin: false });
   assert.deepEqual(validateRegistrationPin('1234', '1234'), { valid: true, pin: '1234', has_pin: true });
@@ -33,6 +44,7 @@ test('PHASE4: empty PIN registration is valid while an existing PIN still gates 
 
   assert.equal(profileEntryMode({ user_id: 'new-profile' }), 'register');
   assert.equal(profileEntryMode({ user_id: 'no-pin', has_pin: false }), 'direct');
-  assert.equal(profileEntryMode({ user_id: 'bassam', has_pin: true }), 'pin');
+  assert.equal(profileEntryMode({ user_id: 'bassam', has_pin: true, server_has_pin: true }), 'pin');
+  assert.equal(profileEntryMode({ user_id: 'bassam', has_pin: true, has_local_key: true }), 'pin');
   console.log('PHASE4_PIN_RULE_PASSED');
 });

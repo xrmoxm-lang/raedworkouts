@@ -2,7 +2,7 @@
  * Strategy:
  *   - App shell (html/css/js): kept fresh automatically.
  *       · navigations  → network-first (always newest HTML when online, cache offline)
- *       · css/js/json   → stale-while-revalidate (instant from cache, refreshed in bg)
+ *       · core css/js/json/modules → network-first (reload means new build)
  *   - Images + YouTube thumbnails → cache-first (rarely change).
  *   - Sync API → network-only. API failures must reject; never return HTML.
  *
@@ -10,7 +10,7 @@
  * index.html. The new SW installs in the background, calls skipWaiting(), and
  * the page (see app.js) reloads itself once to apply — no manual force-refresh.
  */
-const VERSION = 'v19';
+const VERSION = 'v20';
 const CACHE = 'raedworkouts-' + VERSION;
 const SHELL = [
   './',
@@ -18,7 +18,14 @@ const SHELL = [
   './styles.css',
   './data.js',
   './app.js',
+  './locale.js',
+  './domain/skin-suggestions.mjs',
+  './domain/substitutions.js',
+  './domain/programme.js',
   './manifest.webmanifest',
+  './icon-192.svg',
+  './icon-512.svg',
+  './icon-maskable-512.svg',
   './img/body_chest.png',
   './img/body_back.png',
   './img/body_bicep.png',
@@ -48,7 +55,7 @@ self.addEventListener('message', (e) => {
   if (e.data === 'skipWaiting') self.skipWaiting();
 });
 
-function isShellAsset(url) {
+function isCoreAsset(url) {
   return url.origin === location.origin && /\.(css|js|json|webmanifest)$/.test(url.pathname);
 }
 function isSyncHost(url) {
@@ -70,9 +77,12 @@ self.addEventListener('fetch', (e) => {
   }
 
   // 2) Navigations (the HTML document) → network-first so a new deploy shows up.
+  // `cache: 'no-store'` deliberately bypasses an intermediary's stale HTTP
+  // object.  This is the v15 stale-host failure mode: the PWA cache was
+  // correct, but the network path was serving an old build forever.
   if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-store' })
         .then(res => {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put('./index.html', copy)).catch(() => {});
@@ -83,19 +93,18 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 3) Shell assets (css/js/json) → stale-while-revalidate.
-  if (isShellAsset(url)) {
+  // 3) Core app assets → network-first. Filenames are stable (there is no
+  // bundler hash), so stale-while-revalidate would run yesterday's app.js for
+  // one more reload. Offline still falls back to the exact pre-cached shell.
+  if (isCoreAsset(url)) {
     e.respondWith(
-      caches.match(req).then(cached => {
-        const network = fetch(req).then(res => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-          }
-          return res;
-        }).catch(() => cached);
-        return cached || network;
-      })
+      fetch(req, { cache: 'no-store' }).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      }).catch(() => caches.match(req))
     );
     return;
   }
