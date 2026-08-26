@@ -53,6 +53,28 @@ const MUSCLES = {
   calves: { en: 'Calves', ar: 'سمانة', region: 'posterior' },
 };
 
+// The library retains its 15 anatomical display buckets. The Phase 5 weekly
+// ledger deliberately reports the 13 §8.5 tracked groups instead: chest
+// variants merge, vertical pulls are Lats, horizontal rows are Mid-back, and
+// forearms are intentionally outside D4's volume-floor audit.
+const VOLUME_MUSCLE_TAXONOMY = Object.freeze({
+  chest: 'Chest',
+  upper_chest: 'Chest',
+  back: 'Lats',
+  upper_back: 'Mid-back',
+  shoulders: 'Front delts',
+  side_delts: 'Side delts',
+  rear_delts: 'Rear delts',
+  biceps: 'Biceps',
+  triceps: 'Triceps',
+  quads: 'Quads',
+  hamstrings: 'Hamstrings',
+  glutes: 'Glutes',
+  calves: 'Calves',
+  abs: 'Abs',
+  forearms: null,
+});
+
 // ---- Exercise library ---------------------------------------
 // Each exercise: id, name, muscles, mohannad_videos[], jeff_nippard, alternatives[], notes
 const EXERCISES = [
@@ -137,7 +159,7 @@ const EXERCISES = [
     name_ar: 'ضغط أكتاف',
     aliases: ['Seated DB Shoulder Press'],
     primary: ['shoulders'],
-    secondary: ['triceps', 'upper_chest'],
+    secondary: ['triceps', 'upper_chest', 'side_delts'],
     pattern: 'vertical_push',
     mohannad: ['QjAoqZ6EpFg', 'WvLMauqrnK8'],
     jeff_nippard: 'https://www.youtube.com/results?search_query=shoulder+press+jeff+nippard',
@@ -228,7 +250,7 @@ const EXERCISES = [
     name_ar: 'سحب علوي قبضة محايدة',
     aliases: ['Neutral-Grip Lat Pulldown'],
     primary: ['back'],
-    secondary: ['biceps'],
+    secondary: ['biceps', 'rear_delts', 'upper_back'],
     pattern: 'vertical_pull',
     mohannad: ['goIzUxshgGI'],
     jeff_nippard: 'https://www.youtube.com/shorts/SqQxuEpXnF4',
@@ -240,8 +262,8 @@ const EXERCISES = [
     name: 'T-Bar Row',
     name_ar: 'سحب تي بار',
     aliases: ['Chest-Supported T-Bar Row'],
-    primary: ['back'],
-    secondary: ['rear_delts', 'biceps'],
+    primary: ['upper_back'],
+    secondary: ['back', 'rear_delts', 'biceps'],
     pattern: 'horizontal_pull',
     mohannad: ['36sT4np_G1E', '8bHhLWBAvBU'],
     jeff_nippard: 'https://www.youtube.com/shorts/fgSyNdEsqlM',
@@ -264,8 +286,8 @@ const EXERCISES = [
     id: 'seated_cable_row',
     name: 'Seated Cable Row',
     name_ar: 'سحب كيبل جالس',
-    primary: ['back'],
-    secondary: ['biceps', 'rear_delts'],
+    primary: ['upper_back'],
+    secondary: ['back', 'biceps', 'rear_delts'],
     pattern: 'horizontal_pull',
     mohannad: ['z7C7PxVDAD0', 'dCLRdVqKRkk', 'fPbfYDgzIgA'],
     jeff_nippard: 'https://www.youtube.com/shorts/fgSyNdEsqlM',
@@ -428,7 +450,7 @@ const EXERCISES = [
     name_ar: 'الرفعة الرومانية',
     aliases: ['DB Romanian Deadlift', 'Romanian Deadlift (Week 3+)'],
     primary: ['hamstrings'],
-    secondary: ['glutes', 'back'],
+    secondary: ['glutes'],
     pattern: 'compound_hinge',
     mohannad: [],
     jeff_nippard: 'https://www.youtube.com/watch?v=_oyxCn2iSjU',
@@ -493,11 +515,11 @@ const phase5Exercise = ({ id, name, primary, secondary = [], pattern, aliases = 
 
 EXERCISES.push(
   // The fourteen programme movements which were not in the v15 library.
-  phase5Exercise({ id: 'reverse_grip_lat_pulldown', name: 'Reverse-Grip Lat Pulldown', primary: 'back', secondary: ['biceps', 'rear_delts'], pattern: 'vertical_pull' }),
+  phase5Exercise({ id: 'reverse_grip_lat_pulldown', name: 'Reverse-Grip Lat Pulldown', primary: 'back', secondary: ['biceps', 'rear_delts', 'upper_back'], pattern: 'vertical_pull' }),
   phase5Exercise({ id: 'assisted_dip', name: 'Assisted Dip', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'compound_push' }),
   phase5Exercise({ id: 'single_arm_rope_triceps_extension', name: 'Single-Arm Rope Triceps Extension', primary: 'triceps', pattern: 'isolation_push' }),
-  phase5Exercise({ id: 'lying_leg_curl', name: 'Lying Leg Curl', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring' }),
-  phase5Exercise({ id: 'goblet_squat', name: 'Goblet Squat', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
+  phase5Exercise({ id: 'lying_leg_curl', name: 'Lying Leg Curl', primary: 'hamstrings', pattern: 'isolation_hamstring' }),
+  phase5Exercise({ id: 'goblet_squat', name: 'Goblet Squat', primary: 'quads', secondary: ['glutes', 'hamstrings'], pattern: 'compound_quad' }),
   phase5Exercise({ id: 'db_walking_lunge', name: 'DB Walking Lunge', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
   phase5Exercise({ id: 'hanging_leg_raise', name: 'Hanging Leg Raise', primary: 'abs', pattern: 'isolation_core' }),
   phase5Exercise({ id: 'ez_bar_curl', name: 'EZ Bar Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
@@ -971,4 +993,4 @@ const MOTIVATIONAL_MESSAGES = [
 ];
 
 // Export to global scope for the app
-window.RW = { MUSCLES, EXERCISES, PROGRAMME, SESSION_WARMUPS, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };
+window.RW = { MUSCLES, VOLUME_MUSCLE_TAXONOMY, EXERCISES, PROGRAMME, SESSION_WARMUPS, ATHLETE, FAMILY_PROFILES, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG };

@@ -58,6 +58,19 @@ function secondaryMuscles(exercise) {
   return exercise.secondary_muscles || exercise.secondary || [];
 }
 
+function ledgerMuscle(muscle, taxonomy) {
+  if (!taxonomy) return muscle;
+  if (!Object.hasOwn(taxonomy, muscle)) {
+    fail(`volume taxonomy has no mapping for muscle "${muscle}"`);
+  }
+  const mapped = taxonomy[muscle];
+  if (mapped === null) return null;
+  if (typeof mapped !== 'string' || !mapped.trim()) {
+    fail(`volume taxonomy mapping for muscle "${muscle}" must be a non-empty string or null`);
+  }
+  return mapped;
+}
+
 function addCredit(currency, muscle, amount) {
   currency.by_muscle[muscle] = (currency.by_muscle[muscle] || 0) + amount;
   currency.total_credits += amount;
@@ -85,6 +98,7 @@ export function weeklyVolume(user, week, source = {}, legacyCatalogue = null) {
     : { eventLog: source, catalogue: legacyCatalogue };
   const snapshot = snapshotFrom(options);
   const catalogue = options.catalogue || legacyCatalogue;
+  const taxonomy = options.muscleTaxonomy || null;
   if (!snapshot) fail('weeklyVolume requires an event-log snapshot');
   const userKey = canonicalUserKey(typeof user === 'object' ? (user.user_key ?? user.userId ?? user.id) : user);
   if (!userKey) fail('weeklyVolume requires a user');
@@ -99,12 +113,17 @@ export function weeklyVolume(user, week, source = {}, legacyCatalogue = null) {
     if (completedAt < start || completedAt >= end) continue;
     const exercise = exerciseLookup(catalogue, set.exercise_id);
     if (!exercise) fail(`set "${set.id}" references unknown exercise "${set.exercise_id}"`);
-    const primary = primaryMuscle(exercise);
-    const secondary = [...new Set(secondaryMuscles(exercise).filter((muscle) => muscle && muscle !== primary))];
+    const primary = ledgerMuscle(primaryMuscle(exercise), taxonomy);
+    const secondary = [...new Set(secondaryMuscles(exercise)
+      .filter(Boolean)
+      .map((muscle) => ledgerMuscle(muscle, taxonomy))
+      .filter((muscle) => muscle && muscle !== primary))];
     ordinary.working_set_count += 1;
     fractional.working_set_count += 1;
-    addCredit(ordinary, primary, 1);
-    addCredit(fractional, primary, 1);
+    if (primary) {
+      addCredit(ordinary, primary, 1);
+      addCredit(fractional, primary, 1);
+    }
     for (const muscle of secondary) {
       addCredit(ordinary, muscle, 1);
       addCredit(fractional, muscle, 0.5);

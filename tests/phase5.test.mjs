@@ -200,6 +200,43 @@ test('Phase 5 exports before retiring an unsafe legacy forced session and ignore
   console.log('PHASE5_PROGRAMME_REFERENCE_MIGRATION_PASSED');
 });
 
+test('Phase 5 volume taxonomy fails loudly for a muscle outside its tracked map', () => {
+  const unmappedExercise = {
+    id: 'phase5_unmapped_traps',
+    name: 'Phase 5 unmapped traps exercise',
+    name_ar: '',
+    primary: ['traps'],
+    secondary: [],
+    pattern: 'isolation_pull',
+    alternatives: [],
+  };
+  const catalogue = loadCatalogue([...rawData.EXERCISES, unmappedExercise]);
+  const snapshot = {
+    user_key: 'phase5-taxonomy',
+    sets: [{
+      id: 'phase5-taxonomy-set',
+      user_key: 'phase5-taxonomy',
+      exercise_id: unmappedExercise.id,
+      kind: 'working',
+      valid: true,
+      completed_at: '2026-08-19T12:00:00.000Z',
+    }],
+  };
+  let failure = null;
+  try {
+    weeklyVolume('phase5-taxonomy', '2026-W34', {
+      snapshot,
+      catalogue,
+      muscleTaxonomy: rawData.VOLUME_MUSCLE_TAXONOMY,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure instanceof Error, 'an unmapped taxonomy muscle must throw');
+  assert.match(failure.message, /Volume invariant failed: volume taxonomy has no mapping for muscle "traps"/);
+  console.log(`PHASE5_VOLUME_TAXONOMY_FAILURE_PASSED ${failure.message}`);
+});
+
 function realProgrammeWeek(programme) {
   let serial = 0;
   return {
@@ -217,17 +254,19 @@ function realProgrammeWeek(programme) {
   };
 }
 
-test('Phase 5 real catalogue re-derives the locked weekly volume ledger and D4 floor', () => {
+test('Phase 5 real catalogue re-derives the anatomy-corrected weekly volume ledger and D4 floor', () => {
   const catalogue = loadCatalogue(rawData.EXERCISES);
   const programme = resolveProgrammeBlock(rawData.PROGRAMME, { currentWeek: 1 });
   const volume = weeklyVolume('phase5-ledger', '2026-W34', {
     snapshot: realProgrammeWeek(programme),
     catalogue,
+    muscleTaxonomy: rawData.VOLUME_MUSCLE_TAXONOMY,
   });
   const fractional = volume.fractional.total_credits;
   const ordinary = volume.ordinary.total_credits;
   const measured = {
     direct: volume.fractional.working_set_count,
+    indirect: ordinary - volume.fractional.working_set_count,
     fractional,
     ordinary,
     conversion: Number((ordinary / fractional).toFixed(4)),
@@ -236,13 +275,40 @@ test('Phase 5 real catalogue re-derives the locked weekly volume ledger and D4 f
       .map(([muscle, sets]) => `${muscle}:${sets}`)
       .sort(),
   };
+  const perMuscle = Object.fromEntries(Object.entries(volume.fractional.by_muscle)
+    .map(([muscle, fractionalSets]) => {
+      const ordinarySets = volume.ordinary.by_muscle[muscle] || 0;
+      return [muscle, {
+        direct: (fractionalSets * 2) - ordinarySets,
+        indirect: (ordinarySets - fractionalSets) * 2,
+      }];
+    }));
   console.log(`PHASE5_LEDGER_MEASURED ${JSON.stringify(measured)}`);
+  console.log(`PHASE5_LEDGER_PER_MUSCLE ${JSON.stringify(perMuscle)}`);
+  // Locked correction: PHASE5-SPEC.md §2.1b. The prior `research/20` §8.5
+  // Glutes row omitted one anatomically meaningful indirect credit (the RDL).
   assert.deepEqual(measured, {
     direct: 75,
-    fractional: 116.5,
-    ordinary: 158,
-    conversion: 1.3562,
+    indirect: 86,
+    fractional: 118,
+    ordinary: 161,
+    conversion: 1.3644,
     below_floor: [],
+  });
+  assert.deepEqual(perMuscle, {
+    Chest: { direct: 9, indirect: 3 },
+    Lats: { direct: 6, indirect: 6 },
+    'Mid-back': { direct: 6, indirect: 8 },
+    'Front delts': { direct: 3, indirect: 9 },
+    'Side delts': { direct: 6, indirect: 3 },
+    'Rear delts': { direct: 2, indirect: 12 },
+    Biceps: { direct: 5, indirect: 12 },
+    Triceps: { direct: 2, indirect: 12 },
+    Quads: { direct: 12, indirect: 0 },
+    Hamstrings: { direct: 9, indirect: 9 },
+    Glutes: { direct: 3, indirect: 12 },
+    Calves: { direct: 6, indirect: 0 },
+    Abs: { direct: 6, indirect: 0 },
   });
   console.log('PHASE5_LEDGER_REDERIVED');
 });
