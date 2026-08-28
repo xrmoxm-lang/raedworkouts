@@ -22,6 +22,11 @@ export const LOCALE = Object.freeze({
   blocked_substitution_accepted: pair('User accepted blocked volume substitution.', 'قبِل المستخدم استبدالًا يخالف حدود الحجم.'),
   gym_day_plain: pair('Gym day', 'يوم نادٍ'),
   rest_day_plain: pair('Rest day', 'يوم راحة'),
+  // The rest-day banner shipped hardcoded English on an Arabic-only screen. It
+  // escaped the Arabic gate because that gate only ever rendered a training day.
+  home_rest_next: pair('Next: {name}', 'القادم: {name}'),
+  home_rest_rotation: pair('{day} · next in rotation', '{day} · التالي في الدورة'),
+  home_rest_recover: pair('Eat {protein} protein · Sleep 7+ hrs', 'بروتين {protein} · نوم ٧ ساعات فأكثر'),
   this_week_plain: pair('This week', 'هذا الأسبوع'),
   finish_and_save_session: pair('✓ Finish & save session', '✓ أنهِ الجلسة واحفظها'),
   end_session: pair('End session', 'أنهِ الجلسة'),

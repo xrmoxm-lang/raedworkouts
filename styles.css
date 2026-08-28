@@ -542,7 +542,12 @@ body.runner-mode .page-runner.active {
   min-height: 46px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--bg-card); color: var(--text); font: inherit; font-weight: 700;
   cursor: pointer; touch-action: manipulation;
+  /* Face over word. 46px is the one-thumb target and holds both without growing. */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
 }
+/* Emoji carry their own colour, so they must not inherit .active's accent-fg. */
+.effort-picker .effort-emoji { font-size: 17px; line-height: 1; }
+.effort-picker .effort-word { font-size: 11px; font-weight: 700; }
 .effort-picker button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
 /* General warm-up is a real, ordered session phase. */

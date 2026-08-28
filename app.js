@@ -48,7 +48,16 @@ const h = (tag, attrs = {}, ...children) => {
   }
   for (const c of children.flat()) {
     if (c == null || c === false) continue;
-    el.appendChild(typeof c === 'string' ? localizedTextNode(c) : c);
+    // A <bdi> already isolates everything inside it, so splitting its own string
+    // children into further <bdi class="ltr-run"> runs produces <bdi><bdi>…</bdi></bdi>.
+    // Renderers wrap Latin names manually AND localizedTextNode wraps them
+    // automatically, so every such call site was doubling. Translate the string
+    // here, but leave the isolation to the <bdi> we are already building.
+    if (typeof c === 'string') {
+      el.appendChild(tag === 'bdi' ? document.createTextNode(localizeText(c)) : localizedTextNode(c));
+      continue;
+    }
+    el.appendChild(c);
   }
   return el;
 };
@@ -185,22 +194,35 @@ function programmeMigrationExportKey(userId) { return nsKey(userId, 'programme-m
 
 // ---- Final-set effort -----------------------------------------
 // D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
+// The emoji are v15's, unchanged: 😌 / 💪 / 🥵. v15 stored an RPE number (7/8/9)
+// behind them; D16 replaced that with three words. The faces map one-to-one onto
+// the words, so this is v15's picture over v16's meaning — nothing numeric returns.
+// v15 hid them behind a popover (two taps). These stay inline (one tap), because
+// one-thumb logging outranks copying the interaction.
 const EFFORT_LEVELS = [
-  { value: 'easy', label: 'Easy' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'very_hard', label: 'Very hard' },
+  { value: 'easy', emoji: '😌' },
+  { value: 'medium', emoji: '💪' },
+  { value: 'very_hard', emoji: '🥵' },
 ];
 function effortPicker(set, onChange) {
-  return h('div', { class: 'effort-picker', role: 'group', 'aria-label': 'Final-set effort' },
+  return h('div', { class: 'effort-picker', role: 'group', 'aria-label': t('final_set_effort') },
     EFFORT_LEVELS.map(level => h('button', {
       type: 'button',
       class: set.effort === level.value ? 'active' : '',
       'aria-pressed': set.effort === level.value ? 'true' : 'false',
+      // The face is decoration; the word is the accessible name, so a screen
+      // reader announces «سهل», never "smiling face with relieved expression".
+      'aria-label': t(level.value),
       onClick: () => {
         set.effort = level.value;
         if (onChange) onChange(level.value);
       },
-    }, level.label))
+    },
+      h('span', { class: 'effort-emoji', 'aria-hidden': 'true' }, level.emoji),
+      // t(), not a hardcoded string: the Arabic was already in locale.js and the
+      // picker was rendering English over it on an Arabic-only screen.
+      h('span', { class: 'effort-word' }, t(level.value)),
+    ))
   );
 }
 
@@ -2627,18 +2649,22 @@ function renderHome() {
     ));
   } else if (planned) {
     const parts = planned.name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner' },
+    root.appendChild(h('div', { class: 'today-banner', 'data-home-overview': 'true' },
       h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
       h('h2', {}, parts[0]),
       h('p', {}, parts[1] || planned.name),
       h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ~', tf('home_minutes', { n: 70 })),
     ));
   } else {
-    root.appendChild(h('div', { class: 'today-banner rest' },
-      h('div', { class: 'tb-kicker' }, 'Rest day'),
-      h('h2', {}, 'Next: ' + next.session.name.split(' — ')[0]),
-      h('p', {}, `${next.session.day || next.session.name} · next in rotation`),
-      h('div', { class: 'tb-meta' }, `Eat ${profileProteinRange()} protein · Sleep 7+ hrs`),
+    // data-home-overview marks "home drew its banner", not "a session is running",
+    // so it belongs on all three branches. It was on the active branch alone, which
+    // is why the fresh-install deploy gate — the one case that matters on launch
+    // day — could not find it.
+    root.appendChild(h('div', { class: 'today-banner rest', 'data-home-overview': 'true' },
+      h('div', { class: 'tb-kicker' }, t('rest_day_plain')),
+      h('h2', {}, tf('home_rest_next', { name: next.session.name.split(' — ')[0] })),
+      h('p', {}, tf('home_rest_rotation', { day: next.session.day || next.session.name })),
+      h('div', { class: 'tb-meta' }, tf('home_rest_recover', { protein: profileProteinRange() })),
     ));
   }
 
@@ -2718,7 +2744,9 @@ function renderHome() {
       h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
         platformPlaylists.map((playlist) => h('a', {
           href: playlist.url, target: '_blank', rel: 'noopener', class: 'btn tiny', title: playlist.vibe,
-        }, isolate(playlist.label))),
+          // No isolate() here: getCurrentPlaylists already returns the label as a
+          // <bdi class="ltr-run">, so wrapping again produced nested <bdi><bdi>.
+        }, playlist.label)),
       ),
     ));
   }
