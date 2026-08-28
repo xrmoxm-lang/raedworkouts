@@ -9,6 +9,13 @@ import {
   localProfileIdFromV16SyncId,
   v16SyncUserId,
 } from './domain/sync-identity.js';
+import {
+  applyWorkingSetAttempt,
+  isCountableWorkingSet,
+  isRunnerExerciseResolved,
+  isRunnerSetResolved,
+  skipRunnerExercise as skipRunnerExerciseState,
+} from './domain/runner-session.js';
 import { format as localeFormat, text as localeText } from './locale.js';
 
 /* ============================================================
@@ -1199,9 +1206,29 @@ async function signInWithoutPin(profile) {
   } catch (error) {
     settings = previousSettings;
     if (syncErrorStatus(error) === 401) {
-      welcomeSelectedProfile = { ...profile, has_pin: true, server_has_pin: true };
-      welcomePinMessage = 'This profile requires its PIN.';
-      welcomeMode = 'pin';
+      // A 401 alone is not proof of a credential. On a fresh origin it can be
+      // the server rejecting a blank state fetch, while there is no local key
+      // and `/users` advertised no PIN-protected v16 row. Sending Raed to a
+      // keypad then is an unsatisfiable lockout. Only the explicit picker
+      // evidence (`server_has_pin`) may take this path.
+      if (profile.server_has_pin === true) {
+        welcomeSelectedProfile = { ...profile, has_pin: true, server_has_pin: true };
+        welcomePinMessage = 'This profile requires its PIN.';
+        welcomeMode = 'pin';
+      } else {
+        // Undo the tentative direct sign-in. Until registration succeeds this
+        // origin owns neither an active local profile nor a credential.
+        setActiveUser('');
+        welcomeSelectedProfile = {
+          ...profile,
+          has_pin: false,
+          has_local_key: false,
+          server_has_pin: false,
+          needs_registration: true,
+        };
+        welcomePinMessage = '';
+        welcomeMode = 'register';
+      }
       renderWelcome();
       return;
     }
@@ -1359,7 +1386,9 @@ function renderRegisterPanel(profile) {
       } catch (e) {
         const statusCode = syncErrorStatus(e);
         if (statusCode === 409 || /pin_already_set/.test(e.message || '')) {
-          welcomeSelectedProfile = { ...profile, has_pin: true };
+          // The register endpoint has explicitly confirmed a credential, so
+          // this is legitimate evidence for the PIN route on this v16 row.
+          welcomeSelectedProfile = { ...profile, has_pin: true, server_has_pin: true };
           welcomePinMessage = 'This profile already has a PIN — enter it.';
           welcomeMode = 'pin';
           renderWelcome();
@@ -1686,7 +1715,7 @@ function getLastPerformance(exercise_id) {
   for (let i = state.history.length - 1; i >= 0; i--) {
     const h = state.history[i];
     const ex = h.exercises[exercise_id];
-    if (ex && ex.sets && ex.sets.length) return { date: h.date, ...ex };
+    if (ex?.sets?.some(isCountableWorkingSet)) return { date: h.date, ...ex };
   }
   return null;
 }
@@ -1694,7 +1723,7 @@ function getLastTwoPerformances(exercise_id) {
   const out = [];
   for (let i = state.history.length - 1; i >= 0 && out.length < 2; i--) {
     const ex = state.history[i].exercises[exercise_id];
-    if (ex && ex.sets && ex.sets.length) out.push({ date: state.history[i].date, ...ex });
+    if (ex?.sets?.some(isCountableWorkingSet)) out.push({ date: state.history[i].date, ...ex });
   }
   return out;
 }
@@ -1769,9 +1798,9 @@ function suggestNextWeight(exercise_id, planned) {
   const latest = last2[0];
   const topReps = parseInt(String(planned.reps).split('-').pop(), 10) || 10;
   // Find the heaviest working set
-  const workingSets = (latest.sets || []).filter(s => !s.is_warmup && s.weight && s.reps && s.completed);
+  const workingSets = (latest.sets || []).filter(isCountableWorkingSet);
   if (!workingSets.length) {
-    const historicWeight = (latest.sets || []).map((set) => set.weight).find(hasWorkingWeight);
+    const historicWeight = (latest.sets || []).filter(isCountableWorkingSet).map((set) => set.weight).find(hasWorkingWeight);
     return hasWorkingWeight(historicWeight)
       ? { weight: Number(historicWeight), note: 'Use the last logged working load and complete the prescribed reps.' }
       : { weight: null, note: '' };
@@ -1784,7 +1813,7 @@ function suggestNextWeight(exercise_id, planned) {
   const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
   const bump = isLowerBody ? 5 : (isAccessory ? 0 : 2.5);
   if (allHitTarget && last2.length === 2) {
-    const prevSets = (last2[1].sets || []).filter(s => !s.is_warmup && s.completed);
+    const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
     const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
     if (prevAllHit) {
       if (finalEffort === 'very_hard') {
@@ -1817,7 +1846,7 @@ function getWeeklyVolume() {
     if (new Date(h.date).getTime() >= weekAgo) {
       Object.values(h.exercises).forEach(ex => {
         (ex.sets || []).forEach(s => {
-          if (!s.is_warmup && s.completed) {
+          if (isCountableWorkingSet(s)) {
             totalSets++;
             totalKg += (Number(s.weight) || 0) * (Number(s.reps) || 0);
           }
@@ -1968,8 +1997,8 @@ function endSession() {
   if (!state.active_session) return;
   const a = state.active_session;
   // Compute completed flag
-  const anyDone = Object.values(a.exercises).some(ex => ex.sets.some(s => s.completed));
-  if (!anyDone) {
+  const anyResolved = Object.values(a.exercises).some(isRunnerExerciseResolved);
+  if (!anyResolved) {
     if (!confirm('No sets logged. Discard this session?')) return;
     state.active_session = null;
     state.forced_next_session = null;
@@ -2010,7 +2039,7 @@ function computeSessionStats(session) {
   let totalSets = 0, totalReps = 0, totalVol = 0, totalWeightLifted = 0;
   for (const ex of Object.values(session.exercises || {})) {
     for (const s of (ex.sets || [])) {
-      if (!s.completed || s.is_warmup) continue;
+      if (!isCountableWorkingSet(s)) continue;
       totalSets++;
       const r = parseInt(s.reps, 10) || 0;
       const w = parseFloat(s.weight) || 0;
@@ -2292,6 +2321,13 @@ function updateRunnerSet(exerciseId, setIndex, property, value) {
   const set = state.active_session?.exercises?.[exerciseId]?.sets?.[setIndex];
   if (!set) return;
   set[property] = value;
+  if ((property === 'weight' || property === 'reps') && (set.invalid || set.invalid_prompted)) {
+    // Editing is recovery, not a dead end: a corrected row is eligible for a
+    // normal log again. The retained invalid record remains in already-ended
+    // sessions, while an active session stays editable.
+    set.invalid = null;
+    set.invalid_prompted = false;
+  }
   saveLocal();
 }
 
@@ -2314,32 +2350,72 @@ function toggleRunnerSet(exerciseId, setIndex) {
   const exerciseState = state.active_session?.exercises?.[exerciseId];
   const set = exerciseState?.sets?.[setIndex];
   if (!set) return;
+  if (set.skipped) {
+    toast(t('runner_exercise_skipped'));
+    return;
+  }
+  if (set.invalid) {
+    set.invalid = null;
+    set.invalid_prompted = false;
+    saveLocal();
+    render();
+    return;
+  }
   const actualId = exerciseState.swapped_to || exerciseId;
   const workingSets = exerciseState.sets.filter((item) => !item.is_warmup);
   const isFinalWorkingSet = !set.is_warmup && set === workingSets[workingSets.length - 1];
   if (!set.completed) {
-    if (!set.is_warmup && (!hasWorkingWeight(set.weight) || !Number.isFinite(Number(set.reps)) || Number(set.reps) < 1)) {
-      toast(t('required'));
-      return;
+    if (!set.is_warmup) {
+      const valuesAreValid = hasWorkingWeight(set.weight) && Number.isFinite(Number(set.reps)) && Number(set.reps) >= 1;
+      if (valuesAreValid && isFinalWorkingSet && !set.effort) {
+        toast('Final set: tap easy, medium, or very hard first.');
+        return;
+      }
+      if (valuesAreValid && exerciseState.sets.some((prior, index) => index < setIndex && prior.is_warmup && !prior.completed)) {
+        toast('Finish this exercise’s ramp set first.');
+        return;
+      }
+      const result = applyWorkingSetAttempt(set, new Date().toISOString());
+      Object.assign(set, result.set);
+      if (result.outcome === 'confirm-invalid') {
+        saveLocal();
+        render();
+        toast(t('runner_invalid_prompt'), 4200);
+        return;
+      }
+      if (result.outcome === 'stored-invalid') {
+        saveLocal();
+        render();
+        toast(t('runner_invalid_saved'), 3200);
+        return;
+      }
+      detectPR(actualId, Number(set.weight), Number(set.reps));
     }
-    if (isFinalWorkingSet && !set.effort) {
-      toast('Final set: tap easy, medium, or very hard first.');
-      return;
-    }
-    if (!set.is_warmup && exerciseState.sets.some((prior, index) => index < setIndex && prior.is_warmup && !prior.completed)) {
-      toast('Finish this exercise’s ramp set first.');
-      return;
-    }
-    if (!set.is_warmup && set.weight && set.reps) detectPR(actualId, Number(set.weight), Number(set.reps));
   }
   const wasCompleted = set.completed;
-  set.completed = !set.completed;
+  if (set.is_warmup) set.completed = !set.completed;
   saveLocal();
   render();
   if (!wasCompleted && set.completed && !set.is_warmup) {
     startRest(settings.rest_seconds);
     if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
   }
+}
+
+function nextUnresolvedRunnerExerciseIndex(entries = runnerEntries()) {
+  return entries.findIndex(([, exercise]) => !isRunnerExerciseResolved(exercise));
+}
+
+function skipRunnerExercise(exerciseId) {
+  const active = state.active_session;
+  const exercise = active?.exercises?.[exerciseId];
+  if (!active || !exercise) return;
+  active.exercises[exerciseId] = skipRunnerExerciseState(exercise, new Date().toISOString());
+  const next = nextUnresolvedRunnerExerciseIndex();
+  if (next >= 0) active.runner_exercise_index = next;
+  saveLocal();
+  render();
+  toast(t('runner_exercise_skipped'));
 }
 
 function completeRunnerWarmup({ skipped = false } = {}) {
@@ -2397,14 +2473,39 @@ function runnerLongPress(exerciseId, exerciseState) {
   };
 }
 
+function currentPlaylistPlatform(session) {
+  const chosen = settings.music_platform || 'spotify';
+  if (chosen === 'none') return null;
+  if (Array.isArray(session?.playlists) || session?.playlists?.[chosen]?.length) return chosen;
+  return session?.playlists?.spotify?.length ? 'spotify' : null;
+}
+
+// This is intentionally the v15 hand-off: show the selected platform's real
+// playlist links, open them in a separate tab, and leave playback to Spotify.
+function renderRunnerPlaylistHandoff(session) {
+  const playlists = getCurrentPlaylists(session);
+  const platform = currentPlaylistPlatform(session);
+  if (!playlists.length || !platform) return null;
+  const info = PLATFORM_INFO[platform] || PLATFORM_INFO.spotify;
+  return h('section', {
+    class: 'runner-playlist-handoff',
+    'data-runner-playlist-handoff': 'true',
+    'data-runner-music-platform': platform,
+  },
+  h('div', { class: 'runner-playlist-kicker' }, tf('runner_music_handoff', { platform: `${info.icon} ${info.label}` })),
+  h('div', { class: 'runner-playlist-links' }, playlists.map((playlist) => h('a', {
+    href: playlist.url,
+    target: '_blank',
+    rel: 'noopener',
+    title: playlist.vibe || playlist.label,
+  }, isolate(playlist.label)))));
+}
+
 function renderRunnerWarmup(activeSession) {
   const warmup = activeSession.warmup;
   const drills = warmup?.drills || [];
   const complete = generalWarmupComplete(warmup);
   const session = getActiveProgramme()?.sessions?.find((item) => item.id === activeSession.session_id);
-  // Raed wants one press-play affordance while warming up only.  It is kept
-  // out of the lifting runner rather than merely hidden there.
-  const spotify = session?.playlists?.spotify?.[0] || null;
   return h('div', { class: 'runner-warmup', 'data-runner-warmup': 'true', dir: 'rtl' },
     h('div', { class: 'runner-exercise-title' },
       h('div', { class: 'runner-overline' }, t('phase_one')),
@@ -2426,7 +2527,7 @@ function renderRunnerWarmup(activeSession) {
     h('div', { class: 'runner-warmup-actions' },
       h('button', { type: 'button', class: 'btn ghost', 'data-runner-skip-warmup': 'true', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
     ),
-    spotify ? h('a', { class: 'runner-warmup-spotify', href: spotify.url, target: '_blank', rel: 'noopener' }, t('warmup_spotify')) : null,
+    renderRunnerPlaylistHandoff(session),
   );
 }
 
@@ -2492,11 +2593,10 @@ function renderRunner() {
 
   active.runner_exercise_index = index;
   const suggested = suggestNextWeight(actualId, exerciseState.planned);
-  const currentIndex = exerciseState.sets.findIndex((set) => !set.completed);
+  const currentIndex = exerciseState.sets.findIndex((set) => !isRunnerSetResolved(set));
   const selectedSet = currentIndex >= 0 ? exerciseState.sets[currentIndex] : null;
-  const currentExerciseComplete = !selectedSet;
-  const nextIncompleteExerciseIndex = entries.findIndex(([, entry]) =>
-    (entry.sets || []).some((set) => !set.is_warmup && !set.completed));
+  const currentExerciseComplete = isRunnerExerciseResolved(exerciseState);
+  const nextIncompleteExerciseIndex = nextUnresolvedRunnerExerciseIndex(entries);
   const sessionComplete = nextIncompleteExerciseIndex === -1;
   const last = getLastPerformance(actualId);
   const videos = buildExerciseVideos(actualId, exercise);
@@ -2526,7 +2626,7 @@ function renderRunner() {
       const workingNumber = setIndex + 1 - exerciseState.sets.slice(0, setIndex + 1).filter((item) => item.is_warmup).length;
       const isFinal = !set.is_warmup && set === workingSets[workingSets.length - 1];
       return h('div', {
-        class: 'runner-set-row' + (setIndex === currentIndex ? ' current' : '') + (set.completed ? ' done' : ''),
+        class: 'runner-set-row' + (setIndex === currentIndex ? ' current' : '') + (set.completed ? ' done' : '') + (set.invalid ? ' invalid' : '') + (set.skipped ? ' skipped' : ''),
         'data-runner-set-row': String(setIndex),
       },
       h('span', { class: 'runner-set-number' }, isolate(set.is_warmup ? tf('runner_warmup_set', { set: warmupCount }) : String(workingNumber))),
@@ -2539,7 +2639,7 @@ function renderRunner() {
       }),
       h('span', { class: 'runner-unit' }, t('kg')),
       h('input', { type: 'number', dir: 'ltr', step: '1', inputmode: 'numeric', 'aria-label': tf('runner_reps_for_set', { set: setIndex + 1 }), value: set.reps ?? workingRepTarget(exerciseState.planned), onInput: (event) => updateRunnerSet(exerciseId, setIndex, 'reps', event.target.value === '' ? '' : Number(event.target.value)) }),
-      h('button', { type: 'button', class: 'runner-set-check', 'aria-label': tf('runner_log_set_number', { set: setIndex + 1 }), onClick: () => toggleRunnerSet(exerciseId, setIndex) }, set.completed ? '✓' : '○'),
+      h('button', { type: 'button', class: 'runner-set-check', 'aria-label': tf('runner_log_set_number', { set: setIndex + 1 }), onClick: () => toggleRunnerSet(exerciseId, setIndex) }, set.skipped ? '↷' : (set.invalid ? '!' : (set.completed ? '✓' : '○'))),
       isFinal && setIndex === currentIndex ? h('div', { class: 'runner-effort' }, effortPicker(set, () => { saveLocal(); render(); })) : null,
       );
     }),
@@ -2556,13 +2656,15 @@ function renderRunner() {
     setList,
   ));
   if (settings.show_cues && exercise.cue) card.appendChild(h('p', { class: 'runner-cue' }, isolate(exercise.cue)));
-  const lastWorking = last?.sets?.filter((set) => !set.is_warmup && set.completed) || [];
+  const lastWorking = last?.sets?.filter(isCountableWorkingSet) || [];
   card.appendChild(h('div', { class: 'runner-last-time' }, t('runner_last_time'), ' · ', h('bdi', {}, lastWorking.length ? `${lastWorking.at(-1).weight} ${t('kg')} × ${lastWorking.at(-1).reps}` : '—')));
+  card.appendChild(renderRunnerPlaylistHandoff(getActiveProgramme()?.sessions?.find((item) => item.id === active.session_id)));
   middle.appendChild(card);
   shell.appendChild(middle);
   shell.appendChild(h('div', { class: 'runner-bottom-actions' },
     h('button', { type: 'button', class: 'runner-rest', onClick: () => startRest(settings.rest_seconds) }, h('bdi', {}, `⏱ ${String(Math.floor(settings.rest_seconds / 60))}:${String(settings.rest_seconds % 60).padStart(2, '0')}`), ' · ', t('runner_rest')),
     h('button', { type: 'button', class: 'runner-add-set', 'data-runner-add-set': 'true', onClick: () => addRunnerSet(exerciseId) }, t('runner_add_set')),
+    h('button', { type: 'button', class: 'runner-skip-exercise', 'data-runner-skip-exercise': 'true', onClick: () => skipRunnerExercise(exerciseId) }, t('runner_skip_exercise')),
   ));
   const runnerAction = sessionComplete
     ? h('button', { type: 'button', class: 'btn primary runner-log-button', onClick: endSession }, t('end_session'))
@@ -2577,6 +2679,15 @@ function renderRunner() {
       }, isolate(t('runner_log_set')));
   shell.appendChild(h('footer', { class: 'runner-bottom-bar' }, runnerAction));
   root.appendChild(shell);
+  requestAnimationFrame(() => {
+    const list = root.querySelector('[data-runner-set-list]');
+    const current = list?.querySelector('.runner-set-row.current');
+    if (!list || !current) return;
+    const listRect = list.getBoundingClientRect();
+    const currentRect = current.getBoundingClientRect();
+    if (currentRect.top < listRect.top) list.scrollTop += currentRect.top - listRect.top;
+    if (currentRect.bottom > listRect.bottom) list.scrollTop += currentRect.bottom - listRect.bottom;
+  });
 }
 
 function renderHome() {

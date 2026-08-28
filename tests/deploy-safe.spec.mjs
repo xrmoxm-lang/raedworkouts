@@ -36,18 +36,58 @@ test('Deploy safety: a fresh seeded profile hint reaches optional-PIN registrati
   await expect(raed).toHaveCount(1);
   await raed.click();
   await expect(page.locator('.pin-panel'), 'no v16 credential exists, so a PIN prompt would be unsatisfiable').toHaveCount(0);
+  await expect(page.locator('.pin-key'), 'a fresh seeded profile must expose no numeric keypad buttons').toHaveCount(0);
   const registration = page.locator('.register-panel');
   await expect(registration).toHaveCount(1);
+  const createProfile = page.getByRole('button', { name: 'أنشئ الملف' });
+  await expect(createProfile, 'a fresh seeded profile must have a reachable registration action').toBeVisible();
 
   // Leaving both fields blank is the supported first-run path. The aborted
   // server makes this a real offline gym-basement case rather than a mock.
-  await registration.locator('.btn.primary.full').click();
+  await createProfile.click();
   await expect(page.locator('[data-home-overview]')).toHaveCount(1);
   const start = page.locator('#page-home button.btn.primary.full').first();
   await expect(start).toContainText('Upper A');
   await start.click();
   await expect(page.locator('[data-session-runner]')).toHaveCount(1);
   console.log('V16_FRESH_PROFILE_NONBLOCKING_PASSED');
+});
+
+test('Deploy safety: a fresh seeded profile cannot turn an unverified state 401 into a PIN lockout', async ({ page }) => {
+  await page.route(`${syncOrigin}/**`, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === '/users') {
+      // Fresh origin: no `raed-v16` record advertised as PIN-protected.
+      await route.fulfill({ contentType: 'application/json', body: '[]' });
+      return;
+    }
+    if (url.pathname === '/state' && request.method() === 'GET') {
+      // This is the real regression path: a state fetch refuses the blank key,
+      // but the profile picker has no local credential or server PIN record.
+      await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'pin_required' }) });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
+  });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    // A v16 profile that is explicitly PIN-free still has no local key. This
+    // makes the click take the direct first-run path before the server's
+    // unverified 401 arrives.
+    localStorage.setItem('raedworkouts.profiles.v1', JSON.stringify([
+      { user_id: 'Raed', display_name: 'Raed', experience: 'detrained', has_pin: false },
+    ]));
+  });
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await page.locator('.profile-tile').filter({ hasText: 'Raed' }).click();
+
+  // A numeric keypad here is an unsatisfiable credential prompt. Registration
+  // is the only legitimate first-run route until a credential is actually
+  // present locally or is reported by the v16 server row.
+  await expect(page.locator('.pin-key')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'أنشئ الملف' })).toBeVisible();
+  console.log('V16_FRESH_PROFILE_401_REGISTRATION_PASSED');
 });
 
 test('Deploy safety: the fresh v16 profile writes only raed-v16, never Raed', async ({ page }) => {

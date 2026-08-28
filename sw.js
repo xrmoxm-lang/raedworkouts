@@ -10,7 +10,7 @@
  * index.html. The new SW installs in the background, calls skipWaiting(), and
  * the page (see app.js) reloads itself once to apply — no manual force-refresh.
  */
-const VERSION = 'v20';
+const VERSION = 'v21';
 const CACHE = 'raedworkouts-' + VERSION;
 const SHELL = [
   './',
@@ -22,6 +22,8 @@ const SHELL = [
   './domain/skin-suggestions.mjs',
   './domain/substitutions.js',
   './domain/programme.js',
+  './domain/sync-identity.js',
+  './domain/runner-session.js',
   './manifest.webmanifest',
   './icon-192.svg',
   './icon-512.svg',

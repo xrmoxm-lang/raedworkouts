@@ -234,6 +234,10 @@ body.runner-mode .page-runner.active {
 .runner-set-row { display: grid; grid-template-columns: 28px minmax(54px, 1fr) 21px minmax(48px, .8fr) 52px; gap: 6px; min-height: 52px; align-items: center; margin-top: 2px; border-radius: var(--radius-xs); }
 .runner-set-row.current { padding: 3px 5px; margin-right: -5px; margin-left: -5px; background: var(--accent-soft); }
 .runner-set-row.done { opacity: .58; }
+.runner-set-row.invalid { opacity: .78; }
+.runner-set-row.invalid .runner-set-check { border-color: var(--warning); color: var(--warning); }
+.runner-set-row.skipped { opacity: .52; }
+.runner-set-row.skipped .runner-set-check { border-color: var(--text-muted); color: var(--text-muted); }
 .runner-set-number { color: var(--text-muted); font-size: 12px; font-weight: 800; text-align: center; }
 .runner-set-row.current .runner-set-number { color: var(--accent); }
 .runner-set-row input { width: 100%; min-width: 0; height: 52px; padding: 4px 7px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 17px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
@@ -246,10 +250,15 @@ body.runner-mode .page-runner.active {
 .runner-effort .effort-picker button { min-height: 31px; font-size: 11px; }
 .runner-cue { flex: 0 0 auto; min-height: 38px; margin: 0; padding: 5px 2px; overflow: hidden; color: var(--text-muted); font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .runner-last-time { flex: 0 0 auto; min-height: 34px; padding: 7px 9px; border-radius: var(--radius-xs); background: var(--bg-elev); color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runner-playlist-handoff { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 5px 7px; min-height: 36px; margin-top: 5px; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--bg-elev); }
+.runner-playlist-kicker { flex: 1 1 100%; color: var(--text-muted); font-size: 10px; font-weight: 700; line-height: 1.15; }
+.runner-playlist-links { display: flex; flex: 1 1 100%; gap: 6px; min-width: 0; }
+.runner-playlist-links a { min-width: 0; flex: 1 1 auto; padding: 5px 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 999px; color: var(--accent); font-size: 11px; font-weight: 800; text-align: center; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .runner-bottom-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px; }
-.runner-rest, .runner-add-set { min-height: 40px; padding: 5px 9px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+.runner-rest, .runner-add-set, .runner-skip-exercise { min-height: 40px; padding: 5px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; white-space: nowrap; }
 .runner-add-set { color: var(--accent); }
-.runner-rest:active, .runner-add-set:active { background: var(--accent-soft); }
+.runner-skip-exercise { color: var(--text-muted); }
+.runner-rest:active, .runner-add-set:active, .runner-skip-exercise:active { background: var(--accent-soft); }
 .runner-bottom-bar { min-height: 0; padding: 8px 16px calc(10px + var(--safe-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; background: var(--bg); }
 .runner-log-button { min-height: 54px; font-size: 16px; }
 .runner-warmup { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; }
@@ -265,7 +274,6 @@ body.runner-mode .page-runner.active {
 .runner-drill:disabled { opacity: .45; }
 .runner-warmup-actions { display: flex; justify-content: flex-start; margin-top: auto; }
 .runner-warmup-actions .btn { min-height: 44px; }
-.runner-warmup-spotify { display: block; flex: 0 0 auto; padding: 8px; color: var(--accent); font-size: 12px; font-weight: 750; text-align: center; text-decoration: none; }
 .runner-settings-sheet h3 { margin: 0 0 10px; }
 .runner-setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 50px; border-top: 1px solid var(--border); font-size: 14px; font-weight: 700; }
 .runner-settings-sheet .btn.full { margin-top: 8px; }

@@ -154,12 +154,40 @@ rows are explicitly out of scope and unreachable from the v16 client.
   EXPECT: /V16_SYNC_NAMESPACE_PASSED[\s\S]*V16_ALLOWLIST_ADDITIVE_PASSED/
   EVIDENCE: exit=0; node test run locally; both additive namespace assertions emitted their success markers.
 
-- [ ] G27: A fresh browser origin reaches optional-PIN registration and emits only a namespaced v16 state write
+- [ ] G27: A fresh browser origin reaches optional-PIN registration even if an unverified state fetch returns 401, and emits only a namespaced v16 state write
   CHECK: npm run test:deploy-safe
-  EXPECT: /V16_FRESH_PROFILE_NONBLOCKING_PASSED[\s\S]*V16_SYNC_NAMESPACE_BROWSER_PASSED[\s\S]*V16_VERIFIED_PIN_GATE_PASSED/
-  EVIDENCE: PENDING — Raed runs Playwright outside this sandbox.
+  EXPECT: /V16_FRESH_PROFILE_NONBLOCKING_PASSED[\s\S]*V16_FRESH_PROFILE_401_REGISTRATION_PASSED[\s\S]*V16_SYNC_NAMESPACE_BROWSER_PASSED[\s\S]*V16_VERIFIED_PIN_GATE_PASSED/
+  EVIDENCE: FAILING-FIRST — Raed's clean-origin run of the stashed branch reached the numeric keypad and «أدخل رمزك» with no route forward. The new test reproduces that direct path with `/users=[]` and an unverified `/state` 401; its pre-fix expectation is zero `.pin-key` buttons and a reachable «أنشئ الملف». Green external verification is pending because Chromium aborts in the Codex sandbox.
 
 - [ ] G28: The separate HTTPS deployment installs the approved manifest/icons, receives current service-worker code, and reloads offline after first visit
   CHECK: PWA_DEPLOY_URL=https://YOUR-SEPARATE-V16-SITE.netlify.app npm run test:pwa-deploy
   EXPECT: PWA_DEPLOY_HTTPS_OFFLINE_PASSED
   EVIDENCE: PENDING — requires the separate deployed HTTPS URL; the command fails loudly if PWA_DEPLOY_URL is unset or non-HTTPS.
+
+# Gates: v16 overnight runner usability release (N2, N4, N5)
+
+Scope extension: tomorrow's workout must keep the focused v16 runner while restoring
+the Spotify hand-off and non-corrupt skip behaviour Raed relied on in v15. The
+progress and session-switching layout are deliberately deferred to Raed's current
+design review. v15 remains a read-only reference; no bare v15 sync identity,
+programme migration, or app rename is in scope.
+
+- [ ] G29: At 390 px every set row fits its weight, reps, and done controls without horizontal scrolling
+  CHECK: npm run test:runner
+  EXPECT: RUNNER_SET_ROW_WIDTH_PASSED
+  EVIDENCE: PENDING — browser gate; Raed runs Playwright outside the Codex sandbox.
+
+- [ ] G30: A valid set logs, an explicit exercise skip advances without a zero row or volume credit, and an invalid attempt is retained after one prompt
+  CHECK: npm run test:runner && node --test tests/overnight-runner.test.mjs
+  EXPECT: RUNNER_SKIP_POLICY_PASSED
+  EVIDENCE: PENDING — includes browser wiring plus a deterministic state-policy test.
+
+- [ ] G31: Runner Spotify uses the same selected-platform playlist hand-off as v15 rather than a warm-up-only redesign
+  CHECK: npm run test:runner
+  EXPECT: RUNNER_SPOTIFY_V15_HANDOFF_PASSED
+  EVIDENCE: PENDING — the browser assertion verifies the selected-platform hand-off users actually tap.
+
+- [ ] G33: The production v16 PWA is rebuilt under a new service-worker cache version and remains installable/offline on its separate HTTPS origin
+  CHECK: PWA_DEPLOY_URL=https://raedworkouts-v16.vercel.app npm run test:pwa-deploy
+  EXPECT: PWA_DEPLOY_HTTPS_OFFLINE_PASSED
+  EVIDENCE: PENDING — must run against the new production deployment, never against v15.

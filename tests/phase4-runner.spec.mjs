@@ -33,22 +33,23 @@ function seededState() {
   };
 }
 
-function seededSettings() {
+function seededSettings(overrides = {}) {
   return {
     user_id: testUser,
     user_key: '',
     theme: 'light', skin: 'hadid',
     focus_mode: true, show_cues: true,
     rest_seconds: 120, vibrate: false, notifications: false,
-    music_platform: 'none',
+    music_platform: 'spotify',
     block_auto_color: false,
     block_skin_suggestions: {}, block_skin_rejections: {},
     lang: 'ar', locale_version: 1,
     runner_video_open: true,
+    ...overrides,
   };
 }
 
-async function openSeededHome(page) {
+async function openSeededHome(page, settingsOverrides = {}) {
   await page.addInitScript(({ user, state, settings }) => {
     // This script also runs after reload. Seed once per test page so a reload
     // verifies persisted settings instead of recreating the original profile.
@@ -58,12 +59,12 @@ async function openSeededHome(page) {
     localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.state.v1`, JSON.stringify(state));
     localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.settings.v1`, JSON.stringify(settings));
     sessionStorage.setItem('phase4-runner-seeded', 'true');
-  }, { user: testUser, state: seededState(), settings: seededSettings() });
+  }, { user: testUser, state: seededState(), settings: seededSettings(settingsOverrides) });
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
 }
 
-async function openStartedRunner(page) {
-  await openSeededHome(page);
+async function openStartedRunner(page, settingsOverrides = {}) {
+  await openSeededHome(page, settingsOverrides);
   const start = page.locator('#page-home button.btn.primary.full').first();
   await expect(start).toBeVisible();
   await start.click();
@@ -228,6 +229,72 @@ async function requireLongestExerciseRunner(page) {
   expect(renderedRows, 'runner must render the longest exercise in the loaded programme').toBe(longestRows);
   return runner;
 }
+
+test('Overnight runner keeps every weight, reps, and done control inside its set row at 390px', async ({ page }) => {
+  await openStartedRunner(page);
+  const runner = await requireLongestExerciseRunner(page);
+  const widths = await runner.locator('[data-runner-set-row]').evaluateAll((rows) => rows.map((row) => ({
+    clientWidth: row.clientWidth,
+    scrollWidth: row.scrollWidth,
+  })));
+  console.log(`RUNNER_SET_ROW_WIDTH rows=${JSON.stringify(widths)}`);
+  expect(widths.length, 'the runner must render a set row before its geometry can pass').toBeGreaterThan(0);
+  expect(widths.every(({ clientWidth, scrollWidth }) => scrollWidth <= clientWidth), 'weight, reps, and done must fit without horizontal sliding').toBe(true);
+  console.log('RUNNER_SET_ROW_WIDTH_PASSED');
+});
+
+test('Overnight runner treats skipped as a recorded non-zero state and preserves an invalid attempt after one prompt', async ({ page }) => {
+  await openStartedRunner(page);
+  const runner = await requireLongestExerciseRunner(page);
+  const beforeIndex = Number(await runner.getAttribute('data-runner-exercise-index'));
+  const row = runner.locator('[data-runner-set-row]').first();
+  await row.locator('input[type="number"]').first().fill('0');
+  await row.locator('.runner-set-check').click();
+
+  const afterFirstInvalidAttempt = await page.evaluate((user) => {
+    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
+    const active = JSON.parse(localStorage.getItem(key)).active_session;
+    const exercise = Object.values(active.exercises)[active.runner_exercise_index];
+    return exercise.sets[0];
+  }, testUser);
+  expect(afterFirstInvalidAttempt.invalid, 'the first invalid attempt must ask once rather than silently becoming a record').toBeFalsy();
+  expect(afterFirstInvalidAttempt.invalid_prompted, 'the first invalid attempt must be remembered for the next explicit action').toBe(true);
+
+  await row.locator('.runner-set-check').click();
+  const afterSecondInvalidAttempt = await page.evaluate((user) => {
+    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
+    const active = JSON.parse(localStorage.getItem(key)).active_session;
+    const exercise = Object.values(active.exercises)[active.runner_exercise_index];
+    return exercise.sets[0];
+  }, testUser);
+  expect(afterSecondInvalidAttempt.invalid, 'the second explicit invalid action must be retained, not discarded').toBeTruthy();
+  expect(afterSecondInvalidAttempt.completed, 'an invalid row must never become a completed volume row').toBeFalsy();
+
+  await runner.locator('[data-runner-skip-exercise]').click();
+  const persisted = await page.evaluate((user) => {
+    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
+    return JSON.parse(localStorage.getItem(key)).active_session;
+  }, testUser);
+  const skipped = Object.values(persisted.exercises)[beforeIndex];
+  expect(skipped.skipped, 'skip must be explicit at exercise level').toBe(true);
+  const skippedWorking = skipped.sets.filter((set) => !set.is_warmup);
+  expect(skippedWorking.every((set) => set.skipped && !set.completed), 'a skipped exercise cannot manufacture completed sets').toBe(true);
+  expect(skippedWorking.every((set) => (set.weight !== 0 && set.weight !== '0') || set.invalid), 'skip must never manufacture a valid 0 kg row').toBe(true);
+  expect(persisted.runner_exercise_index, 'skip must move on instead of trapping the workout').toBe(beforeIndex + 1);
+  console.log('RUNNER_SKIP_POLICY_PASSED');
+});
+
+test('Overnight runner restores the v15 selected-platform Spotify hand-off after warm-up and during lifting', async ({ page }) => {
+  await openStartedRunner(page, { music_platform: 'spotify' });
+  const runner = await requireLongestExerciseRunner(page);
+  const handoff = runner.locator('[data-runner-playlist-handoff]');
+  await expect(handoff, 'the selected Spotify playlist must remain reachable after warm-up').toHaveCount(1);
+  await expect(handoff).toHaveAttribute('data-runner-music-platform', 'spotify');
+  const links = handoff.locator('a[target="_blank"][rel="noopener"]');
+  await expect(links, 'v15 opened the actual playlist in a new tab').toHaveCount(1);
+  await expect(links.first()).toHaveAttribute('href', /open\.spotify\.com\/playlist\//);
+  console.log('RUNNER_SPOTIFY_V15_HANDOFF_PASSED');
+});
 
 test('Phase 4 runner contains all fixed content at 390x844 with video collapsed', async ({ page }) => {
   await openStartedRunner(page);
