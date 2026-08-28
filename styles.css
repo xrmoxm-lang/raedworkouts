@@ -1299,3 +1299,24 @@ body.welcome-mode main {
   :root:not([data-theme="light"]) .set-check.checked,
   :root:not([data-theme="light"]) .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--focus-ring); }
 }
+
+/* ---- Coach: retrieval from Raed's own library ------------------------ */
+.coach-row { display: flex; gap: 6px; align-items: stretch; }
+.coach-input {
+  flex: 1 1 auto; min-width: 0; padding: 10px 12px; font: inherit;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+}
+.coach-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.coach-row .btn { flex: 0 0 auto; }
+.coach-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.coach-source { display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
+/* A quoted passage, so it reads as someone else's words rather than the app's. */
+.coach-passage { border-inline-start: 3px solid var(--accent-soft); }
+.coach-text {
+  margin: 0; font-size: 13px; line-height: 1.65; color: var(--text);
+  /* Passages are English prose pulled from PDFs; keep them LTR inside an RTL page. */
+  direction: ltr; text-align: start; unicode-bidi: isolate;
+  /* PDF extraction leaves long unbroken runs; never let one widen the page. */
+  overflow-wrap: anywhere;
+}

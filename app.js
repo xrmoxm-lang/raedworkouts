@@ -2184,12 +2184,132 @@ function previewedSession() {
 }
 
 
+// The coach searches the 33 Nippard works Raed owns and shows what they actually
+// say, each passage with its book and page. It NEVER writes an answer of its own.
+// A generated training cue that sounds confident and is wrong is the one failure
+// this feature cannot have, so there is no generation path to get wrong: the
+// service has none, and neither does this.
+// HTTPS, not the raw Tailscale IP. The app is served over HTTPS, and a browser
+// refuses to fetch http:// from an https:// page — the request never leaves, and
+// it looks like a network fault rather than the policy block it is. Tailscale
+// Serve terminates TLS on :8444 and proxies to 127.0.0.1:8124. Tailnet only,
+// never Funnel: these passages are the text of books Raed paid for.
+const COACH_URL = 'https://raed-hp.tail53bd35.ts.net:8444';
+const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
+let coachState = { status: 'idle', question: '', results: [], error: '' };
+
+// Arabic counts do not work like English ones. "2 مقاطع" is wrong: two takes the
+// dual (مقطعان), one takes the singular, and 3–10 take the plural. top_k caps at
+// 10 so those three cases are the whole range. English keeps its own simple rule.
+function coachFoundLabel(count) {
+  if (activeLanguage() !== 'ar') return tf('coach_found', { n: count });
+  if (count === 1) return t('coach_found_one_ar');
+  if (count === 2) return t('coach_found_two_ar');
+  return tf('coach_found', { n: count });
+}
+
+async function askCoach(question) {
+  coachState = { status: 'loading', question, results: [], error: '' };
+  renderCoach();
+  try {
+    const res = await fetch(COACH_URL + '/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, top_k: 5 }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const data = await res.json();
+    if (data.status === 'no_match') {
+      // A 200 carrying "nothing matched". Its own state — not an error, and not
+      // an empty result list dressed up as an answer.
+      coachState = { status: 'no_match', question, results: [], error: '' };
+    } else if (data.status === 'ok' && Array.isArray(data.results) && data.results.length) {
+      coachState = { status: 'ok', question, results: data.results, error: '' };
+    } else {
+      coachState = { status: 'error', question, results: [], error: data.error || data.status || 'unknown' };
+    }
+  } catch (err) {
+    // Unreachable is reported as unreachable. The library is on Raed's own
+    // server, so the honest cause is almost always "phone is off Tailscale" —
+    // saying that beats a spinner that never resolves.
+    coachState = { status: 'offline', question, results: [], error: String(err?.message || err) };
+  }
+  renderCoach();
+}
+
 function renderCoach() {
   const root = $('#page-coach');
   root.innerHTML = '';
-  // The tab is deliberately present now; the separate local-coach work owns
-  // its service and conversation UI. Do not borrow Settings’ former controls.
   root.appendChild(h('div', { class: 'page-header' }, h('h1', {}, t('coach'))));
+
+  const input = h('input', {
+    type: 'text', class: 'coach-input', value: coachState.question,
+    placeholder: t('coach_placeholder'), 'data-coach-input': 'true',
+    onKeydown: (ev) => { if (ev.key === 'Enter') submit(); },
+  });
+  const submit = () => {
+    const question = input.value.trim();
+    // The service rejects anything under 3 characters; catching it here keeps a
+    // stray tap from rendering as a server error.
+    if (question.length < 3) return;
+    askCoach(question);
+  };
+
+  root.appendChild(h('div', { class: 'card compact', 'data-coach-ask': 'true' },
+    h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_intro')),
+    h('div', { class: 'coach-row' },
+      input,
+      h('button', { class: 'btn primary', onClick: submit, 'data-coach-submit': 'true' }, t('coach_ask')),
+    ),
+  ));
+
+  if (coachState.status === 'idle') {
+    root.appendChild(h('div', { class: 'card compact' },
+      h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_try')),
+      h('div', { class: 'coach-chips' }, COACH_EXAMPLES.map((example) => h('button', {
+        class: 'btn tiny', onClick: () => { input.value = t(example); askCoach(t(example)); },
+      }, t(example)))),
+    ));
+    return;
+  }
+
+  if (coachState.status === 'loading') {
+    root.appendChild(h('div', { class: 'card compact tiny muted', 'data-coach-loading': 'true' }, t('coach_searching')));
+    return;
+  }
+
+  // Three outcomes, three different things on screen. Collapsing them is how a
+  // retrieval failure turns into a training answer Raed trusts and shouldn't.
+  if (coachState.status === 'no_match') {
+    root.appendChild(h('div', { class: 'card compact', 'data-coach-no-match': 'true' },
+      h('strong', {}, t('coach_no_match')),
+      h('p', { class: 'tiny muted' }, t('coach_no_match_hint')),
+    ));
+    return;
+  }
+  if (coachState.status === 'offline' || coachState.status === 'error') {
+    root.appendChild(h('div', { class: 'card compact warn', 'data-coach-error': 'true' },
+      h('strong', {}, t(coachState.status === 'offline' ? 'coach_offline' : 'coach_error')),
+      h('p', { class: 'tiny muted' }, t('coach_offline_hint')),
+      h('p', { class: 'tiny muted' }, h('bdi', { class: 'ltr-run' }, coachState.error)),
+    ));
+    return;
+  }
+
+  root.appendChild(h('div', { class: 'tiny muted', style: 'margin:2px 0 6px;', 'data-coach-count': 'true' },
+    coachFoundLabel(coachState.results.length)));
+  coachState.results.forEach((passage) => {
+    root.appendChild(h('article', { class: 'card compact coach-passage', 'data-coach-passage': 'true' },
+      h('div', { class: 'coach-source' },
+        // Book titles are English and stay English (T1). h() isolates Latin runs
+        // on its own, so no manual <bdi> here — that is what produced nested bdi.
+        h('strong', {}, passage.work),
+        h('span', { class: 'tiny muted' }, ' · ', tf('coach_page', { n: passage.page })),
+      ),
+      h('p', { class: 'coach-text' }, passage.text),
+    ));
+  });
+  root.appendChild(h('p', { class: 'tiny muted', style: 'text-align:center;margin-top:4px;' }, t('coach_footer')));
 }
 
 function discardActiveSessionFromHome() {

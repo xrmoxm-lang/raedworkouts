@@ -22,6 +22,27 @@ export const LOCALE = Object.freeze({
   blocked_substitution_accepted: pair('User accepted blocked volume substitution.', 'قبِل المستخدم استبدالًا يخالف حدود الحجم.'),
   gym_day_plain: pair('Gym day', 'يوم نادٍ'),
   rest_day_plain: pair('Rest day', 'يوم راحة'),
+  // The coach quotes Raed's own 33 Nippard works and never writes prose of its
+  // own, so the copy must promise searching — not answering.
+  coach_intro: pair('Search the books you own. You get the passages themselves, with the book and page.', 'ابحث في كتبك التي تملكها. تصلك المقاطع نفسها، ومعها اسم الكتاب والصفحة.'),
+  coach_placeholder: pair('Ask about training or nutrition…', 'اسأل عن التمرين أو التغذية…'),
+  coach_ask: pair('Search', 'ابحث'),
+  coach_try: pair('Try one of these:', 'جرّب واحدًا من هذه:'),
+  coach_eg_volume: pair('How many sets per muscle per week?', 'كم مجموعة لكل عضلة في الأسبوع؟'),
+  coach_eg_failure: pair('Should I train to failure?', 'هل أتمرّن حتى الفشل؟'),
+  coach_eg_protein: pair('How much protein to keep muscle?', 'كم بروتينًا للحفاظ على العضلة؟'),
+  coach_searching: pair('Searching your library…', 'جارٍ البحث في مكتبتك…'),
+  // 3–10 only; 1 and 2 take the singular and the dual below. top_k caps at 10.
+  coach_found: pair('{n} passages from your books', '{n} مقاطع من كتبك'),
+  coach_found_one_ar: pair('1 passage from your books', 'مقطع واحد من كتبك'),
+  coach_found_two_ar: pair('2 passages from your books', 'مقطعان من كتبك'),
+  coach_page: pair('page {n}', 'صفحة {n}'),
+  coach_footer: pair('Quoted from your books. Nothing here is written by the app.', 'منقول من كتبك. لا شيء هنا من تأليف التطبيق.'),
+  coach_no_match: pair('Your books have nothing on this.', 'لا يوجد في كتبك ما يجيب عن هذا.'),
+  coach_no_match_hint: pair('That is an answer, not a failure. Try different wording.', 'هذه إجابة لا عطل. جرّب صياغة أخرى.'),
+  coach_offline: pair('Could not reach your library.', 'تعذّر الوصول إلى مكتبتك.'),
+  coach_error: pair('The library server returned an error.', 'أعاد خادم المكتبة خطأ.'),
+  coach_offline_hint: pair('The books live on your own server. Connect to Tailscale and try again.', 'كتبك على خادمك الخاص. اتصل بـTailscale ثم أعد المحاولة.'),
   // The rest-day banner shipped hardcoded English on an Arabic-only screen. It
   // escaped the Arabic gate because that gate only ever rendered a training day.
   home_rest_next: pair('Next: {name}', 'القادم: {name}'),
