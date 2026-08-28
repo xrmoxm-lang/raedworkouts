@@ -100,7 +100,7 @@ const EXERCISES = [
     secondary: ['shoulders', 'triceps'],
     pattern: 'horizontal_push',
     mohannad: ['Q1S9ybWYMjE', 'ogj1igwlc9I'],
-    jeff_nippard: 'https://www.youtube.com/results?search_query=chest+press+machine+jeff+nippard',
+    jeff_nippard: 'https://youtu.be/k1S_Any3NIA?t=240',
     alternatives: ['incline_chest_press', 'pec_dec'],
     cue: 'Handles in line with mid-chest. Squeeze pecs at lockout.',
   },
@@ -440,7 +440,7 @@ const EXERCISES = [
     secondary: ['hamstrings'],
     pattern: 'compound_hinge',
     mohannad: ['Va6Wg_jKilM', 'KPng97k1Opg'],
-    jeff_nippard: 'https://www.youtube.com/watch?v=xDmFkJxPzeM',
+    jeff_nippard: 'https://youtu.be/xDmFkJxPzeM?t=97',
     alternatives: ['rdl'],
     cue: 'Chin tucked. Squeeze glutes at top. Don\'t over-extend lower back.',
   },
@@ -499,7 +499,11 @@ const EXERCISES = [
 // ---- Phase 5 Upper/Lower catalogue expansion ----------------
 // These records deliberately have no guessed video. A new exercise renders
 // “no video yet” until Raed enters or source-links a clip.
-const phase5Exercise = ({ id, name, primary, secondary = [], pattern, aliases = [], alternatives = [] }) => ({
+// jeff_nippard is a parameter, not a hardcoded blank: the Phase 5 port created
+// these fourteen movements with no way to carry a demo link, so a verified
+// source-linked video had nowhere to go. Callers pass one only when it was
+// extracted from a PDF Raed owns (D8 — never a guessed video).
+const phase5Exercise = ({ id, name, primary, secondary = [], pattern, aliases = [], alternatives = [], jeff_nippard = '' }) => ({
   id,
   name,
   name_ar: '',
@@ -508,7 +512,7 @@ const phase5Exercise = ({ id, name, primary, secondary = [], pattern, aliases = 
   secondary,
   pattern,
   mohannad: [],
-  jeff_nippard: '',
+  jeff_nippard,
   alternatives,
   cue: '',
 });
@@ -521,13 +525,13 @@ EXERCISES.push(
   phase5Exercise({ id: 'lying_leg_curl', name: 'Lying Leg Curl', primary: 'hamstrings', pattern: 'isolation_hamstring' }),
   phase5Exercise({ id: 'goblet_squat', name: 'Goblet Squat', primary: 'quads', secondary: ['glutes', 'hamstrings'], pattern: 'compound_quad' }),
   phase5Exercise({ id: 'db_walking_lunge', name: 'DB Walking Lunge', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
-  phase5Exercise({ id: 'hanging_leg_raise', name: 'Hanging Leg Raise', primary: 'abs', pattern: 'isolation_core' }),
-  phase5Exercise({ id: 'ez_bar_curl', name: 'EZ Bar Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
-  phase5Exercise({ id: 'machine_lateral_raise', name: 'Machine Lateral Raise', primary: 'side_delts', pattern: 'isolation_push' }),
-  phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', pattern: 'isolation_core' }),
+  phase5Exercise({ id: 'hanging_leg_raise', name: 'Hanging Leg Raise', primary: 'abs', pattern: 'isolation_core', jeff_nippard: 'https://youtu.be/2RrGnjxSsiA?t=247' }),
+  phase5Exercise({ id: 'ez_bar_curl', name: 'EZ Bar Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull', jeff_nippard: 'https://www.youtube.com/watch?v=Dd0t5UOCEUc' }),
+  phase5Exercise({ id: 'machine_lateral_raise', name: 'Machine Lateral Raise', primary: 'side_delts', pattern: 'isolation_push', jeff_nippard: 'https://youtu.be/-9QsrJ542ao' }),
+  phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', pattern: 'isolation_core', jeff_nippard: 'https://youtu.be/OXs4DCS8Ei8?si=0WCCbNRrf2eaWePi' }),
   phase5Exercise({ id: 'db_incline_curl', name: 'DB Incline Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull' }),
   phase5Exercise({ id: 'single_leg_leg_extension', name: 'Single-Leg Leg Extension', primary: 'quads', pattern: 'isolation_quad' }),
-  phase5Exercise({ id: 'leg_press_toe_press', name: 'Leg Press Toe Press', primary: 'calves', pattern: 'isolation_calf' }),
+  phase5Exercise({ id: 'leg_press_toe_press', name: 'Leg Press Toe Press', primary: 'calves', pattern: 'isolation_calf', jeff_nippard: 'https://youtu.be/VJ_9xii47Sk' }),
   phase5Exercise({ id: 'machine_crunch', name: 'Machine Crunch', primary: 'abs', pattern: 'isolation_core', alternatives: ['ab_crunch'] }),
 
   // Every named §8.4 substitute resolves through the same catalogue and

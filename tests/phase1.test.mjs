@@ -129,7 +129,13 @@ test('catalogue migrates every source exercise losslessly and exposes aliases/vi
   assert.equal(catalogue.get('بنش مايل (آلة)').id, 'incline_chest_press');
   assert.ok(catalogue.videos.every((video) => ['source_linked', 'manual'].includes(video.confidence)));
   assert.ok(catalogue.videos.every((video) => !String(video.youtube_id || '').includes('results')));
-  assert.equal(exercise('chest_press_machine').video_records.some((video) => video.label.en === 'Jeff Nippard'), false);
+  // This used to assert `false`. That was not an invariant — it recorded the gap
+  // that chest_press_machine's only Nippard link was a YouTube SEARCH url, which
+  // the catalogue rightly refuses to promote to a video record. The link has since
+  // been replaced with one extracted from the annotation layer of a PDF Raed owns
+  // (The Essentials Program p. 38, anchor "Machine Chest Press"), so a real record
+  // now exists and the honest assertion is the opposite one.
+  assert.equal(exercise('chest_press_machine').video_records.some((video) => video.label.en === 'Jeff Nippard'), true);
 });
 
 test('catalogue fails loudly when an exercise has two primary muscles', () => {
