@@ -185,15 +185,18 @@ test('Phase 4 Arabic UI renders no undeclared visible Latin text on every reacha
   await page.evaluate(() => {
     localStorage.clear();
     localStorage.setItem('raedworkouts.profiles.v1', JSON.stringify([
-      { user_id: 'arabic-pin-profile', display_name: 'ملف تجريبي', has_pin: true, experience: 'returning' },
+      { user_id: 'arabic-profile', display_name: 'ملف تجريبي', experience: 'returning' },
     ]));
   });
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   findings.push(...await scanVisibleLatin(page, 'profiles'));
   await page.getByRole('button', { name: /ملف تجريبي/ }).click();
-  await expect(page.locator('.pin-panel')).toHaveCount(1);
-  findings.push(...await scanVisibleLatin(page, 'profile-pin'));
-  await page.getByRole('button', { name: /الملفات/ }).click();
+  await expect(page.locator('.pin-panel, .pin-key, input[type="password"]')).toHaveCount(0);
+  await expect(page.locator('[data-home-overview]')).toHaveCount(1);
+  findings.push(...await scanVisibleLatin(page, 'profile-direct'));
+
+  await page.evaluate(() => localStorage.removeItem('raedworkouts.active_user'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /شخص آخر/ }).click();
   await expect(page.locator('.register-panel')).toHaveCount(1);
   findings.push(...await scanVisibleLatin(page, 'profile-other'));

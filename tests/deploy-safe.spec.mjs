@@ -19,15 +19,20 @@ test.use({
 async function seedFreshProfileHint(page) {
   await page.addInitScript(() => {
     localStorage.clear();
-    // This recreates the dangerous first-origin state: a UI/profile index
-    // claims a PIN, but there is neither a derived local key nor a v16 row.
+    // This reproduces the formerly dangerous fresh-origin state. The stale
+    // hint must be ignored: profiles now open directly, with no PIN UI.
     localStorage.setItem('raedworkouts.profiles.v1', JSON.stringify([
       { user_id: 'Raed', display_name: 'Raed', experience: 'detrained', has_pin: true },
     ]));
   });
 }
 
-test('Deploy safety: a fresh seeded profile hint reaches optional-PIN registration, not an impossible keypad', async ({ page }) => {
+async function expectNoPinUi(page) {
+  await expect(page.locator('.pin-panel, .pin-key, input[type="password"]')).toHaveCount(0);
+  await expect(page.getByText(/أدخل الرمز|أدخل رمزك|رمز الدخول/)).toHaveCount(0);
+}
+
+test('Deploy safety: a fresh seeded profile opens directly and exposes no PIN UI', async ({ page }) => {
   await page.route(`${syncOrigin}/**`, (route) => route.abort());
   await seedFreshProfileHint(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
@@ -35,76 +40,63 @@ test('Deploy safety: a fresh seeded profile hint reaches optional-PIN registrati
   const raed = page.locator('.profile-tile').filter({ hasText: 'Raed' });
   await expect(raed).toHaveCount(1);
   await raed.click();
-  await expect(page.locator('.pin-panel'), 'no v16 credential exists, so a PIN prompt would be unsatisfiable').toHaveCount(0);
-  await expect(page.locator('.pin-key'), 'a fresh seeded profile must expose no numeric keypad buttons').toHaveCount(0);
-  const registration = page.locator('.register-panel');
-  await expect(registration).toHaveCount(1);
-  const createProfile = page.getByRole('button', { name: 'أنشئ الملف' });
-  await expect(createProfile, 'a fresh seeded profile must have a reachable registration action').toBeVisible();
 
-  // Leaving both fields blank is the supported first-run path. The aborted
-  // server makes this a real offline gym-basement case rather than a mock.
-  await createProfile.click();
+  await expectNoPinUi(page);
   await expect(page.locator('[data-home-overview]')).toHaveCount(1);
   const start = page.locator('#page-home button.btn.primary.full').first();
   await expect(start).toContainText('Upper A');
   await start.click();
   await expect(page.locator('[data-session-runner]')).toHaveCount(1);
-  console.log('V16_FRESH_PROFILE_NONBLOCKING_PASSED');
+  console.log('V16_FRESH_PROFILE_DIRECT_OPEN_PASSED');
 });
 
-test('Deploy safety: a fresh seeded profile cannot turn an unverified state 401 into a PIN lockout', async ({ page }) => {
+test('Deploy safety: even a legacy server credential cannot restore a PIN gate', async ({ page }) => {
   await page.route(`${syncOrigin}/**`, async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    if (url.pathname === '/users') {
-      // Fresh origin: no `raed-v16` record advertised as PIN-protected.
-      await route.fulfill({ contentType: 'application/json', body: '[]' });
+    const { pathname } = new URL(route.request().url());
+    if (pathname === '/users') {
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify([
+        { user_id: 'bassam-v16', display_name: 'Bassam', experience: 'returning', has_pin: true, sessions: 2 },
+      ]) });
       return;
     }
-    if (url.pathname === '/state' && request.method() === 'GET') {
-      // This is the real regression path: a state fetch refuses the blank key,
-      // but the profile picker has no local credential or server PIN record.
-      await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'pin_required' }) });
+    if (pathname === '/state' && route.request().method() === 'GET') {
+      await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'credential_retired' }) });
       return;
     }
     await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
   });
-  await page.addInitScript(() => {
-    localStorage.clear();
-    // A v16 profile that is explicitly PIN-free still has no local key. This
-    // makes the click take the direct first-run path before the server's
-    // unverified 401 arrives.
-    localStorage.setItem('raedworkouts.profiles.v1', JSON.stringify([
-      { user_id: 'Raed', display_name: 'Raed', experience: 'detrained', has_pin: false },
-    ]));
-  });
+  await page.addInitScript(() => localStorage.clear());
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
-  await page.locator('.profile-tile').filter({ hasText: 'Raed' }).click();
+  await page.locator('.profile-tile').filter({ hasText: 'Bassam' }).click();
 
-  // A numeric keypad here is an unsatisfiable credential prompt. Registration
-  // is the only legitimate first-run route until a credential is actually
-  // present locally or is reported by the v16 server row.
-  await expect(page.locator('.pin-key')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'أنشئ الملف' })).toBeVisible();
-  console.log('V16_FRESH_PROFILE_401_REGISTRATION_PASSED');
+  await expectNoPinUi(page);
+  await expect(page.locator('[data-home-overview]')).toHaveCount(1);
+  console.log('V16_LEGACY_CREDENTIAL_NEVER_GATES_PASSED');
 });
 
-test('Deploy safety: the fresh v16 profile writes only raed-v16, never Raed', async ({ page }) => {
+test('Deploy safety: direct first-run sync writes only a namespaced v16 row without a credential header', async ({ page }) => {
   const stateWrites = [];
+  const registerCalls = [];
   await page.route(`${syncOrigin}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname === '/users') {
-      // The v15 row is intentionally present: it must not become a v16 PIN
-      // credential or sync target.
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify([
         { user_id: 'Raed', display_name: 'Raed', experience: 'detrained', has_pin: true, sessions: 5 },
       ]) });
       return;
     }
+    if (url.pathname === '/register') {
+      registerCalls.push(request);
+      await route.fulfill({ status: 410, contentType: 'application/json', body: JSON.stringify({ error: 'retired' }) });
+      return;
+    }
+    if (url.pathname === '/state' && request.method() === 'GET') {
+      await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
+      return;
+    }
     if (url.pathname === '/state' && request.method() === 'POST') {
-      stateWrites.push(JSON.parse(request.postData() || '{}'));
+      stateWrites.push({ body: JSON.parse(request.postData() || '{}'), headers: request.headers() });
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, rev: 1, latest_rev: 1, user_id: 'raed-v16' }) });
       return;
     }
@@ -113,30 +105,35 @@ test('Deploy safety: the fresh v16 profile writes only raed-v16, never Raed', as
   await seedFreshProfileHint(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.locator('.profile-tile').filter({ hasText: 'Raed' }).click();
-  await page.locator('.register-panel .btn.primary.full').click();
 
   await expect.poll(() => stateWrites.length).toBe(1);
-  expect(stateWrites[0].user_id, 'the v16 app must never POST to bare Raed').toBe('raed-v16');
-  expect(stateWrites[0].settings_json.user_id, 'the local identity is not copied into remote settings').toBeUndefined();
-  console.log(`V16_SYNC_NAMESPACE_BROWSER_PASSED user_id=${stateWrites[0].user_id}`);
+  expect(stateWrites[0].body.user_id, 'the v16 app must never POST to bare Raed').toBe('raed-v16');
+  expect(stateWrites[0].body.settings_json.user_id, 'the local identity is not copied into remote settings').toBeUndefined();
+  expect(stateWrites[0].headers['x-user-key'], 'no retired credential header may leave the client').toBeUndefined();
+  expect(registerCalls, 'profile setup must not call the retired credential endpoint').toHaveLength(0);
+  console.log(`V16_SYNC_NAMESPACE_BROWSER_PASSED user_id=${stateWrites[0].body.user_id}`);
 });
 
-test('Deploy safety: a PIN prompt remains available when the v16 server actually reports a PIN', async ({ page }) => {
+test('Deploy safety: no reachable profile, settings, or help screen contains PIN controls', async ({ page }) => {
   await page.route(`${syncOrigin}/**`, async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/users') {
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify([
-        { user_id: 'bassam-v16', display_name: 'Bassam', experience: 'returning', has_pin: true, sessions: 2 },
-      ]) });
+      await route.fulfill({ contentType: 'application/json', body: '[]' });
       return;
     }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
+    if (url.pathname === '/state' && route.request().method() === 'GET') {
+      await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
+      return;
+    }
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, rev: 1 }) });
   });
-  await page.addInitScript(() => localStorage.clear());
+  await seedFreshProfileHint(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
-  const bassam = page.locator('.profile-tile').filter({ hasText: 'Bassam' });
-  await expect(bassam).toContainText('برمز');
-  await bassam.click();
-  await expect(page.locator('.pin-panel'), 'a verified v16 server PIN must still protect Bassam').toHaveCount(1);
-  console.log('V16_VERIFIED_PIN_GATE_PASSED');
+  await expectNoPinUi(page);
+  await page.locator('.profile-tile').filter({ hasText: 'Raed' }).click();
+  for (const route of ['home', 'settings', 'help']) {
+    if (route !== 'home') await page.locator(`.tab[data-route="${route}"]`).click();
+    await expectNoPinUi(page);
+  }
+  console.log('V16_NO_PIN_UI_PASSED');
 });

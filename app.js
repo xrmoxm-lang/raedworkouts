@@ -517,17 +517,13 @@ const defaultSettings = () => ({
   runner_video_default_version: 1,
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
   show_pr_summary: true,       // show end-of-session PR review
-  // Gym launcher: tries scheme first, falls back to App Store URL
+  // Gym launcher: opens the verified IN2 app URL, with an App Store fallback.
   gym_launch_scheme: 'scope.bit://',                                  // bundle ID-based scheme attempt
   gym_launch_fallback: 'https://apps.apple.com/sa/app/in2-fitness/id1536137282', // App Store fallback
   gym_launch_override: '',     // user-set custom URL (e.g. shortcuts://run-shortcut?name=Open%20IN2)
   sync_url: SYNC_URL,
   sync_key: SYNC_KEY,
-  user_key: '',                 // sha256(user_id_lower + ':' + pin); local-only, never synced
   user_id: '',
-  pending_registration: null,   // local-only retry data when first profile setup happens offline
-  needs_pin_reauth: false,      // local-only: PIN exists server-side, but this browser needs the key
-  pin_prompt_dismissed_at: '',
   block_auto_color: true,      // whether a configured boundary suggestion is offered
   block_skin_suggestions: {},  // deliberately unset until Raed assigns a skin per block
   block_skin_rejections: {},   // { block: true }; rejection is remembered for that block
@@ -547,7 +543,6 @@ let welcomeLoading = false;
 let welcomePreselectUser = '';
 let welcomeMode = 'tiles';
 let welcomeSelectedProfile = null;
-let welcomePinMessage = '';
 let suppressNextPush = false;
 
 function hasMeaningfulLocalData() {
@@ -579,19 +574,19 @@ function ensureProfile() {
   if (!state.profile.created_at) state.profile.created_at = new Date().toISOString();
 }
 function registerLocalProfile(profile) {
-  const previous = getLocalProfiles().find(p => String(p.user_id).toLowerCase() === String(profile.user_id).toLowerCase());
   const list = getLocalProfiles().filter(p => String(p.user_id).toLowerCase() !== String(profile.user_id).toLowerCase());
   list.push({
     user_id: profile.user_id,
     display_name: profile.display_name || profile.user_id,
     experience: profile.experience || 'detrained',
-    has_pin: typeof profile.has_pin === 'boolean' ? profile.has_pin : (previous?.has_pin ?? Boolean(settings.user_key)),
     updated_at: new Date().toISOString(),
   });
   localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(list));
 }
 function getLocalProfiles() {
-  try { return JSON.parse(localStorage.getItem(PROFILE_INDEX_KEY) || '[]'); } catch (_) { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_INDEX_KEY) || '[]').map(({ has_pin: _retired, ...profile }) => profile);
+  } catch (_) { return []; }
 }
 function getActiveUser() {
   return localStorage.getItem(ACTIVE_USER_KEY) || '';
@@ -635,7 +630,7 @@ function stripForSync(value, mode = 'state') {
   if (Array.isArray(value)) return value.map(v => stripForSync(v, mode));
   if (!value || typeof value !== 'object') return value;
   const deny = mode === 'settings'
-    ? new Set(['sync_key', 'sync_url', 'user_key', 'user_id', 'last_rev', 'pending_variant', 'pending_registration', 'needs_pin_reauth'])
+    ? new Set(['sync_key', 'sync_url', 'user_id', 'last_rev', 'pending_variant'])
     : new Set(['last_sync']);
   const out = {};
   Object.entries(value).forEach(([k, v]) => {
@@ -643,6 +638,18 @@ function stripForSync(value, mode = 'state') {
     out[k] = stripForSync(v, mode);
   });
   return out;
+}
+function retireLegacyCredentialFields(rawSettings = {}) {
+  // Old local snapshots can contain the retired credential fields. They are
+  // discarded during every load/merge and are never rendered or synced again.
+  const {
+    user_key: _credential,
+    pending_registration: _registration,
+    needs_pin_reauth: _reauth,
+    pin_prompt_dismissed_at: _prompt,
+    ...safeSettings
+  } = rawSettings;
+  return safeSettings;
 }
 function syncStatePayload() {
   const clean = stripForSync(state, 'state');
@@ -727,7 +734,10 @@ function loadLocal() {
     if (!Object.prototype.hasOwnProperty.call(storedState, 'programme_reference_migration_version')) {
       state.programme_reference_migration_version = 0;
     }
-    try { settings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(settingsKey(activeUser)) || '{}') }; } catch (e) {}
+    try {
+      const storedSettings = JSON.parse(localStorage.getItem(settingsKey(activeUser)) || '{}');
+      settings = { ...defaultSettings(), ...retireLegacyCredentialFields(storedSettings) };
+    } catch (e) {}
     // Existing profiles predate the Arabic-default requirement.  Preserve an
     // explicit post-Phase-4 choice, but migrate prior settings once.
     if (!settings.locale_version) {
@@ -808,15 +818,13 @@ function applyRemotePayload(remote, localUserId = settings.user_id) {
   // metadata from leaking into localStorage, profile names, or later requests.
   const localId = localUserId || settings.user_id;
   if (!localId) throw new Error('Sync identity invariant failed: remote payload needs a local profile id');
-  const localUserKey = settings.user_key || '';
   const localLang = settings.lang;
   const localTheme = settings.theme;
   const remoteState = remote.state_json || remote.state || {};
-  const remoteSettings = remote.settings_json || remote.settings || {};
+  const remoteSettings = retireLegacyCredentialFields(remote.settings_json || remote.settings || {});
   state = { ...defaultState(), ...remoteState };
   settings = { ...defaultSettings(), ...remoteSettings };
   settings.user_id = localId;
-  settings.user_key = localUserKey;
   settings.lang = settings.lang || localLang;
   settings.theme = settings.theme || localTheme;
   delete settings.programme_variant;
@@ -837,7 +845,6 @@ function applyRemotePayload(remote, localUserId = settings.user_id) {
 function syncAuthBody() {
   return {
     _auth_token: settings.sync_key,
-    _auth_user_key: settings.user_key || '',
   };
 }
 function syncErrorStatus(err) {
@@ -849,56 +856,6 @@ function isNetworkError(err) {
   if (/^Sync\s+\d+/.test(msg)) return false;
   return err instanceof TypeError || /Sync timeout|Failed to fetch|NetworkError|Load failed|internet connection|offline/i.test(msg);
 }
-function pinErrorMessage(err) {
-  const status = syncErrorStatus(err);
-  if (status === 401) return t('wrong_pin');
-  if (status === 429) return t('too_many_tries');
-  if (isNetworkError(err)) return t('cant_reach_server');
-  return t('pin_could_not_verify');
-}
-async function retryPendingRegistration() {
-  const pending = settings.pending_registration;
-  if (!pending || !settings.user_id) return true;
-  // PIN-free profiles do not have a `/register` operation to retry. Their
-  // first successful `/state` write is the registration of the v16 row.
-  if (!pending.pin) {
-    settings.pending_registration = null;
-    persistLocal();
-    return true;
-  }
-  try {
-    const res = await syncFetch('/register', {
-      method: 'POST',
-      body: JSON.stringify({ user_id: syncUserId(pending.user_id || settings.user_id), pin: pending.pin, _auth_token: settings.sync_key }),
-    });
-    // A PIN-free profile deliberately has no derived user key.  Deriving one
-    // from an empty string would turn the optional PIN into an invisible PIN.
-    settings.user_key = pending.pin ? (res.user_key || await deriveUserKey(settings.user_id, pending.pin)) : '';
-    settings.pending_registration = null;
-    settings.needs_pin_reauth = false;
-    setActiveUser(settings.user_id);
-    persistLocal();
-    return true;
-  } catch (err) {
-    const status = syncErrorStatus(err);
-    if (isNetworkError(err)) {
-      setSyncStatus('err', 'Registration pending — offline');
-      return true;
-    }
-    if (status === 409 || /pin_already_set/.test(String(err?.message || ''))) {
-      settings.pending_registration = null;
-      settings.needs_pin_reauth = true;
-      syncDirty = true;
-      writeDirtyMarker(settings.user_id);
-      persistLocal();
-      render();
-      toast('Enter your PIN to reconnect sync.', 3500);
-      return false;
-    }
-    throw err;
-  }
-}
-
 // ---- Cloud sync (self-hosted on Raed's HP server) ----------
 async function syncFetch(path, opts = {}) {
   const { timeoutMs = 15000, signal, ...fetchOpts } = opts;
@@ -906,7 +863,6 @@ async function syncFetch(path, opts = {}) {
   const url = base + path;
   const headers = { ...(fetchOpts.headers || {}) };
   if (settings.sync_key) headers.Authorization = 'Bearer ' + settings.sync_key;
-  if (settings.user_key) headers['X-User-Key'] = settings.user_key;
   if (fetchOpts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
 
   const canAbort = typeof AbortController !== 'undefined' && timeoutMs > 0 && !signal;
@@ -926,10 +882,6 @@ async function syncFetch(path, opts = {}) {
 
 async function syncToCloud(opts = {}) {
   if (!settings.sync_url || !settings.sync_key || !settings.user_id) return false;
-  if (settings.pending_registration && !opts.beacon) {
-    const canContinue = await retryPendingRegistration();
-    if (!canContinue) return false;
-  }
   const userIdAtStart = settings.user_id;
   const bodyObj = {
     user_id: syncUserId(settings.user_id),
@@ -1064,46 +1016,13 @@ async function testCloudConnection() {
   }
 }
 
-async function sha256Hex(text) {
-  const data = new TextEncoder().encode(text);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-async function deriveUserKey(userId, pin) {
-  return sha256Hex(`${syncUserId(userId)}:${pin}`);
-}
-
-function hasLocalProfileCredential(userId) {
-  if (!userId) return false;
-  try {
-    const saved = JSON.parse(localStorage.getItem(settingsKey(userId)) || '{}');
-    return typeof saved.user_key === 'string' && saved.user_key.length > 0;
-  } catch (_) {
-    return false;
-  }
-}
-
-function profileWithLocalCredential(profile) {
-  const userId = profile?.user_id || profile?.display_name || '';
-  const hasLocalKey = hasLocalProfileCredential(userId);
-  const unverifiedPinHint = profile?.has_pin === true && !hasLocalKey && profile?.server_has_pin !== true;
-  return {
-    ...profile,
-    has_local_key: hasLocalKey,
-    // Do not display a PIN badge copied from an old/local hint when this
-    // origin has no credential to check. The required registration step still
-    // remains explicit rather than silently entering an unclaimed profile.
-    ...(unverifiedPinHint ? { has_pin: false, needs_registration: true } : {}),
-  };
-}
-
-// `/users` contains both long-lived v15 rows and the isolated v16 rows.  The
-// picker only trusts a `-v16` row as proof that this app has a server-side
-// PIN; bare rows are deliberately invisible to v16.
+// `/users` contains both long-lived v15 rows and isolated v16 rows. Bare v15
+// rows remain invisible here, and legacy credential metadata is intentionally
+// ignored: profiles always open directly in v16.
 function welcomeProfilesForV16(remoteRows = []) {
   const profiles = new Map();
   const add = (profile) => {
-    const local = profileWithLocalCredential(profile);
+    const { has_pin, pin_hash, pin_salt, ...local } = profile || {};
     const key = String(local.user_id || '').toLocaleLowerCase();
     if (key) profiles.set(key, local);
   };
@@ -1121,8 +1040,6 @@ function welcomeProfilesForV16(remoteRows = []) {
       experience: remote.experience || existing.experience || 'returning',
       sessions: remote.sessions ?? existing.sessions ?? 0,
       updated_at: remote.updated_at || existing.updated_at || null,
-      has_pin: remote.has_pin === true || existing.has_pin === true,
-      server_has_pin: remote.has_pin === true,
     });
   }
   return [...profiles.values()];
@@ -1141,43 +1058,16 @@ async function loadWelcomeProfiles() {
     if (!settings.user_id) renderWelcome();
   }
 }
-export function validateRegistrationPin(pin, repeatedPin) {
-  const first = String(pin || '').trim();
-  const second = String(repeatedPin || '').trim();
-  if (!first && !second) return { valid: true, pin: '', has_pin: false };
-  if (!/^\d{4}$/.test(first)) return { valid: false, error: 'Use a 4 digit PIN.' };
-  if (first !== second) return { valid: false, error: 'PINs do not match.' };
-  return { valid: true, pin: first, has_pin: true };
-}
-
-export function profileEntryMode(profile) {
-  const credentialExists = profile?.has_local_key === true || profile?.server_has_pin === true;
-  if (profile?.has_pin === true && credentialExists) return 'pin';
-  // A legacy/UI hint without a local key or a v16 server record has nothing
-  // to verify. Send the fresh install to optional-PIN registration instead.
-  if (profile?.has_pin === true) return 'register';
-  if (profile?.needs_registration === true) return 'register';
-  return Object.hasOwn(profile || {}, 'has_pin') ? 'direct' : 'register';
-}
-
 async function selectProfile(profile) {
   welcomeSelectedProfile = profile;
-  welcomePinMessage = '';
-  const mode = profileEntryMode(profile);
-  if (mode === 'direct') {
-    await signInWithoutPin(profile);
-    return;
-  }
-  welcomeMode = mode;
-  renderWelcome();
+  await openProfile(profile);
 }
-function finishLocalSignIn(userId, profile, userKey = '') {
-  settings = { ...defaultSettings(), user_id: userId, user_key: userKey, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+function finishLocalProfile(userId, profile) {
+  settings = { ...defaultSettings(), user_id: userId, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
   state = { ...defaultState(), profile: {
     display_name: profile?.display_name || userId,
     experience: profile?.experience || 'returning',
     bodyweight_kg: profile?.bodyweight_kg ?? null,
-    has_pin: typeof profile?.has_pin === 'boolean' ? profile.has_pin : Boolean(userKey),
     created_at: new Date().toISOString(),
   }};
   setActiveUser(userId);
@@ -1186,179 +1076,50 @@ function finishLocalSignIn(userId, profile, userKey = '') {
   clearDirtyMarker(userId);
   render();
 }
-async function signInWithoutPin(profile) {
-  const previousSettings = settings;
+async function openProfile(profile) {
   const userId = profile.user_id || profile.display_name;
-  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId, user_key: '' };
+  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId };
   state = { ...defaultState(), profile: {
     display_name: profile.display_name || userId,
     experience: profile.experience || 'returning',
     bodyweight_kg: profile.bodyweight_kg ?? null,
-    has_pin: false,
     created_at: new Date().toISOString(),
   }};
   setActiveUser(userId);
   try {
-    await pullFromCloud();
+    const pulled = await pullFromCloud();
     persistLocal();
     applyTheme();
     render();
+    // A new local profile has no remote revision. Its first namespaced state
+    // write claims its v16 row; it never needs a separate credential setup.
+    if (!pulled && readLastRev(userId) == null) saveLocal();
   } catch (error) {
-    settings = previousSettings;
+    finishLocalProfile(userId, profile);
     if (syncErrorStatus(error) === 401) {
-      // A 401 alone is not proof of a credential. On a fresh origin it can be
-      // the server rejecting a blank state fetch, while there is no local key
-      // and `/users` advertised no PIN-protected v16 row. Sending Raed to a
-      // keypad then is an unsatisfiable lockout. Only the explicit picker
-      // evidence (`server_has_pin`) may take this path.
-      if (profile.server_has_pin === true) {
-        welcomeSelectedProfile = { ...profile, has_pin: true, server_has_pin: true };
-        welcomePinMessage = 'This profile requires its PIN.';
-        welcomeMode = 'pin';
-      } else {
-        // Undo the tentative direct sign-in. Until registration succeeds this
-        // origin owns neither an active local profile nor a credential.
-        setActiveUser('');
-        welcomeSelectedProfile = {
-          ...profile,
-          has_pin: false,
-          has_local_key: false,
-          server_has_pin: false,
-          needs_registration: true,
-        };
-        welcomePinMessage = '';
-        welcomeMode = 'register';
-      }
-      renderWelcome();
+      setSyncStatus('err', 'Cloud row needs an administrator reset. Local logging is available.');
+      toast('Opened locally. Cloud sync needs an administrator reset.', 4000);
       return;
     }
     if (!isNetworkError(error)) throw error;
-    finishLocalSignIn(userId, { ...profile, has_pin: false });
+    saveLocal();
     toast('Opened locally. Cloud sync will reconnect when available.', 3500);
   }
 }
-async function verifyPin(profile, pin) {
-  const userId = profile.user_id;
-  const key = await deriveUserKey(userId, pin);
-  const prev = settings;
-  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId, user_key: key };
-  try {
-    const remote = await syncFetch('/state?user=' + syncUserQuery(userId));
-    applyRemotePayload(remote, userId);
-    toast('Signed in.');
-    applyTheme();
-    render();
-  } catch (e) {
-    settings = prev;
-    throw e;
-  }
-}
-async function verifyReconnectPin(pin) {
-  const userId = settings.user_id;
-  if (!userId) throw new Error('No active profile.');
-  const key = await deriveUserKey(userId, pin);
-  const previousKey = settings.user_key;
-  settings.user_key = key;
-  try {
-    await syncFetch('/state?user=' + syncUserQuery(userId));
-    settings.needs_pin_reauth = false;
-    settings.pending_registration = null;
-    saveLocal({ sync: false, dirty: false });
-    markDirty();
-    toast('Sync reconnected.');
-    render();
-    flushSync().catch(() => {});
-  } catch (e) {
-    settings.user_key = previousKey;
-    throw e;
-  }
-}
-async function registerProfile(profile, pin, bodyweight) {
+async function createProfile(profile, bodyweight) {
   const localUserId = profile.user_id || profile.display_name;
-  const body = {
-    user_id: syncUserId(localUserId),
-    pin,
-    _auth_token: SYNC_KEY,
-  };
-  const prev = settings;
-  let claimed = false;
-  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY };
-  try {
-    // An empty PIN is a valid first-run choice. `/register` only creates a
-    // credential, so PIN-free profiles claim their independent v16 row via
-    // the state write below instead.
-    const res = pin ? await syncFetch('/register', { method: 'POST', body: JSON.stringify(body) }) : null;
-    const userId = localUserId;
-    const userKey = pin ? (res?.user_key || await deriveUserKey(userId, pin)) : '';
-    claimed = true;
-    finishLocalSignIn(userId, { ...profile, has_pin: Boolean(pin), bodyweight_kg: bodyweight ?? profile.bodyweight_kg }, userKey);
-    state.profile.experience = profile.experience || state.profile.experience || 'returning';
-    if (bodyweight) {
-      state.profile.bodyweight_kg = bodyweight;
-      state.bodyweight_log = [{ date: todayISO(), kg: bodyweight }];
-    }
-    saveLocal({ sync: false, dirty: false });
-    const pushed = await syncToCloud().catch(err => {
-      syncDirty = true;
-      writeDirtyMarker(userId);
-      setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
-      schedulePush(60000);
-      return false;
-    });
-    toast(pushed ? 'Profile ready.' : 'Profile ready locally. Cloud sync is pending.', pushed ? 1800 : 3500);
-    applyTheme();
-    render();
-  } catch (e) {
-    if (!claimed) settings = prev;
-    throw e;
+  finishLocalProfile(localUserId, { ...profile, bodyweight_kg: bodyweight ?? profile.bodyweight_kg });
+  state.profile.experience = profile.experience || state.profile.experience || 'returning';
+  if (bodyweight) {
+    state.profile.bodyweight_kg = bodyweight;
+    state.bodyweight_log = [{ date: todayISO(), kg: bodyweight }];
   }
-}
-function renderPinPad(profile) {
-  let pin = '';
-  let checking = false;
-  const dots = h('div', { class: 'pin-dots' }, [0,1,2,3].map(i => h('span', { class: i < pin.length ? 'filled' : '' })));
-  const status = h('div', { class: 'tiny muted', style: 'min-height:18px;' }, welcomePinMessage || 'Enter your PIN');
-  const refresh = () => {
-    dots.innerHTML = '';
-    [0,1,2,3].forEach(i => dots.appendChild(h('span', { class: i < pin.length ? 'filled' : '' })));
-  };
-  const submit = async () => {
-    if (checking || pin.length !== 4) return;
-    checking = true;
-    setUiText(status, 'Checking...');
-    try {
-      await verifyPin(profile, pin);
-    } catch (e) {
-      pin = '';
-      checking = false;
-      setUiText(status, pinErrorMessage(e));
-      dots.classList.add('shake');
-      setTimeout(() => dots.classList.remove('shake'), 350);
-      refresh();
-    }
-  };
-  const keys = ['1','2','3','4','5','6','7','8','9','←','0','OK'];
-  return h('div', { class: 'pin-panel' },
-    h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
-    h('h2', {}, profile.display_name || profile.user_id),
-    dots,
-    status,
-    h('div', { class: 'pin-grid' }, keys.map(k => h('button', {
-      type: 'button',
-      class: 'pin-key' + (k === 'OK' ? ' ok' : ''),
-      onClick: () => {
-        if (k === '←') pin = pin.slice(0, -1);
-        else if (k === 'OK') submit();
-        else if (pin.length < 4) pin += k;
-        refresh();
-        if (pin.length === 4) submit();
-      }
-    }, k)))
-  );
+  saveLocal();
+  toast('Profile ready.');
+  applyTheme();
+  render();
 }
 function renderRegisterPanel(profile) {
-  const pin1 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN' });
-  const pin2 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: 'Repeat PIN' });
   const bw = h('input', { type: 'number', inputmode: 'decimal', step: '0.1', placeholder: 'Bodyweight kg (optional)', value: profile.bodyweight_kg ?? '' });
   const exp = h('select', {},
     ['beginner','returning','experienced'].map(v => h('option', { value: v, ...(profile.experience === v ? { selected: '' } : {}) },
@@ -1367,33 +1128,18 @@ function renderRegisterPanel(profile) {
   );
   const status = h('div', { class: 'tiny muted' }, '');
   return h('div', { class: 'register-panel card' },
-    h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
+    h('button', { class: 'btn tiny ghost', onClick: () => { welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
     h('h2', {}, profile.display_name || profile.user_id),
-    h('p', { class: 'muted' }, 'PIN is optional. Your workout data stays separate.'),
+    h('p', { class: 'muted' }, 'Your workout data stays separate.'),
     h('label', {}, 'Experience', exp),
-    h('label', {}, 'PIN (optional)', pin1),
-    h('label', {}, 'Repeat PIN', pin2),
     h('label', {}, 'Bodyweight', bw),
     status,
     h('button', { class: 'btn primary full', onClick: async () => {
-      const p1 = pin1.value.trim();
-      const p2 = pin2.value.trim();
-      const pinResult = validateRegistrationPin(p1, p2);
-      if (!pinResult.valid) { setUiText(status, pinResult.error); return; }
       setUiText(status, 'Creating profile...');
       try {
-        await registerProfile({ ...profile, experience: exp.value }, pinResult.pin, parseFloat(bw.value) || null);
+        await createProfile({ ...profile, experience: exp.value }, parseFloat(bw.value) || null);
       } catch (e) {
         const statusCode = syncErrorStatus(e);
-        if (statusCode === 409 || /pin_already_set/.test(e.message || '')) {
-          // The register endpoint has explicitly confirmed a credential, so
-          // this is legitimate evidence for the PIN route on this v16 row.
-          welcomeSelectedProfile = { ...profile, has_pin: true, server_has_pin: true };
-          welcomePinMessage = 'This profile already has a PIN — enter it.';
-          welcomeMode = 'pin';
-          renderWelcome();
-          return;
-        }
         if (statusCode === 403 || /not_allowlisted/.test(e.message || '')) {
           setUiText(status, 'Ask Raed to add this name first.');
           return;
@@ -1402,12 +1148,7 @@ function renderRegisterPanel(profile) {
           setUiText(status, e.message || 'Could not create profile.');
           return;
         }
-        const localId = profile.user_id || (profile.display_name || '').trim();
-        const userKey = pinResult.has_pin ? await deriveUserKey(localId, pinResult.pin) : '';
-        finishLocalSignIn(localId, { ...profile, has_pin: pinResult.has_pin, experience: exp.value, bodyweight_kg: parseFloat(bw.value) || null }, userKey);
-        settings.pending_registration = { user_id: localId, pin: pinResult.pin };
-        saveLocal({ sync: false });
-        toast('Offline profile created. It will connect when the server is reachable.', 3500);
+        throw e;
       }
     }}, 'Create profile')
   );
@@ -1416,7 +1157,7 @@ function renderSomeoneElsePanel() {
   const name = h('input', { type: 'text', placeholder: 'Name' });
   const status = h('div', { class: 'tiny muted' }, 'Only Raed-approved names can register.');
   return h('div', { class: 'register-panel card' },
-    h('button', { class: 'btn tiny ghost', onClick: () => { welcomePinMessage = ''; welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
+    h('button', { class: 'btn tiny ghost', onClick: () => { welcomeMode = 'tiles'; renderWelcome(); } }, '← Profiles'),
     h('h2', {}, 'Someone else?'),
     h('label', {}, 'Name', name),
     status,
@@ -1448,9 +1189,7 @@ function renderWelcome() {
       h('p', {}, 'Family training profiles. Offline-first, synced when reachable.'),
     )
   );
-  if (welcomeMode === 'pin' && welcomeSelectedProfile) {
-    wrap.appendChild(renderPinPad(welcomeSelectedProfile));
-  } else if (welcomeMode === 'register' && welcomeSelectedProfile) {
+  if (welcomeMode === 'register' && welcomeSelectedProfile) {
     wrap.appendChild(renderRegisterPanel(welcomeSelectedProfile));
   } else if (welcomeMode === 'other') {
     wrap.appendChild(renderSomeoneElsePanel());
@@ -1465,7 +1204,7 @@ function renderWelcome() {
           onClick: () => selectProfile(profile),
         },
           h('span', { class: 'profile-initial' }, String(name || '?').slice(0,1).toUpperCase()),
-          h('span', { class: 'profile-name' }, profile.has_pin ? tf('profile_name_with_pin', { name }) : name),
+          h('span', { class: 'profile-name' }, name),
           h('span', { class: 'profile-meta' },
             h('bdi', { class: 'ltr-run' }, String(profile.sessions || 0)), ' ', t('sessions'), ' · ', t(experience),
           ),
@@ -1477,101 +1216,6 @@ function renderWelcome() {
   }
   root.appendChild(wrap);
 }
-function shouldShowPinPrompt() {
-  if (!settings.user_id || settings.user_key || settings.needs_pin_reauth) return false;
-  const last = settings.pin_prompt_dismissed_at ? new Date(settings.pin_prompt_dismissed_at).getTime() : 0;
-  return !last || (Date.now() - last) > 7 * 86400 * 1000;
-}
-function openSetPinModal() {
-  const overlay = $('#modal-overlay');
-  const m = $('#modal');
-  m.innerHTML = '';
-  const pin1 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN', style: 'width:100%;margin:8px 0;' });
-  const pin2 = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: 'Repeat PIN', style: 'width:100%;margin:8px 0;' });
-  const status = h('div', { class: 'tiny muted' }, '');
-  m.appendChild(h('p', { class: 'muted' }, 'Set a PIN so only this profile can read or write its cloud row.'));
-  m.appendChild(pin1);
-  m.appendChild(pin2);
-  m.appendChild(status);
-  m.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
-    h('button', { class: 'btn ghost', style: 'flex:1;', onClick: () => {
-      settings.pin_prompt_dismissed_at = new Date().toISOString();
-      saveLocal({ sync: false, dirty: false });
-      overlay.classList.remove('show');
-      render();
-    }}, 'Later'),
-    h('button', { class: 'btn primary', style: 'flex:1;', onClick: async () => {
-      const p1 = pin1.value.trim();
-      const p2 = pin2.value.trim();
-      if (!/^\d{4}$/.test(p1)) { setUiText(status, 'Use a 4 digit PIN.'); return; }
-      if (p1 !== p2) { setUiText(status, 'PINs do not match.'); return; }
-      setUiText(status, 'Saving...');
-      try {
-        const res = await syncFetch('/register', { method: 'POST', body: JSON.stringify({ user_id: syncUserId(settings.user_id), pin: p1, _auth_token: settings.sync_key }) });
-        settings.user_key = res.user_key || await deriveUserKey(settings.user_id, p1);
-        setActiveUser(settings.user_id);
-        saveLocal({ sync: false, dirty: false });
-        overlay.classList.remove('show');
-        toast('PIN set.');
-        render();
-      } catch (e) {
-        setUiText(status, /pin_already_set|409/.test(e.message || '') ? 'PIN already exists. Switch profile and sign in.' : 'Could not set PIN.');
-      }
-    }}, 'Set PIN'),
-  ));
-  overlay.classList.add('show');
-  setTimeout(() => pin1.focus(), 80);
-}
-function openReconnectPinModal() {
-  const overlay = $('#modal-overlay');
-  const m = $('#modal');
-  m.innerHTML = '';
-  const pin = h('input', { type: 'password', inputmode: 'numeric', maxlength: '4', placeholder: '4 digit PIN', style: 'width:100%;margin:8px 0;' });
-  const status = h('div', { class: 'tiny muted' }, '');
-  let checking = false;
-  const submit = async () => {
-    const value = pin.value.trim();
-    if (checking) return;
-    if (!/^\d{4}$/.test(value)) { setUiText(status, 'Use a 4 digit PIN.'); return; }
-    checking = true;
-    setUiText(status, 'Reconnecting...');
-    try {
-      await verifyReconnectPin(value);
-      overlay.classList.remove('show');
-    } catch (e) {
-      checking = false;
-      pin.value = '';
-      setUiText(status, pinErrorMessage(e));
-      pin.focus();
-    }
-  };
-  m.appendChild(h('h3', {}, 'Reconnect sync'));
-  m.appendChild(h('p', { class: 'muted' }, 'Enter your PIN to reconnect cloud sync. Local workout data stays on this device and will be merged after verification.'));
-  m.appendChild(pin);
-  m.appendChild(status);
-  m.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
-    h('button', { class: 'btn ghost', style: 'flex:1;', onClick: () => overlay.classList.remove('show') }, 'Cancel'),
-    h('button', { class: 'btn primary', style: 'flex:1;', onClick: submit }, 'Reconnect'),
-  ));
-  pin.addEventListener('input', () => {
-    pin.value = pin.value.replace(/\D/g, '').slice(0, 4);
-    if (pin.value.length === 4) submit();
-  });
-  overlay.classList.add('show');
-  setTimeout(() => pin.focus(), 80);
-}
-function renderReconnectBanner() {
-  return h('div', { class: 'card compact pin-nudge' },
-    h('div', { class: 'setting-row' },
-      h('div', { class: 'label' },
-        h('div', { class: 'name' }, 'Enter your PIN to reconnect sync'),
-        h('div', { class: 'desc' }, 'Local workout data is saved. Reconnect to merge it into cloud storage.'),
-      ),
-      h('button', { class: 'btn tiny primary', onClick: openReconnectPinModal }, 'Enter PIN'),
-    )
-  );
-}
-
 // ---- Theme --------------------------------------------------
 const SKINS = {
   hadid: { label: 'حديد', sw_light: '#b8451a', sw_dark: '#e8622d', theme_dark: '#17130f' },
@@ -2735,10 +2379,6 @@ function renderHome() {
     ));
   }
 
-  if (settings.needs_pin_reauth) {
-    root.appendChild(renderReconnectBanner());
-  }
-
   // Stats row
   root.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
@@ -3521,9 +3161,9 @@ async function undoPreRestore() {
   try { snapshot = JSON.parse(localStorage.getItem(preRestoreKey(settings.user_id)) || 'null'); } catch (_) {}
   if (!snapshot) { toast('No restore snapshot found.'); return; }
   await quiesceSyncPipeline();
-  const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
   state = { ...defaultState(), ...(snapshot.state || {}) };
-  settings = { ...defaultSettings(), ...(snapshot.settings || {}), ...keep };
+  settings = { ...defaultSettings(), ...retireLegacyCredentialFields(snapshot.settings || {}), ...keep };
   ensureProfile();
   saveLocal({ sync: false });
   const pushed = await flushSync({ mode: 'replace' });
@@ -3566,9 +3206,9 @@ async function restoreRevision(rev) {
   await quiesceSyncPipeline();
   stashPreRestore('revision ' + rev);
   const snap = await syncFetch('/revision?user=' + syncUserQuery(settings.user_id) + '&rev=' + encodeURIComponent(rev));
-  const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
   state = { ...defaultState(), ...(snap.state_json || {}) };
-  settings = { ...defaultSettings(), ...(snap.settings_json || {}), ...keep };
+  settings = { ...defaultSettings(), ...retireLegacyCredentialFields(snap.settings_json || {}), ...keep };
   ensureProfile();
   saveLocal({ sync: false });
   const pushed = await flushSync({ mode: 'replace' });
@@ -3612,9 +3252,9 @@ async function importJsonFile(file) {
   const parsed = JSON.parse(text);
   await quiesceSyncPipeline();
   stashPreRestore('import');
-  const keep = { user_id: settings.user_id, user_key: settings.user_key, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
+  const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
   if (parsed.state) state = { ...defaultState(), ...parsed.state };
-  if (parsed.settings) settings = { ...defaultSettings(), ...parsed.settings, ...keep };
+  if (parsed.settings) settings = { ...defaultSettings(), ...retireLegacyCredentialFields(parsed.settings), ...keep };
   else settings = { ...settings, ...keep };
   ensureProfile();
   saveLocal({ sync: false });
@@ -3641,7 +3281,6 @@ async function switchProfile() {
   settings.sync_key = SYNC_KEY;
   welcomeMode = 'tiles';
   welcomeSelectedProfile = null;
-  welcomePinMessage = '';
   welcomeProfiles = null;
   render();
 }
@@ -3653,10 +3292,6 @@ function renderSettings() {
     h('h1', {}, 'Settings'),
     h('div', { class: 'sub' }, 'Profile, programme, sync, and data.'),
   ));
-  if (settings.needs_pin_reauth) {
-    root.appendChild(renderReconnectBanner());
-  }
-
   // Profile
   const profileCard = h('div', { class: 'card' });
   profileCard.appendChild(h('h3', {}, '👤 Profile'));
@@ -3697,7 +3332,7 @@ function renderSettings() {
     bwInput,
   ));
   profileCard.appendChild(h('div', { class: 'setting-row' },
-    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Cloud identity'), h('div', { class: 'desc' }, settings.user_key ? 'PIN protected.' : 'Legacy token until a PIN is set.')),
+    h('div', { class: 'label' }, h('div', { class: 'name' }, 'Cloud identity'), h('div', { class: 'desc' }, 'This profile syncs to its separate v16 cloud row.')),
     h('button', { class: 'btn tiny', onClick: switchProfile }, 'Switch profile'),
   ));
   root.appendChild(profileCard);
@@ -4049,7 +3684,7 @@ function renderHelp() {
   card.appendChild(h('h2', {}, 'Library & videos'));
   card.appendChild(h('p', {}, 'Exercises include Mohannad clips and a Jeff Nippard form link. You can add custom videos, hide videos from session view, edit JN links, and add custom exercises.'));
   card.appendChild(h('h2', {}, 'Your data'));
-  card.appendChild(h('p', {}, 'Profiles use PINs, sync is automatic, and the server keeps revisions plus scheduled backups. Settings has restore from backup, cloud download, and local JSON export/import. Offline logging stays on this device until sync returns.'));
+  card.appendChild(h('p', {}, 'Profiles stay separate, sync is automatic, and the server keeps revisions plus scheduled backups. Settings has restore from backup, cloud download, and local JSON export/import. Offline logging stays on this device until sync returns.'));
   card.appendChild(h('h2', {}, 'Install to Home Screen'));
   card.appendChild(h('p', {}, 'iPhone Safari: Share button -> Add to Home Screen. Android Chrome: menu -> Install app or Add to Home screen.'));
   root.appendChild(card);
@@ -4060,7 +3695,7 @@ function init() {
   loadLocal();
   applyLang();
 
-  // ?user=abdullah — profile picker preselect only. It never bypasses PIN.
+  // ?user=abdullah — profile picker preselect only; it only selects a profile.
   const urlUser = new URLSearchParams(window.location.search).get('user');
   if (urlUser && !settings.user_id) welcomePreselectUser = urlUser.trim();
 
