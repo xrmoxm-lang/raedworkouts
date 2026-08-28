@@ -191,3 +191,24 @@ programme migration, or app rename is in scope.
   CHECK: PWA_DEPLOY_URL=https://raedworkouts-v16.vercel.app npm run test:pwa-deploy
   EXPECT: PWA_DEPLOY_HTTPS_OFFLINE_PASSED
   EVIDENCE: PENDING — must run against the new production deployment, never against v15.
+
+# Gates: v16 local grounded coach foundation
+
+Scope extension: a local-CPU-only retrieval index over the complete extracted
+corpus, grounded citations/refusal/error semantics, and the checkpointed static
+coach graph. Voice, UI wiring, paid providers, and deployment are out of scope.
+
+- [ ] G34: The HP builds the complete local BGE index and independently reports source, chunk, vector, and database measurements
+  CHECK: python3 server/coach_index.py build --corpus ../sources/text --db /tmp/raedcoach-index.sqlite
+  EXPECT: LOCAL_INDEX_BUILT
+  EVIDENCE: BLOCKED — the Codex sandbox prevents SSH to the HP (`Operation not permitted` before authentication). This check must run there, using its local fastembed venv; it makes no API call.
+
+- [x] G35: Grounded Q&A returns citations, refuses genuinely uncovered content, and surfaces a query-rewrite failure as an error
+  CHECK: python3 -m unittest server.tests.test_coach_ai.CoachQuestionAnswerTests
+  EXPECT: COACH_QA_PATHS_PASSED
+  EVIDENCE: exit=0; 4 tests passed; deliberate Arabic rewrite exception emitted QUERY_REWRITE_ERROR_SURFACED rather than not_in_sources.
+
+- [x] G36: The checkpointed question graph enforces its contracts, does not permit model-supplied loads, and preserves the existing deterministic clamp boundary
+  CHECK: python3 -m unittest server.tests.test_coach_ai.CoachGraphTests && node scripts/verify-coach-ai.mjs
+  EXPECT: COACH_GRAPH_CONTRACTS_PASSED
+  EVIDENCE: exit=0; 3 graph tests passed; deliberate load_kg output emitted MODEL_LOAD_REJECTED; static bridge check passed.

@@ -63,6 +63,7 @@ const requiredTerms = {
   runner_skip_warmup: 'تخطّي الإحماء',
   runner_finish_warmup: 'أكمل الإحماء',
   warmup_spotify: 'سبوتيفاي — شغّل',
+  home_spotify_handoff: '🎧 سبوتيفاي — شغّل وانسَ الموضوع:',
   kg: 'kg',
 };
 for (const [key, expected] of Object.entries(requiredTerms)) {

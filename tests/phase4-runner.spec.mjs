@@ -65,9 +65,12 @@ async function openSeededHome(page, settingsOverrides = {}) {
 
 async function openStartedRunner(page, settingsOverrides = {}) {
   await openSeededHome(page, settingsOverrides);
-  const start = page.locator('#page-home button.btn.primary.full').first();
-  await expect(start).toBeVisible();
-  await start.click();
+  const viewExercises = page.locator('#page-home [data-home-view-exercises]').first();
+  await expect(viewExercises).toBeVisible();
+  await viewExercises.click();
+  const previewStart = page.locator('[data-session-preview-start]');
+  await expect(previewStart).toBeVisible();
+  await previewStart.click();
 
   // The Phase 4 runner has this explicit bypass for the test's target exercise.
   // Before it exists, the old post-start home still supplies the real failing
@@ -103,7 +106,8 @@ test('Phase 5 never presents an unseeded exercise as 0 kg or completes it withou
   await expect(home, 'an unseeded plan must not prescribe a numeric zero weight').not.toContainText('0 kg');
   await expect(home.locator('[data-suggested-weight]').first(), 'an unseeded planned weight is visibly unset').toHaveText('—');
 
-  await page.locator('#page-home button.btn.primary.full').first().click();
+  await page.locator('#page-home [data-home-view-exercises]').first().click();
+  await page.locator('[data-session-preview-start]').click();
   await page.locator('[data-runner-skip-warmup]').click();
   const runner = page.locator('[data-session-runner]');
   const firstWorkingRow = runner.locator('[data-runner-set-row]').first();
@@ -296,36 +300,22 @@ test('Overnight runner restores the v15 selected-platform Spotify hand-off after
   console.log('RUNNER_SPOTIFY_V15_HANDOFF_PASSED');
 });
 
-test('Phase 4 runner contains all fixed content at 390x844 with video collapsed', async ({ page }) => {
+test('Phase 6 runner uses the v15 segmented card, body image, video strip, and last-time footer', async ({ page }) => {
   await openStartedRunner(page);
-  await page.locator('[data-runner-video-toggle]').click();
-  await recordRunnerGeometry(page, 'video=collapsed');
-  await requireLongestExerciseRunner(page);
-  console.log('PHASE4_RUNNER_COLLAPSED_PASSED');
+  const runner = await requireLongestExerciseRunner(page);
+  await expect(runner.locator('[data-v15-segmented-progress]')).toHaveCount(1);
+  await expect(runner.locator('.ex-thumb.body-img')).toHaveCount(1);
+  await expect(runner.loc('[data-v15-video-strip]')).toHaveCount(1);
+  await expect(runner.loc('[data-v15-last-time]')).toHaveCount(1);
+  console.log('PHASE6_V15_WORKOUT_CARD_PASSED');
 });
 
-test('Phase 4 runner contains all fixed content at 390x844 with video expanded by default', async ({ page }) => {
+test('Phase 6 runner removes the retired focus, cue, and full-screen-form controls', async ({ page }) => {
   await openStartedRunner(page);
-  const videoToggle = page.locator('[data-runner-video-toggle]');
-  await recordRunnerGeometry(page, 'video=expanded');
   const runner = await requireLongestExerciseRunner(page);
-  await expect(videoToggle).toHaveCount(1);
-  await expect(runner.locator('[data-runner-video][data-expanded="true"]')).toHaveCount(1);
-  console.log('PHASE4_RUNNER_EXPANDED_PASSED');
-});
-
-test('Phase 4 runner persists its video and cue switches per profile', async ({ page }) => {
-  await openStartedRunner(page);
-  await requireLongestExerciseRunner(page);
-  await page.locator('[data-runner-settings-button]').click();
-  await page.locator('[data-runner-video-setting]').click();
-  await page.locator('[data-runner-cues-setting]').click();
-  await page.locator('[data-runner-settings-close]').click();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  const runner = await requireLongestExerciseRunner(page);
-  await expect(runner.locator('[data-runner-video][data-expanded="false"]')).toHaveCount(1);
-  await expect(runner.locator('.runner-cue')).toHaveCount(0);
-  console.log('PHASE4_RUNNER_PREFERENCES_PASSED');
+  await expect(runner.locator('[data-runner-video-toggle], [data-runner-settings-button], .runner-cue')).toHaveCount(0);
+  await expect(runner).not.toContainText(/Exercise \d+ of \d+|Focus mode|Cue:|Today: Last session not fully logged/i);
+  console.log('PHASE6_RETIRED_RUNNER_CHROME_ABSENT');
 });
 
 test('Phase 4 runner records a skipped warm-up, uses swipe only for exercise navigation, and leaves without ending', async ({ page }) => {
@@ -342,7 +332,7 @@ test('Phase 4 runner records a skipped warm-up, uses swipe only for exercise nav
   expect(afterTotal, 'a swipe must stay inside the same session').toBe(total);
   expect(afterIndex, 'a horizontal swipe must move to an adjacent exercise').toBe(beforeIndex + (swipeForward ? 1 : -1));
 
-  await page.locator('[data-runner-leave-button]').click();
+  await page.locator('.tab[data-route="home"]').click();
   await expect(page.locator('[data-home-overview]')).toHaveCount(1);
   await expect(page.locator('[data-home-continue]')).toHaveCount(1);
   const persisted = await page.evaluate((user) => {

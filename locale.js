@@ -76,6 +76,10 @@ export const LOCALE = Object.freeze({
   programme_changed: pair('Programme: {name}', 'البرنامج: {name}'),
   mohannad_video: pair('Mohannad — video {n}', 'مهنّد — فيديو {n}'),
   todays_vibe: pair("🎯 Today's vibe: {text}", '🎯 روح اليوم: {text}'),
+  session_mood_upper_a: pair('Big presses first. Save shoulders and arms for the second half.', 'الضغطات الكبيرة أولًا. اترك الأكتاف والذراعين للنصف الأخير.'),
+  session_mood_lower_a: pair('Start heavy on legs. Deadlift cleanly, not heavier.', 'ابدأ ثقيلًا على الأرجل. الرفعة الميتة بأداء نظيف لا بوزن أكبر.'),
+  session_mood_upper_b: pair('Incline first while fresh. More pulling than pressing today.', 'المائل أولًا وأنت مرتاح. السحب اليوم أكثر من الدفع.'),
+  session_mood_lower_b: pair('Squat and hips lead today. The rest completes, not exhausts.', 'السكوات والحوض هما اليوم. البقية إتمام لا إنهاك.'),
   unknown_exercise: pair('Unknown exercise: {id}', 'تمرين غير معروف: {id}'),
   rest_seconds: pair('⏱ Rest {seconds}', '⏱ راحة {seconds}'),
   history_total: pair('{sets} sets · {kg} kg total', '{sets} مجموعات · {kg} kg إجمالًا'),
@@ -220,6 +224,9 @@ export const LOCALE = Object.freeze({
   runner_invalid_prompt: pair('Enter a real weight and reps. Tap again only to keep this as invalid.', 'أدخل وزناً وتكرارات صحيحة. اضغط مرة أخرى فقط لحفظها كسجل غير صالح.'),
   runner_invalid_saved: pair('Kept as invalid. It will not count toward volume.', 'حُفظت كسجل غير صالح ولن تُحسب في الحجم.'),
   runner_music_handoff: pair('{platform} — press play, then forget about it:', '{platform} — شغّل ثم ركّز في التمرين:'),
+  // Phase 6 keeps v15's Home music-card layout, but T1 makes its app copy
+  // Arabic. Playlist titles below remain literal Spotify titles.
+  home_spotify_handoff: pair('🎧 Spotify — press play, then forget about it:', '🎧 سبوتيفاي — شغّل وانسَ الموضوع:'),
   runner_active_started: pair('Active · started {time}', 'جارية · بدأت {time}'),
   runner_add_set: pair('＋ Add set', '+ مجموعة'),
   warmup_spotify: pair('▶ Spotify — press play', 'سبوتيفاي — شغّل'),
@@ -273,6 +280,10 @@ export const LOCALE = Object.freeze({
   could_not_create_profile: pair('Could not create profile.', 'تعذر إنشاء الملف.'),
   saving: pair('Saving...', 'جارٍ الحفظ…'),
   cloud_identity: pair('Cloud identity', 'هوية السحابة'),
+  checking: pair('Checking', 'جارٍ الفحص'),
+  separate_v16_cloud_row: pair('This profile syncs to its separate v16 cloud row', 'يُزامَن هذا الملف في صفّه السحابي الخاص بـv16.'),
+  profile_opened_local_admin_reset: pair('Opened locally. Cloud sync needs an administrator reset.', 'فُتح محليًا. المزامنة السحابية تحتاج إعادة ضبط من المسؤول.'),
+  workout_data_separate: pair('Your workout data stays separate.', 'تبقى بيانات تمرينك منفصلة.'),
 
   leave_workout: pair('Leave workout', 'اخرج من التمرين'),
   workout_settings: pair('Workout settings', 'إعدادات التمرين'),
@@ -314,6 +325,10 @@ export const LOCALE = Object.freeze({
   choose_different_down: pair('Choose a different session ▾', 'اختر تمريناً آخر ▾'),
   choose_different_up: pair('Choose a different session ▴', 'اختر تمريناً آخر ▴'),
   session_plan: pair('Session plan', 'خطة التمرين'),
+  view_exercises: pair('View exercises', 'عرض التمارين'),
+  start_workout: pair('Start', 'ابدأ'),
+  coach: pair('Coach', 'المدرب'),
+  no_video_yet: pair('No video yet', 'لا يوجد فيديو بعد'),
   next_session_preview: pair('Next session preview', 'معاينة التمرين التالي'),
   focus_mode: pair('Focus mode', 'وضع التركيز'),
   focus_on: pair('On — one exercise at a time', 'مفعّل — تمرين واحد في كل مرة'),
@@ -495,14 +510,15 @@ export const ALLOWED_WARMUP_DRILL_NAMES = Object.freeze([
   'Front/back leg swings', 'Side/side leg swings',
 ]);
 export const ALLOWED_PLAYLIST_TITLES = Object.freeze([
-  // Upper/Lower currently ships this one exact Spotify title. It remains
-  // English so the hand-off matches Spotify; retired PPL titles stay out.
-  'Beast Mode',
+  // Upper/Lower keeps these v15 Spotify titles literally so the hand-off
+  // matches the title Raed sees in Spotify. Retired PPL titles stay out.
+  'Beast Mode', 'Power Workout',
 ]);
 export const ALLOWED_PROPER_NOUNS = Object.freeze([
   'Raedworkouts', 'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',
   'Apple Music', 'YT Music', 'Spotify', 'IN2', 'IN2 Fitness', '20IN2', 'App Store', 'iOS', 'JSON',
-  'scope.bit://', 'shortcuts://run-shortcut',
+  // A deployment namespace is an identifier, not user-facing prose.
+  'v16', 'scope.bit://', 'shortcuts://run-shortcut',
 ]);
 export const ALLOWED_PROPER_NOUN_ABBREVIATIONS = Object.freeze([
   'M', 'JN', 'RDL', 'R', 'B', 'A',

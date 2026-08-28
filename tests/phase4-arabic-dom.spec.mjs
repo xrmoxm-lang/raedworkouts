@@ -169,13 +169,19 @@ test('Phase 4 Arabic UI renders no undeclared visible Latin text on every reacha
   await openSignedInArabicApp(page);
 
   findings.push(...await scanVisibleLatin(page, 'home'));
-  for (const route of ['library', 'history', 'settings', 'help']) {
+  for (const route of ['library', 'history', 'settings']) {
     await visitTab(page, route);
     findings.push(...await scanVisibleLatin(page, route));
   }
+  // Phase 6 moved Help into Settings. Opening its disclosure proves the
+  // merged destination remains reachable without reviving the old Help tab.
+  await page.locator('#page-settings [data-settings-disclosure]').last().locator('summary').click();
+  findings.push(...await scanVisibleLatin(page, 'settings-help'));
 
   await visitTab(page, 'home');
   await page.locator('#page-home button.btn.primary.full').first().click();
+  await expect(page.locator('[data-session-preview]')).toHaveCount(1);
+  await page.locator('[data-session-preview-start]').click();
   await expect(page.locator('[data-session-runner]')).toHaveCount(1);
   findings.push(...await scanVisibleLatin(page, 'runner-warmup'));
   await page.locator('[data-runner-skip-warmup]').click();
@@ -192,7 +198,12 @@ test('Phase 4 Arabic UI renders no undeclared visible Latin text on every reacha
   findings.push(...await scanVisibleLatin(page, 'profiles'));
   await page.getByRole('button', { name: /ملف تجريبي/ }).click();
   await expect(page.locator('.pin-panel, .pin-key, input[type="password"]')).toHaveCount(0);
-  await expect(page.locator('[data-home-overview]')).toHaveCount(1);
+  // A fresh profile is correctly on its planned-session Home, not in an
+  // active workout. The old active-banner assertion made this gate fail after
+  // every clean profile launch despite the screen being reachable and valid.
+  await expect(page.locator('#page-home')).toHaveClass(/active/);
+  await expect(page.locator('#page-home [data-home-stat-tiles]')).toHaveCount(1);
+  await expect(page.locator('#page-home [data-home-view-exercises]')).toHaveCount(1);
   findings.push(...await scanVisibleLatin(page, 'profile-direct'));
 
   await page.evaluate(() => localStorage.removeItem('raedworkouts.active_user'));

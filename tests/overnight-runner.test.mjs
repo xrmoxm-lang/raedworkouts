@@ -47,7 +47,7 @@ test('Overnight runner policy logs valid work, retains invalid input after one p
 
 test('Overnight runner deployment precaches its imported policy modules under a new service-worker cache version', async () => {
   const source = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(source, /const VERSION = 'v21';/, 'a changed runner must not reuse the deployed v20 cache');
+  assert.match(source, /const VERSION = 'v22';/, 'this changed app shell must not reuse the deployed v21 cache');
   assert.match(source, /'\.\/domain\/runner-session\.js'/);
   console.log('RUNNER_SERVICE_WORKER_FRESHNESS_PASSED');
 });

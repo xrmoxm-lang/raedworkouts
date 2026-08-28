@@ -783,14 +783,17 @@ const programmeRow = (source) => ({
 
 const UPPER_LOWER_SESSION_ORDER = ['upper_a', 'lower_a', 'upper_b', 'lower_b'];
 const UPPER_LOWER_SESSION_META = {
-  upper_a: { name: 'Upper A', warmup_type: 'upper' },
-  lower_a: { name: 'Lower A', warmup_type: 'lower' },
-  upper_b: { name: 'Upper B', warmup_type: 'upper' },
-  lower_b: { name: 'Lower B', warmup_type: 'lower' },
+  upper_a: { name: 'Upper A', warmup_type: 'upper', mood: 'Big presses first. Save shoulders and arms for the second half.' },
+  lower_a: { name: 'Lower A', warmup_type: 'lower', mood: 'Start heavy on legs. Deadlift cleanly, not heavier.' },
+  upper_b: { name: 'Upper B', warmup_type: 'upper', mood: 'Incline first while fresh. More pulling than pressing today.' },
+  lower_b: { name: 'Lower B', warmup_type: 'lower', mood: 'Squat and hips lead today. The rest completes, not exhausts.' },
 };
 const UPPER_LOWER_PLAYLISTS = {
   spotify: [
     { label: 'Beast Mode', url: 'https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP', vibe: 'Hip-hop heavy' },
+    // These are the two v15 Spotify chips Raed approved for the Home card.
+    // Keep Spotify's literal title and link, rather than translating either.
+    { label: 'Power Workout', url: 'https://open.spotify.com/playlist/37i9dQZF1DX35oM5SPECmN', vibe: 'High BPM' },
   ],
 };
 

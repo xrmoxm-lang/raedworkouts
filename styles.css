@@ -1178,6 +1178,61 @@ body.welcome-mode main {
   .modal-overlay.show, .modal-overlay.show .modal, .rest-timer, .rpe-popover.open { animation: none !important; }
 }
 
+/* ===== Phase 6 — exact v15 workout-card composition ======
+   Raed chose the familiar v15 card, segmented strip, anatomy thumbnail and
+   M1/M2/M3/JN row. These overrides intentionally remove the Phase 4
+   full-viewport runner geometry without changing its guarded data helpers. */
+.session-preview { margin-bottom: 14px; }
+.session-preview-start { margin-bottom: 24px; }
+.home-v15-spotify { margin-top: 14px; }
+.v15-runner {
+  width: 100%; max-width: var(--maxw); height: auto; min-height: 0;
+  display: block; overflow: visible; margin: 0 auto; padding: 0 16px 28px;
+  background: transparent;
+}
+.v15-segmented-progress {
+  display: flex; gap: 4px; margin: 4px 0 12px;
+}
+.v15-progress-segment {
+  flex: 1 1 0; height: 6px; padding: 0; border: 0; border-radius: 999px;
+  background: var(--border); cursor: pointer;
+}
+.v15-progress-segment.current { background: var(--accent); }
+.v15-progress-segment.done { background: var(--good); }
+.v15-runner-main {
+  display: block; min-height: 0; overflow: visible; padding: 0; touch-action: pan-y;
+}
+.v15-workout-card { min-height: 0; overflow: visible; padding: 14px; }
+.v15-workout-card .ex-body { overflow: visible; }
+.v15-video-strip { margin-top: 10px; }
+.v15-set-panel { display: block; margin-top: 0; min-height: 0; overflow: visible; }
+.v15-set-list { display: grid; gap: 7px; }
+.v15-set-list .set-grid-headers,
+.v15-set-list .set-grid { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px; }
+.v15-workout-card > .ex-body > .set-grid-headers {
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px;
+}
+.v15-set-list .runner-set-row {
+  display: grid; min-height: 48px; margin: 0; padding: 0; background: transparent;
+}
+.v15-set-list .runner-set-row input { height: 48px; min-height: 48px; }
+.v15-set-list .runner-set-row .runner-set-check { width: 48px; height: 48px; }
+.v15-set-list .runner-set-row.done .runner-set-check { color: #fff; }
+.v15-effort-row { grid-column: 1 / -1; }
+.v15-workout-card .runner-bottom-actions { justify-content: flex-start; padding: 0; }
+.v15-workout-card .runner-last-time { min-height: 0; margin-top: 14px; white-space: normal; }
+.settings-disclosure { margin-bottom: 12px; }
+.settings-disclosure > summary {
+  list-style: none; cursor: pointer; min-height: 52px; display: flex; align-items: center;
+  padding: 0 16px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); color: var(--text); font-weight: 750;
+}
+.settings-disclosure > summary::-webkit-details-marker { display: none; }
+.settings-disclosure > summary::before { content: '‹'; margin-inline-end: 10px; color: var(--text-muted); font-size: 20px; }
+.settings-disclosure[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.settings-disclosure[open] > summary::before { transform: rotate(-90deg); }
+.settings-disclosure > .card { margin: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+
 /* ============================================================
    BOLDER PASS (v10) — product-bolder: confident athletic type,
    stronger hierarchy + weight contrast, sharper accent, more
