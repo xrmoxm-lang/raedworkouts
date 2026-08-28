@@ -231,6 +231,8 @@ export const LOCALE = Object.freeze({
   runner_add_set: pair('＋ Add set', '+ مجموعة'),
   warmup_spotify: pair('▶ Spotify — press play', 'سبوتيفاي — شغّل'),
   runner_finish_warmup: pair('Finish warm-up', 'أكمل الإحماء'),
+  warmup_finish_drills: pair('Finish treadmill and drills', 'أكمل المشاية والحركات'),
+  warmup_start_ramps: pair('Start exercise ramps', 'ابدأ مجموعات التدرّج'),
   phase_one: pair('Phase 1', 'المرحلة الأولى'),
   treadmill: pair('Treadmill', 'المشاية'),
   runner_set_count: pair('{count} sets', '{count} مجموعات'),

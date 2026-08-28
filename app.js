@@ -544,6 +544,10 @@ let welcomePreselectUser = '';
 let welcomeMode = 'tiles';
 let welcomeSelectedProfile = null;
 let suppressNextPush = false;
+// v15's focus-mode cursor: which exercise the session view is showing.
+// Its declaration was lost in the phase-6 rewrite while eight references to it
+// survived, so the session view threw ReferenceError on render.
+let focusExerciseIdx = null;
 
 function hasMeaningfulLocalData() {
   return (state.history || []).length > 0 || Boolean(state.active_session) || (state.bodyweight_log || []).length > 0;
@@ -1542,31 +1546,43 @@ function scopedReplacementFor(session, exerciseId) {
 function renderWarmupPhase(activeSession) {
   const warmup = activeSession.warmup;
   const card = h('div', { class: 'card warmup-phase' },
-    h('div', { class: 'phase-kicker' }, '⚠ PHASE 1 · WARM-UP'),
-    h('h3', {}, 'Warm-up — cap 15 min'),
-    h('p', { class: 'tiny muted' }, 'Treadmill first, then 10-rep drills. Exercise ramps come next.'),
+    h('div', { class: 'phase-kicker' }, t('warmup_phase')),
+    h('h3', {}, t('warmup_cap')),
+    h('p', { class: 'tiny muted' }, t('warmup_explainer')),
   );
   const treadmillDone = warmup.treadmill_done;
   card.appendChild(h('div', { class: 'warmup-step' },
-    h('div', {}, h('strong', {}, '1. Treadmill walk'), h('div', { class: 'tiny muted' }, 'Choose 5–10 min, then tap done.')),
+    h('div', {}, h('strong', {}, t('treadmill_walk')), h('div', { class: 'tiny muted' }, t('choose_treadmill'))),
     h('div', { class: 'warmup-minute-picker' }, [5, 7, 10].map((minutes) => h('button', {
       class: 'btn tiny' + (warmup.treadmill_minutes === minutes ? ' primary' : ''),
       onClick: () => { warmup.treadmill_minutes = minutes; warmup.treadmill_done = true; saveLocal(); render(); },
-    }, `${minutes} min`)))
+    }, h('bdi', { class: 'ltr-run' }, String(minutes)), ' ', t('minutes'))))
   ));
   card.appendChild(h('div', { class: 'warmup-step' },
-    h('div', {}, h('strong', {}, '2. Drills'), h('div', { class: 'tiny muted' }, '10 reps each.')),
+    h('div', {}, h('strong', {}, t('drills')), h('div', { class: 'tiny muted' }, t('ten_reps_each'))),
     h('div', { class: 'warmup-drill-list' }, warmup.drills.map((drill) => h('button', {
       class: 'warmup-drill' + (drill.completed ? ' done' : ''),
       disabled: !treadmillDone,
       onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
-    }, h('span', {}, `${drill.movement} · ${drill.reps}`), h('span', {}, drill.completed ? '✓' : '○'))))
+    }, h('span', {}, isolate(drill.movement), ' · ', h('bdi', { class: 'ltr-run' }, String(drill.reps))), h('span', {}, drill.completed ? '✓' : '○'))))
   ));
   const complete = generalWarmupComplete(warmup);
   card.appendChild(h('button', {
     class: 'btn primary full', disabled: !complete,
     onClick: () => { warmup.completed_at = new Date().toISOString(); activeSession.phase = 'lifting'; saveLocal(); render(); },
-  }, complete ? 'Start exercise ramps →' : 'Finish treadmill and drills'));
+  }, complete ? t('warmup_start_ramps') + ' →' : t('warmup_finish_drills')));
+  // Skipping must always be possible — the treadmill is often taken. It is
+  // recorded, never silently dropped: `21` §3 says a gap is information about
+  // his life, not a bug in the log.
+  card.appendChild(h('button', {
+    class: 'btn ghost full', style: 'margin-top:8px;', 'data-warmup-skip': 'true',
+    onClick: () => {
+      warmup.skipped = true;
+      warmup.completed_at = new Date().toISOString();
+      activeSession.phase = 'lifting';
+      saveLocal(); render();
+    },
+  }, t('runner_skip_warmup')));
   return card;
 }
 
@@ -1613,6 +1629,9 @@ function startSession(session) {
     warmup: createSessionWarmup(session),
     exercises,
   };
+  // The restored v15 view is cursor-based: every new session starts at its
+  // first unresolved exercise, never at the prior session's last card.
+  focusExerciseIdx = null;
   // A block transition may offer a configured skin, but cannot apply one.
   const prevBlock = state._last_toasted_block;
   const curBlock = state.current_block || 1;
@@ -1625,7 +1644,7 @@ function startSession(session) {
   const skinSuggestion = skinBoundary.suggestion;
   state._last_toasted_block = curBlock;
   saveLocal();
-  router('runner');
+  router('home');   // v15's session view lives on home
   if (skinSuggestion) showSkinSuggestion(skinSuggestion);
   else {
     toast('Session started — let\'s go.');
@@ -1645,6 +1664,7 @@ function endSession() {
     if (!confirm('No sets logged. Discard this session?')) return;
     state.active_session = null;
     state.forced_next_session = null;
+    focusExerciseIdx = null;
     saveLocal();
     router('home');
     return;
@@ -1656,6 +1676,7 @@ function endSession() {
   state.history.push(finishedSession);
   state.active_session = null;
   state.forced_next_session = null;  // clear override after session ends
+  focusExerciseIdx = null;
   state.msg_index = (state.msg_index + 1) % (RW.MOTIVATIONAL_MESSAGES?.length || 20);
   saveLocal();
   // Show end-of-session screen instead of jumping to history
@@ -1915,7 +1936,7 @@ function render() {
   document.body.classList.remove('runner-mode');
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + route));
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.route === route));
-  if (route === 'runner') {
+  if (false && route === 'runner') {  // custom runner retired — v15's session view owns this
     if (!state.active_session) {
       router('home');
       return;
@@ -1927,7 +1948,7 @@ function render() {
     return;
   }
   if (route === 'home') renderHome();
-  if (route === 'preview') renderSessionPreview();
+  // preview retired 2026-08-28 — Raed: the plan is already on home, do not list it twice
   if (route === 'coach') renderCoach();
   if (route === 'library') renderLibrary();
   if (route === 'history') renderHistory();
@@ -2073,7 +2094,10 @@ function skipRunnerExercise(exerciseId) {
   if (!active || !exercise) return;
   active.exercises[exerciseId] = skipRunnerExerciseState(exercise, new Date().toISOString());
   const next = nextUnresolvedRunnerExerciseIndex();
-  if (next >= 0) active.runner_exercise_index = next;
+  if (next >= 0) {
+    active.runner_exercise_index = next;
+    focusExerciseIdx = next;
+  }
   saveLocal();
   render();
   toast(t('runner_exercise_skipped'));
@@ -2188,7 +2212,8 @@ function renderRunnerWarmup(activeSession) {
     h('div', { class: 'runner-warmup-actions' },
       h('button', { type: 'button', class: 'btn ghost', 'data-runner-skip-warmup': 'true', onClick: () => completeRunnerWarmup({ skipped: true }) }, isolate(t('runner_skip_warmup'))),
     ),
-    renderRunnerPlaylistHandoff(session),
+    // Spotify is on Home, before the session starts. Raed: "سبوتيفاي شيلها لأنه
+    // خلاص موجودة برا" — showing it twice was the complaint.
   );
 }
 
@@ -2295,7 +2320,7 @@ function renderV15Workout(active, entries, index, exerciseId, exerciseState, exe
     }, t('previous')),
     h('button', { type: 'button', class: 'btn tiny', 'data-runner-add-set': 'true', onClick: () => addRunnerSet(exerciseId) }, '+ ', t('runner_add_set')),
     h('button', { type: 'button', class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, tf('rest_seconds', { seconds: `${Math.floor(settings.rest_seconds / 60)}:${String(settings.rest_seconds % 60).padStart(2, '0')}` })),
-    h('button', { type: 'button', class: 'btn tiny', onClick: () => showAltModal(exerciseId, exerciseState) }, '⇄ ', t('swap')),
+    h('button', { type: 'button', class: 'btn tiny', onClick: () => showAltModal(exerciseId, exerciseState) }, t('swap')),
     h('button', {
       type: 'button', class: 'btn tiny', 'data-runner-reset-set': 'true',
       'aria-label': '↺', onClick: () => resetCurrentRunnerSet(exerciseId),
@@ -2479,11 +2504,11 @@ function renderRunner() {
 }
 
 function showSessionPreview(session) {
-  // The exercise list is a real stage, not a modal and not a pre-created
-  // session. Back leaves it harmlessly; only its Start button begins logging.
-  state.preview_session_id = session?.id || null;
-  saveLocal();
-  router('preview');
+  // Preview retired 2026-08-28. Raed: "خلاص ما أبغاه يعرض لي التمارين، على طول،
+  // لأنه موجود خطة التمارين" — the plan is already on home, so pressing start
+  // begins the session instead of listing the same exercises a second time.
+  startSession(session);
+  return;
 }
 
 function previewedSession() {
@@ -2535,7 +2560,7 @@ function renderSessionPreview() {
     // Stable capture/test hook: this is the only control in the preview that
     // enters the workout. The label changes for a resumed session, not its job.
     'data-session-preview-start-workout': 'true',
-    onClick: () => active ? router('runner') : startSession(session),
+    onClick: () => active ? router('home') : startSession(session),
   }, '▶ ', active ? t('continue_session') : t('start_workout')));
 }
 
@@ -2641,13 +2666,11 @@ function renderHome() {
 
   // Action button
   if (state.active_session) {
-    root.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('runner') },
+    root.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('home') },
       t('continue_session')
     ));
-    root.appendChild(h('button', {
-      type: 'button', class: 'btn ghost full', 'data-home-view-exercises': 'true',
-      onClick: () => showSessionPreview(getActiveProgramme().sessions.find((item) => item.id === state.active_session.session_id)),
-    }, t('view_exercises')));
+    // عرض التمارين retired — the plan is already listed on this page.
+
   } else if (planned) {
     root.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(planned) },
       '▶ ', tf('start_session_named', { session: shortSessionName(planned) })
@@ -2700,34 +2723,15 @@ function renderHome() {
     ));
   }
 
-  // Phase 6 restores v15's active Home instead of reducing it to Continue.
-  // Only the explicitly retired set meter, Focus/Cue chrome, and note stay
-  // gone. The visible playlist, vibe, full exercise list, and terminal
-  // session controls remain useful while the runner is temporarily closed.
-  if (activeSession && activeProgrammeSession) {
-    root.appendChild(h('div', { class: 'spacer-24' }));
-    // Upper/Lower has no separate mood field yet. Keep v15's visible vibe
-    // block without inventing copy: its approved localised session name is
-    // the truthful fallback until Raed supplies session-specific moods.
-    const vibe = activeProgrammeSession.mood || t(activeProgrammeSession.name);
-    root.appendChild(h('div', { class: 'cue', 'data-home-vibe': 'true', style: 'margin-bottom:10px;' },
-      tf('todays_vibe', { text: vibe }),
-    ));
-    appendV15HomeExerciseList(root, activeProgrammeSession, activeSession);
-    root.appendChild(h('div', { class: 'card', 'data-home-session-actions': 'true', style: 'margin-top:16px;' },
-      h('button', { class: 'btn primary full', 'data-home-finish': 'true', onClick: endSession }, t('finish_and_save_session')),
-      h('div', { class: 'spacer-12' }),
-      h('button', { class: 'btn danger ghost full', 'data-home-discard': 'true', onClick: discardActiveSessionFromHome }, t('discard_session')),
-    ));
-    return;
-  }
+  // The Phase 6 block that used to sit here short-circuited with `return`, so
+  // v15's real session view below — warm-up phase, focus mode, Prev/Next, the
+  // exercise cards, the terminal controls — never ran. Raed: "ما في زر Next،
+  // Next exercise, previous، ما في". Removed so the original code owns this.
 
   // Active session detail
   if (state.active_session) {
     root.appendChild(h('div', { class: 'spacer-24' }));
     const a = state.active_session;
-    const session = getActiveProgramme().sessions.find(s => s.id === a.session_id);
-
     // Active sessions created before Phase 2 remain usable instead of being
     // retroactively blocked by a phase they never received.
     if (!a.warmup) {
@@ -2735,45 +2739,15 @@ function renderHome() {
     }
     if (a.phase === 'warmup' && a.warmup) {
       root.appendChild(renderWarmupPhase(a));
-      root.appendChild(h('button', { class: 'btn danger ghost full', style: 'margin-top:12px;', onClick: () => { if (confirm('Discard this session?')) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, 'Discard session'));
+      root.appendChild(h('button', { class: 'btn danger ghost full', style: 'margin-top:12px;', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')));
       return;
     }
 
-    // Mood + playlist row
-    if (session.mood) {
-      root.appendChild(h('div', { class: 'cue', style: 'margin-bottom:10px;' }, tf('todays_vibe', { text: session.mood })));
-    }
-    const platformPlaylists = getCurrentPlaylists(session);
-    if (platformPlaylists && platformPlaylists.length) {
-      root.appendChild(h('div', { class: 'card compact', style: 'margin-bottom:14px;' },
-        h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' },
-          t('home_spotify_handoff')
-        ),
-        h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
-          platformPlaylists.map(p =>
-            h('a', { href: p.url, target: '_blank', rel: 'noopener', class: 'btn tiny', title: p.vibe }, isolate(p.label))
-          )
-        ),
-      ));
-    }
-
-    // Focus mode toggle
-    root.appendChild(h('div', { style: 'display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:8px;' },
-      h('span', { class: 'tiny muted' }, 'Focus mode'),
-      h('button', {
-        class: 'btn tiny' + (settings.focus_mode ? ' primary' : ''),
-        onClick: () => { settings.focus_mode = !settings.focus_mode; saveLocal(); render(); }
-      }, settings.focus_mode ? 'On — one exercise at a time' : 'Off — show all'),
-      h('button', {
-        class: 'btn tiny' + (settings.show_cues ? ' primary' : ''),
-        onClick: () => { settings.show_cues = !settings.show_cues; saveLocal(); render(); },
-      }, settings.show_cues ? 'Cues on' : 'Cues off'),
-    ));
-
     const exEntries = Object.entries(a.exercises);
-    if (settings.focus_mode) {
+    // This is v15's single-exercise session flow, not an optional setting.
+    if (exEntries.length) {
       // Find the next non-complete exercise
-      const findNextIdx = () => exEntries.findIndex(([id, ex]) => !ex.sets.filter(s => !s.is_warmup).every(s => s.completed));
+      const findNextIdx = () => exEntries.findIndex(([, exercise]) => !isRunnerExerciseResolved(exercise));
       let curIdx = focusExerciseIdx;
       if (curIdx == null || curIdx >= exEntries.length) {
         const ni = findNextIdx();
@@ -2782,21 +2756,15 @@ function renderHome() {
       focusExerciseIdx = curIdx;
 
       const total = exEntries.length;
-      const doneCount = exEntries.filter(([_, ex]) => ex.sets.filter(s => !s.is_warmup).every(s => s.completed)).length;
-
       // Progress strip
-      root.appendChild(h('div', { style: 'display:flex; gap:4px; margin-bottom:12px;' },
+    root.appendChild(h('div', { style: 'display:flex; gap:4px; margin-bottom:12px;', 'data-v15-session-progress': 'true' },
         exEntries.map(([id, ex], i) => {
-          const allDone = ex.sets.filter(s => !s.is_warmup).every(s => s.completed);
+          const allDone = isRunnerExerciseResolved(ex);
           return h('div', {
             style: `flex:1; height:6px; border-radius:999px; cursor:pointer; background:${allDone ? 'var(--good)' : (i === curIdx ? 'var(--accent)' : 'var(--border)')}`,
             onClick: () => { focusExerciseIdx = i; render(); }
           });
         })
-      ));
-
-      root.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:8px; text-align:center;' },
-        `Exercise ${curIdx + 1} of ${total} · ${doneCount} done`
       ));
 
       // Render only the current exercise, expanded
@@ -2805,23 +2773,39 @@ function renderHome() {
       card.classList.add('expanded');
       root.appendChild(card);
 
+      // Horizontal swipe between exercises. It existed only in the retired runner,
+      // so reviving v15's view had silently dropped it. RTL: swiping left moves
+      // forward, matching the on-screen arrows.
+      let swipeFrom = null;
+      card.addEventListener('pointerdown', (e) => { swipeFrom = { x: e.clientX, y: e.clientY }; });
+      card.addEventListener('pointercancel', () => { swipeFrom = null; });
+      card.addEventListener('pointerup', (e) => {
+        if (!swipeFrom) return;
+        const dx = e.clientX - swipeFrom.x;
+        const dy = e.clientY - swipeFrom.y;
+        swipeFrom = null;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+        if (e.target.closest('input, textarea, button, a')) return;
+        const step = dx < 0 ? 1 : -1;
+        const nextIdx = Math.min(total - 1, Math.max(0, curIdx + step));
+        if (nextIdx === curIdx) return;
+        focusExerciseIdx = nextIdx;
+        render();
+      });
+
       // Prev / Next nav
       root.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
-        h('button', { class: 'btn', style: 'flex:1;', onClick: () => { focusExerciseIdx = Math.max(0, curIdx - 1); render(); } }, '← Previous'),
+        h('button', { class: 'btn', style: 'flex:1;', onClick: () => { focusExerciseIdx = Math.max(0, curIdx - 1); render(); } }, t('previous')),
         curIdx < total - 1
-          ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { focusExerciseIdx = curIdx + 1; render(); } }, 'Next exercise →')
+          ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { focusExerciseIdx = curIdx + 1; render(); } }, t('next_exercise_arrow'))
           : h('button', { class: 'btn primary', style: 'flex:2;', onClick: endSession }, t('end_session')),
       ));
-    } else {
-      exEntries.forEach(([ex_id, exState]) => {
-        root.appendChild(renderExerciseCard(ex_id, exState));
-      });
     }
 
     root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
-      h('button', { class: 'btn primary full', onClick: endSession }, '✓ Finish & save session'),
+      h('button', { class: 'btn primary full', onClick: endSession }, t('finish_and_save_session')),
       h('div', { class: 'spacer-12' }),
-      h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm('Discard this session?')) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, 'Discard session'),
+      h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')),
     ));
   } else {
     // Show today's planned exercises preview
@@ -2856,7 +2840,7 @@ function renderExerciseCard(ex_id, exState) {
   if (!ex) return h('div', {}, tf('unknown_exercise', { id: actualId }));
   const sug = suggestNextWeight(actualId, planned);
   const last = getLastPerformance(actualId);
-  const allWorkingDone = exState.sets.filter(s => !s.is_warmup).every(s => s.completed);
+  const allWorkingDone = isRunnerExerciseResolved(exState);
 
   const card = h('div', { class: 'ex' + (allWorkingDone ? ' done' : ''), id: 'ex-' + ex_id });
   const isOpen = card.classList.contains('expanded');
@@ -2869,7 +2853,8 @@ function renderExerciseCard(ex_id, exState) {
   }},
     h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
     h('div', { class: 'ex-info' },
-      h('h4', {}, settings.lang === 'ar' && ex.name_ar ? ex.name_ar : ex.name),
+      // T1: catalogue exercise names remain English even in the Arabic UI.
+      h('h4', {}, h('bdi', { class: 'ltr-run' }, ex.name)),
       h('div', { class: 'meta' },
         ex.primary.map(m => h('span', { class: 'muscle-tag' }, muscleLabel(m))),
         ` ${planned.sets} × ${planned.reps}`,
@@ -2890,9 +2875,6 @@ function renderExerciseCard(ex_id, exState) {
       ));
     }
   }
-  // Cue — subtle tip
-  if (settings.show_cues && ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, 'Cue: '), ex.cue));
-
   // Videos — Library controls which are visible via state.video_hidden
   const allVideos = buildExerciseVideos(actualId, ex);
   if (allVideos.length) {
@@ -2916,12 +2898,19 @@ function renderExerciseCard(ex_id, exState) {
     const setNum = isWarm ? `W${idx+1}` : `${idx - exState.sets.filter(s => s.is_warmup).length + 1}`;
     const workingSets = exState.sets.filter((item) => !item.is_warmup);
     const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
-    const row = h('div', { class: 'set-grid' + (set.completed && !isWarm ? ' done' : ''), style: isWarm ? 'opacity:0.7;' : '' },
+    const row = h('div', {
+      class: 'set-grid' + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : ''),
+      style: isWarm ? 'opacity:0.7;' : '',
+      'data-session-set-row': String(idx),
+      'data-set-kind': isWarm ? 'warmup' : 'working',
+    },
       h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
       h('input', {
         type: 'number', step: '0.5', inputmode: 'decimal',
         placeholder: suggestedWeightPlaceholder(sug.weight),
         value: editableWeightValue(set.weight),
+        'data-runner-weight-input': 'true',
+        disabled: Boolean(set.skipped),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onInput: (e) => { set.weight = e.target.value === '' ? '' : parseFloat(e.target.value); saveLocal(); }
       }),
@@ -2933,7 +2922,8 @@ function renderExerciseCard(ex_id, exState) {
         onInput: (e) => { set.reps = e.target.value === '' ? '' : parseInt(e.target.value, 10); saveLocal(); }
       }),
       h('button', {
-        class: 'set-check' + (set.completed ? ' checked' : ''),
+        class: 'set-check' + (set.completed ? ' checked' : '') + (set.skipped ? ' skipped' : ''),
+        disabled: Boolean(set.skipped),
         onClick: () => {
           if (!set.completed) {
             if (!isWarm && (!hasWorkingWeight(set.weight) || !Number.isFinite(Number(set.reps)) || Number(set.reps) < 1)) {
@@ -2959,7 +2949,7 @@ function renderExerciseCard(ex_id, exState) {
             if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
           }
         }
-      }, set.completed ? '✓' : '○'),
+      }, set.skipped ? '↷' : set.completed ? '✓' : '○'),
     );
     body.appendChild(row);
     if (isFinalWorkingSet) {
@@ -2973,7 +2963,7 @@ function renderExerciseCard(ex_id, exState) {
   // Action row: alternatives + add set + warmup helper
   if (planned.warmup) {
     body.appendChild(h('div', { class: 'warmup-block' },
-      h('strong', {}, '⚠ Warm-up: '), warmupText(planned, sug.weight)
+      h('strong', {}, '⚠ ', t('warmup'), ': '), warmupText(planned, sug.weight)
     ));
   }
 
@@ -2989,7 +2979,11 @@ function renderExerciseCard(ex_id, exState) {
     h('button', {
       class: 'btn tiny',
       onClick: () => showAltModal(ex_id, exState)
-    }, '⇄ Swap'),
+    }, t('swap')),
+    h('button', {
+      class: 'btn tiny ghost', 'data-runner-skip-exercise': 'true',
+      onClick: () => skipRunnerExercise(ex_id),
+    }, t('runner_skip_exercise')),
   );
   body.appendChild(actions);
 
@@ -3024,7 +3018,7 @@ function showAltModal(ex_id, exState) {
     );
   };
 
-  m.appendChild(h('h3', {}, '⇄ Swap'));
+  m.appendChild(h('h3', {}, t('swap')));
 
   // ===== SECTION 1: Replace =====
   const validAlts = (ex?.alternatives || []).map(id => allEx.find(e => e.id === id)).filter(Boolean);

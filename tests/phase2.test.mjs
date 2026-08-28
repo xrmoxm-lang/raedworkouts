@@ -100,13 +100,14 @@ test('warm-up phase has a 5–10 minute treadmill, ten-rep drills, 15-minute cap
   assert.equal(lower.drills.some((drill) => /leg/i.test(drill.id)), true);
 });
 
-test('session UI keeps the removal list out and wires one-thumb logging, cue control, and the warm-up gate', () => {
-  assert.match(appSource, /show_cues:\s*true/);
-  assert.match(appSource, /Cues on/);
+test('session UI keeps the removal list out and wires one-thumb logging and the warm-up gate', () => {
   assert.match(appSource, /renderWarmupPhase/);
   assert.match(appSource, /isFinalWorkingSet && !set\.effort/);
   assert.match(appSource, /Finish this exercise’s ramp set first/);
   assert.doesNotMatch(appSource, /Last session not fully logged/);
+  assert.doesNotMatch(appSource, /Focus mode/);
+  assert.doesNotMatch(appSource, /Cues on/);
+  assert.doesNotMatch(appSource, /Cue:\s/);
   assert.match(styleSource, /grid-template-columns:\s*30px minmax\(72px, 1fr\) minmax\(64px, 0\.8fr\) 48px/);
 });
 

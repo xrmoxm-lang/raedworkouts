@@ -180,13 +180,17 @@ test('Phase 4 Arabic UI renders no undeclared visible Latin text on every reacha
 
   await visitTab(page, 'home');
   await page.locator('#page-home button.btn.primary.full').first().click();
-  await expect(page.locator('[data-session-preview]')).toHaveCount(1);
-  await page.locator('[data-session-preview-start]').click();
-  await expect(page.locator('[data-session-runner]')).toHaveCount(1);
-  findings.push(...await scanVisibleLatin(page, 'runner-warmup'));
-  await page.locator('[data-runner-skip-warmup]').click();
-  await expect(page.locator('[data-session-runner][data-runner-phase="lifting"]')).toHaveCount(1);
-  findings.push(...await scanVisibleLatin(page, 'runner-lifting'));
+  await expect(page.locator('[data-session-preview]')).toHaveCount(0);
+  const warmup = page.locator('#page-home .warmup-phase');
+  await expect(warmup).toHaveCount(1);
+  findings.push(...await scanVisibleLatin(page, 'session-warmup'));
+  await warmup.locator('.warmup-minute-picker button').first().click();
+  const drills = warmup.locator('.warmup-drill');
+  const drillCount = await drills.count();
+  for (let index = 0; index < drillCount; index += 1) await drills.nth(index).click();
+  await warmup.locator('.btn.primary.full').click();
+  await expect(page.locator('#page-home .ex.expanded')).toHaveCount(1);
+  findings.push(...await scanVisibleLatin(page, 'session-lifting'));
 
   await page.evaluate(() => {
     localStorage.clear();

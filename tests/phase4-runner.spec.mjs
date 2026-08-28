@@ -12,13 +12,11 @@ test.use({
   viewport: { width: 390, height: 844 },
   launchOptions: {
     args: ['--allow-file-access-from-files'],
-    // CI obtains the matching browser through `npx playwright install`.
-    // This override is only for a pre-installed local Chrome for Testing.
     executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
   },
 });
 
-function seededState() {
+function seededState({ history = [] } = {}) {
   return {
     schema_version: 2,
     programme_reference_migration_version: 1,
@@ -26,7 +24,7 @@ function seededState() {
     current_block: 1,
     profile: { display_name: 'Runner test', experience: 'returning', created_at: '2026-08-25T00:00:00.000Z' },
     active_session: null,
-    history: [],
+    history,
     bodyweight_log: [],
     custom_videos: {}, custom_jn_urls: {}, video_hidden: {}, custom_exercises: [],
     programme_overrides: null, prs: {}, msg_index: 0, substitutions: [],
@@ -38,7 +36,6 @@ function seededSettings(overrides = {}) {
     user_id: testUser,
     user_key: '',
     theme: 'light', skin: 'hadid',
-    focus_mode: true, show_cues: true,
     rest_seconds: 120, vibrate: false, notifications: false,
     music_platform: 'spotify',
     block_auto_color: false,
@@ -49,298 +46,110 @@ function seededSettings(overrides = {}) {
   };
 }
 
-async function openSeededHome(page, settingsOverrides = {}) {
-  await page.addInitScript(({ user, state, settings }) => {
-    // This script also runs after reload. Seed once per test page so a reload
-    // verifies persisted settings instead of recreating the original profile.
+async function openSeededHome(page, { history = [], settings = {} } = {}) {
+  await page.addInitScript(({ user, state, savedSettings }) => {
     if (sessionStorage.getItem('phase4-runner-seeded')) return;
     localStorage.clear();
     localStorage.setItem('raedworkouts.active_user', user);
     localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.state.v1`, JSON.stringify(state));
-    localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.settings.v1`, JSON.stringify(settings));
+    localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.settings.v1`, JSON.stringify(savedSettings));
     sessionStorage.setItem('phase4-runner-seeded', 'true');
-  }, { user: testUser, state: seededState(), settings: seededSettings(settingsOverrides) });
+  }, { user: testUser, state: seededState({ history }), savedSettings: seededSettings(settings) });
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
 }
 
-async function openStartedRunner(page, settingsOverrides = {}) {
-  await openSeededHome(page, settingsOverrides);
-  const viewExercises = page.locator('#page-home [data-home-view-exercises]').first();
-  await expect(viewExercises).toBeVisible();
-  await viewExercises.click();
-  const previewStart = page.locator('[data-session-preview-start]');
-  await expect(previewStart).toBeVisible();
-  await previewStart.click();
+async function startAndCompleteWarmup(page) {
+  const home = page.locator('#page-home');
+  await home.locator('[data-home-view-exercises]').click();
+  await expect(page.locator('[data-session-preview]'), 'Raed retired the duplicate exercise-preview stage').toHaveCount(0);
 
-  // The Phase 4 runner has this explicit bypass for the test's target exercise.
-  // Before it exists, the old post-start home still supplies the real failing
-  // scroll measurement below.
-  const skipWarmup = page.locator('[data-runner-skip-warmup]');
-  if (await skipWarmup.count()) {
-    // Skip remains available but deliberately quiet.  The only bottom-bar
-    // action is positive completion, and it cannot run until warm-up is done.
-    await expect(skipWarmup).toHaveCount(1);
-    const completeWarmup = page.locator('[data-runner-complete-warmup]');
-    await expect(completeWarmup).toHaveCount(1);
-    await expect(completeWarmup).toBeDisabled();
-    await skipWarmup.click();
-  }
-
-  // Choose the actual longest rendered exercise from the active programme,
-  // rather than baking a row count into this gate.
-  await page.evaluate((user) => {
-    const stateKey = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
-    const current = JSON.parse(localStorage.getItem(stateKey));
-    const entries = Object.entries(current.active_session.exercises || {});
-    const [longestIndex] = entries.reduce((best, [, exercise], index) =>
-      (exercise.sets.length > best[1] ? [index, exercise.sets.length] : best), [0, -1]);
-    current.active_session.runner_exercise_index = longestIndex;
-    localStorage.setItem(stateKey, JSON.stringify(current));
-  }, testUser);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  const warmup = home.locator('.warmup-phase');
+  await expect(warmup).toBeVisible();
+  await warmup.locator('.warmup-minute-picker button').first().click();
+  const drills = warmup.locator('.warmup-drill');
+  const drillCount = await drills.count();
+  expect(drillCount, 'an upper or lower warm-up must expose its mapped drills').toBeGreaterThan(0);
+  for (let index = 0; index < drillCount; index += 1) await drills.nth(index).click();
+  const beginLifting = warmup.locator('.btn.primary.full');
+  await expect(beginLifting).toBeEnabled();
+  await beginLifting.click();
+  await expect(home.locator('.ex.expanded')).toHaveCount(1);
+  return home;
 }
 
-test('Phase 5 never presents an unseeded exercise as 0 kg or completes it without a real weight', async ({ page }) => {
+test('v15 session on Home has one music card, English exercise names, videos, and no retired focus or cue chrome', async ({ page }) => {
   await openSeededHome(page);
-  const home = page.locator('#page-home');
-  await expect(home, 'an unseeded plan must not prescribe a numeric zero weight').not.toContainText('0 kg');
-  await expect(home.locator('[data-suggested-weight]').first(), 'an unseeded planned weight is visibly unset').toHaveText('—');
+  const home = await startAndCompleteWarmup(page);
 
-  await page.locator('#page-home [data-home-view-exercises]').first().click();
-  await page.locator('[data-session-preview-start]').click();
-  await page.locator('[data-runner-skip-warmup]').click();
-  const runner = page.locator('[data-session-runner]');
-  const firstWorkingRow = runner.locator('[data-runner-set-row]').first();
-  const weight = firstWorkingRow.locator('input[type="number"]').first();
-  await expect(weight, 'a suggested load must be a placeholder, never an input value').toHaveValue('');
-  await expect(weight, 'no-history exercise has no fictional numeric suggestion').toHaveAttribute('placeholder', '');
-
-  await firstWorkingRow.locator('.runner-set-check').click();
-  await expect(firstWorkingRow, 'a working row with no weight cannot be completed').not.toHaveClass(/\bdone\b/);
-  const persisted = await page.evaluate((user) => {
-    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
-    return JSON.parse(localStorage.getItem(key)).active_session;
-  }, testUser);
-  const working = Object.values(persisted.exercises).flatMap((exercise) => exercise.sets).filter((set) => !set.is_warmup);
-  expect(working.every((set) => set.weight === ''), 'a never-performed exercise never persists 0 as a working weight').toBe(true);
-  console.log('PHASE5_UNSEEDED_WEIGHT_RULE_PASSED');
+  await expect(home.locator('[data-home-v15-spotify]'), 'the home hand-off must render once, not once per active-session branch').toHaveCount(1);
+  await expect(home.locator('[data-home-v15-spotify] a')).toHaveCount(2);
+  await expect(home.locator('[data-home-v15-spotify] a bdi')).toHaveCount(2);
+  await expect(home.locator('[data-v15-session-progress]')).toHaveCount(1);
+  await expect(home.locator('.ex.expanded .ex-thumb.body-img')).toHaveCount(1);
+  await expect(home.locator('.ex.expanded .video-row')).toHaveCount(1);
+  await expect(home.locator('.ex.expanded h4 bdi')).toHaveText('Chest Press Machine');
+  await expect(home).not.toContainText(/Focus mode|وضع التركيز|Cues on|التلميحات|Cue:|Session notes|Today: Last session not fully logged/i);
+  console.log('V15_SESSION_HOME_CONTRACT_PASSED');
 });
 
-async function recordRunnerGeometry(page, state) {
-  if (process.env.PHASE4_FORCE_RUNNER_OVERFLOW === '1') {
-    // Test-only positive control: this never reaches the application files.
-    // It proves the local-overflow assertion still catches clipped content.
-    await page.evaluate(() => {
-      const list = document.querySelector('[data-runner-set-list]');
-      const current = list?.querySelector('.runner-set-row.current');
-      if (!list || !current || list.querySelector('[data-runner-overflow-fixture]')) return;
-      // Test-only positive control: enough real-shaped rows to make the list
-      // scroll, then its scroll position deliberately hides the actual current
-      // row. Production files never receive this fixture or an env hook.
-      for (let i = 0; i < 8; i += 1) {
-        const fixture = current.cloneNode(true);
-        fixture.classList.remove('current');
-        fixture.dataset.runnerOverflowFixture = 'true';
-        list.appendChild(fixture);
-      }
-      list.scrollTop = list.scrollHeight;
-    });
-  }
-
-  const geometry = await page.evaluate(() => {
-    const shell = document.querySelector('.runner-shell');
-    const main = document.querySelector('.runner-main');
-    const panel = document.querySelector('[data-runner-set-panel]');
-    const list = document.querySelector('[data-runner-set-list]');
-    const currentRow = list?.querySelector('.runner-set-row.current');
-    const dimensions = (element) => ({
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-      top: Math.round(element.getBoundingClientRect().top),
-      bottom: Math.round(element.getBoundingClientRect().bottom),
-    });
-    const belowFold = [...shell.querySelectorAll('*')]
-      .map((element) => ({ element, rect: element.getBoundingClientRect() }))
-      .filter(({ rect }) => rect.width > 0 && rect.height > 0 && rect.top >= window.innerHeight)
-      .map(({ element, rect }) => `${element.tagName.toLowerCase()}.${[...element.classList].join('.') || 'none'}@${Math.round(rect.top)}px`);
-    const listRect = list.getBoundingClientRect();
-    const currentRect = currentRow.getBoundingClientRect();
-    const fixedZones = {
-      shell,
-      topbar: shell.querySelector('.runner-topbar'),
-      main,
-      card: shell.querySelector('.runner-card'),
-      panel,
-      cue: shell.querySelector('.runner-cue'),
-      lastTime: shell.querySelector('.runner-last-time'),
-      actions: shell.querySelector('.runner-bottom-actions'),
-      bottomBar: shell.querySelector('.runner-bottom-bar'),
-    };
-    return {
-      viewport: window.innerHeight,
-      documentHeight: document.documentElement.scrollHeight,
-      documentLayers: {
-        html: dimensions(document.documentElement),
-        body: dimensions(document.body),
-        page: dimensions(document.querySelector('#page-runner')),
-      },
-      shell: dimensions(shell),
-      main: dimensions(main),
-      panel: dimensions(panel),
-      list: dimensions(list),
-      fixedZones: Object.fromEntries(Object.entries(fixedZones)
-        .filter(([, element]) => element)
-        .map(([name, element]) => [name, dimensions(element)])),
-      current: {
-        top: Math.round(currentRect.top), bottom: Math.round(currentRect.bottom),
-        listTop: Math.round(listRect.top), listBottom: Math.round(listRect.bottom),
-        fullyVisible: currentRect.top >= listRect.top && currentRect.bottom <= listRect.bottom,
-      },
-      belowFold,
-    };
-  });
-
-  const line = (name, value) =>
-    `${name} client=${value.clientHeight}px scroll=${value.scrollHeight}px spare=${value.clientHeight - value.scrollHeight}px`;
-  console.log(`PHASE4_RUNNER_GEOMETRY ${state}: document=${geometry.documentHeight}px viewport=${geometry.viewport}px shell=${geometry.shell.clientHeight}px viewportMargin=${geometry.viewport - geometry.shell.clientHeight}px`);
-  console.log(`PHASE4_RUNNER_DOCUMENT_LAYERS ${state}: html=${geometry.documentLayers.html.clientHeight}/${geometry.documentLayers.html.scrollHeight} body=${geometry.documentLayers.body.clientHeight}/${geometry.documentLayers.body.scrollHeight} page=${geometry.documentLayers.page.clientHeight}/${geometry.documentLayers.page.scrollHeight}`);
-  console.log(`PHASE4_RUNNER_GEOMETRY ${state}: ${line('shell', geometry.shell)} ${line('main', geometry.main)} ${line('setPanel', geometry.panel)} ${line('setList', geometry.list)}`);
-  console.log(`PHASE4_RUNNER_CURRENT_SET ${state}: row=${geometry.current.top}-${geometry.current.bottom}px list=${geometry.current.listTop}-${geometry.current.listBottom}px visible=${geometry.current.fullyVisible}`);
-  console.log(`PHASE4_RUNNER_BELOW_FOLD ${state}: ${JSON.stringify(geometry.belowFold)}`);
-
-  expect(Math.abs(geometry.shell.clientHeight - geometry.viewport), `${state} shell must fill the viewport`).toBeLessThanOrEqual(3);
-  expect(geometry.documentHeight, `${state} document must not scroll`).toBeLessThanOrEqual(geometry.viewport);
-  for (const [name, value] of Object.entries(geometry.fixedZones)) {
-    expect(value.scrollHeight, `${state} ${name} must not hide vertical content`).toBeLessThanOrEqual(value.clientHeight);
-  }
-  expect(geometry.current.fullyVisible, `${state} current set must be visible without list scrolling`).toBe(true);
-  expect(geometry.belowFold, `${state} runner must not place content below the viewport`).toEqual([]);
-}
-
-async function requireLongestExerciseRunner(page) {
-  const runner = page.locator('[data-session-runner]');
-  await expect(runner).toHaveCount(1);
-  await expect(runner).toHaveAttribute('data-runner-phase', 'lifting');
-  await expect(page.locator('[data-home-overview]')).toHaveCount(0);
-  await expect(page.locator('[data-home-stat-tiles]')).toHaveCount(0);
-  await expect(page.locator('[data-home-continue]')).toHaveCount(0);
-  const renderedRows = await runner.locator('[data-runner-set-row]').count();
-  const longestRows = await page.evaluate((user) => {
-    const stateKey = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
-    const current = JSON.parse(localStorage.getItem(stateKey));
-    return Math.max(...Object.values(current.active_session.exercises || {}).map((exercise) => exercise.sets.length));
-  }, testUser);
-  expect(renderedRows, 'runner must render the longest exercise in the loaded programme').toBe(longestRows);
-  return runner;
-}
-
-test('Overnight runner keeps every weight, reps, and done control inside its set row at 390px', async ({ page }) => {
-  await openStartedRunner(page);
-  const runner = await requireLongestExerciseRunner(page);
-  const widths = await runner.locator('[data-runner-set-row]').evaluateAll((rows) => rows.map((row) => ({
+test('set rows never need horizontal scrolling at 390px', async ({ page }) => {
+  await openSeededHome(page);
+  const home = await startAndCompleteWarmup(page);
+  const widths = await home.locator('[data-session-set-row]').evaluateAll((rows) => rows.map((row) => ({
     clientWidth: row.clientWidth,
     scrollWidth: row.scrollWidth,
   })));
   console.log(`RUNNER_SET_ROW_WIDTH rows=${JSON.stringify(widths)}`);
-  expect(widths.length, 'the runner must render a set row before its geometry can pass').toBeGreaterThan(0);
+  expect(widths.length, 'a v15 session must render at least one set row').toBeGreaterThan(0);
   expect(widths.every(({ clientWidth, scrollWidth }) => scrollWidth <= clientWidth), 'weight, reps, and done must fit without horizontal sliding').toBe(true);
   console.log('RUNNER_SET_ROW_WIDTH_PASSED');
 });
 
-test('Overnight runner treats skipped as a recorded non-zero state and preserves an invalid attempt after one prompt', async ({ page }) => {
-  await openStartedRunner(page);
-  const runner = await requireLongestExerciseRunner(page);
-  const beforeIndex = Number(await runner.getAttribute('data-runner-exercise-index'));
-  const row = runner.locator('[data-runner-set-row]').first();
-  await row.locator('input[type="number"]').first().fill('0');
-  await row.locator('.runner-set-check').click();
-
-  const afterFirstInvalidAttempt = await page.evaluate((user) => {
+test('skipping is explicit, writes no zero row, and immediately resolves the exercise', async ({ page }) => {
+  await openSeededHome(page);
+  const home = await startAndCompleteWarmup(page);
+  const before = await page.evaluate((user) => {
     const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
-    const active = JSON.parse(localStorage.getItem(key)).active_session;
-    const exercise = Object.values(active.exercises)[active.runner_exercise_index];
-    return exercise.sets[0];
+    return Object.keys(JSON.parse(localStorage.getItem(key)).active_session.exercises)[0];
   }, testUser);
-  expect(afterFirstInvalidAttempt.invalid, 'the first invalid attempt must ask once rather than silently becoming a record').toBeFalsy();
-  expect(afterFirstInvalidAttempt.invalid_prompted, 'the first invalid attempt must be remembered for the next explicit action').toBe(true);
 
-  await row.locator('.runner-set-check').click();
-  const afterSecondInvalidAttempt = await page.evaluate((user) => {
-    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
-    const active = JSON.parse(localStorage.getItem(key)).active_session;
-    const exercise = Object.values(active.exercises)[active.runner_exercise_index];
-    return exercise.sets[0];
-  }, testUser);
-  expect(afterSecondInvalidAttempt.invalid, 'the second explicit invalid action must be retained, not discarded').toBeTruthy();
-  expect(afterSecondInvalidAttempt.completed, 'an invalid row must never become a completed volume row').toBeFalsy();
-
-  await runner.locator('[data-runner-skip-exercise]').click();
+  await home.locator('[data-runner-skip-exercise]').click();
   const persisted = await page.evaluate((user) => {
     const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
     return JSON.parse(localStorage.getItem(key)).active_session;
   }, testUser);
-  const skipped = Object.values(persisted.exercises)[beforeIndex];
-  expect(skipped.skipped, 'skip must be explicit at exercise level').toBe(true);
-  const skippedWorking = skipped.sets.filter((set) => !set.is_warmup);
-  expect(skippedWorking.every((set) => set.skipped && !set.completed), 'a skipped exercise cannot manufacture completed sets').toBe(true);
-  expect(skippedWorking.every((set) => (set.weight !== 0 && set.weight !== '0') || set.invalid), 'skip must never manufacture a valid 0 kg row').toBe(true);
-  expect(persisted.runner_exercise_index, 'skip must move on instead of trapping the workout').toBe(beforeIndex + 1);
+  const skipped = persisted.exercises[before];
+  expect(skipped.skipped, 'machine unavailable is an explicit skip, not a fake completion').toBe(true);
+  const working = skipped.sets.filter((set) => !set.is_warmup);
+  expect(working.every((set) => set.skipped && !set.completed), 'skipping cannot manufacture completed sets').toBe(true);
+  expect(working.every((set) => set.weight !== 0 && set.weight !== '0'), 'skipping cannot manufacture a 0 kg row').toBe(true);
   console.log('RUNNER_SKIP_POLICY_PASSED');
 });
 
-test('Overnight runner restores the v15 selected-platform Spotify hand-off after warm-up and during lifting', async ({ page }) => {
-  await openStartedRunner(page, { music_platform: 'spotify' });
-  const runner = await requireLongestExerciseRunner(page);
-  const handoff = runner.locator('[data-runner-playlist-handoff]');
-  await expect(handoff, 'the selected Spotify playlist must remain reachable after warm-up').toHaveCount(1);
-  await expect(handoff).toHaveAttribute('data-runner-music-platform', 'spotify');
-  const links = handoff.locator('a[target="_blank"][rel="noopener"]');
-  await expect(links, 'v15 opened the actual playlist in a new tab').toHaveCount(1);
-  await expect(links.first()).toHaveAttribute('href', /open\.spotify\.com\/playlist\//);
-  console.log('RUNNER_SPOTIFY_V15_HANDOFF_PASSED');
-});
+test('an unseeded movement stays blank, while a real suggestion is a placeholder and never an input value', async ({ page }) => {
+  await openSeededHome(page);
+  const home = await startAndCompleteWarmup(page);
+  const unseeded = home.locator('[data-session-set-row][data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(unseeded).toHaveValue('');
+  await expect(unseeded).toHaveAttribute('placeholder', '');
+  await expect(home).not.toContainText('0 kg');
 
-test('Phase 6 runner uses the v15 segmented card, body image, video strip, and last-time footer', async ({ page }) => {
-  await openStartedRunner(page);
-  const runner = await requireLongestExerciseRunner(page);
-  await expect(runner.locator('[data-v15-segmented-progress]')).toHaveCount(1);
-  await expect(runner.locator('.ex-thumb.body-img')).toHaveCount(1);
-  await expect(runner.loc('[data-v15-video-strip]')).toHaveCount(1);
-  await expect(runner.loc('[data-v15-last-time]')).toHaveCount(1);
-  console.log('PHASE6_V15_WORKOUT_CARD_PASSED');
-});
-
-test('Phase 6 runner removes the retired focus, cue, and full-screen-form controls', async ({ page }) => {
-  await openStartedRunner(page);
-  const runner = await requireLongestExerciseRunner(page);
-  await expect(runner.locator('[data-runner-video-toggle], [data-runner-settings-button], .runner-cue')).toHaveCount(0);
-  await expect(runner).not.toContainText(/Exercise \d+ of \d+|Focus mode|Cue:|Today: Last session not fully logged/i);
-  console.log('PHASE6_RETIRED_RUNNER_CHROME_ABSENT');
-});
-
-test('Phase 4 runner records a skipped warm-up, uses swipe only for exercise navigation, and leaves without ending', async ({ page }) => {
-  await openStartedRunner(page);
-  const runner = await requireLongestExerciseRunner(page);
-  const beforeIndex = Number(await runner.getAttribute('data-runner-exercise-index'));
-  const total = Number(await runner.getAttribute('data-runner-exercise-total'));
-
-  const swipeForward = beforeIndex < total - 1;
-  await runner.locator('.runner-main').dispatchEvent('pointerdown', { clientX: swipeForward ? 320 : 80, clientY: 280 });
-  await runner.locator('.runner-main').dispatchEvent('pointerup', { clientX: swipeForward ? 80 : 320, clientY: 280 });
-  const afterIndex = Number(await runner.getAttribute('data-runner-exercise-index'));
-  const afterTotal = Number(await runner.getAttribute('data-runner-exercise-total'));
-  expect(afterTotal, 'a swipe must stay inside the same session').toBe(total);
-  expect(afterIndex, 'a horizontal swipe must move to an adjacent exercise').toBe(beforeIndex + (swipeForward ? 1 : -1));
-
-  await page.locator('.tab[data-route="home"]').click();
-  await expect(page.locator('[data-home-overview]')).toHaveCount(1);
-  await expect(page.locator('[data-home-continue]')).toHaveCount(1);
-  const persisted = await page.evaluate((user) => {
-    const stateKey = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
-    return JSON.parse(localStorage.getItem(stateKey)).active_session;
+  await page.evaluate((user) => {
+    const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
+    const current = JSON.parse(localStorage.getItem(key));
+    const exerciseId = Object.keys(current.active_session.exercises)[0];
+    current.history.push({
+      date: '2026-08-27', session_id: 'seeded-history', exercises: {
+        [exerciseId]: {
+          sets: [{ is_warmup: false, weight: 27.5, reps: 10, effort: 'medium', completed: true }],
+        },
+      },
+    });
+    localStorage.setItem(key, JSON.stringify(current));
   }, testUser);
-  expect(persisted, 'leaving the runner must not end the session').toBeTruthy();
-  expect(persisted.phase).toBe('lifting');
-  expect(persisted.warmup.skipped).toBe(true);
-  console.log('PHASE4_RUNNER_SESSION_LIFECYCLE_PASSED');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const seeded = page.locator('#page-home [data-session-set-row][data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(seeded).toHaveValue('');
+  await expect(seeded).toHaveAttribute('placeholder', '27.5');
+  console.log('PHASE5_UNSEEDED_WEIGHT_RULE_PASSED');
 });

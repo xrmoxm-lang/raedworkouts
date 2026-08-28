@@ -524,11 +524,13 @@ body.runner-mode .page-runner.active {
   animation: checkPop var(--dur) var(--ease-out);
 }
 
-/* A set row fits a narrow phone without horizontal scrolling. Weight and reps
-   arrive prefilled, so the ordinary working-set action is one thumb tap. */
+/* A set row fits a narrow phone without horizontal scrolling. A history-based
+   load is a placeholder, not a fabricated prefilled prescription. */
 .set-grid, .set-grid-headers { max-width: 100%; min-width: 0; }
 .set-grid input { min-width: 0; font-size: max(16px, 1em); }
 .set-check { touch-action: manipulation; }
+.set-grid.skipped { opacity: 0.64; }
+.set-grid.skipped .set-check { color: var(--text-muted); border-style: dashed; }
 .final-effort-row {
   display: grid; grid-template-columns: 1fr; gap: 7px;
   margin: 3px 0 12px; padding: 10px;

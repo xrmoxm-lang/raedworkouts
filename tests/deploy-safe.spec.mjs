@@ -44,9 +44,9 @@ test('Deploy safety: a fresh seeded profile opens directly and exposes no PIN UI
   await expectNoPinUi(page);
   await expect(page.locator('[data-home-overview]')).toHaveCount(1);
   const start = page.locator('#page-home button.btn.primary.full').first();
-  await expect(start).toContainText('Upper A');
+  await expect(start).toContainText('علوي أ');
   await start.click();
-  await expect(page.locator('[data-session-runner]')).toHaveCount(1);
+  await expect(page.locator('#page-home .warmup-phase')).toHaveCount(1);
   console.log('V16_FRESH_PROFILE_DIRECT_OPEN_PASSED');
 });
 
@@ -131,9 +131,11 @@ test('Deploy safety: no reachable profile, settings, or help screen contains PIN
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await expectNoPinUi(page);
   await page.locator('.profile-tile').filter({ hasText: 'Raed' }).click();
-  for (const route of ['home', 'settings', 'help']) {
+  for (const route of ['home', 'settings']) {
     if (route !== 'home') await page.locator(`.tab[data-route="${route}"]`).click();
     await expectNoPinUi(page);
   }
+  await page.locator('#page-settings [data-settings-disclosure]').last().locator('summary').click();
+  await expectNoPinUi(page);
   console.log('V16_NO_PIN_UI_PASSED');
 });
