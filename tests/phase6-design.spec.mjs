@@ -51,13 +51,18 @@ test('Phase 6 starts directly into the v15 warm-up/session path without the reti
   console.log('PHASE6_DIRECT_V15_SESSION_FLOW_PASSED');
 });
 
-test('Phase 6 moves Help into six collapsed Settings groups and frees its tab for the coach', async ({ page }) => {
+test('Phase 6 moves Help into collapsed Settings groups and frees its tab for the coach', async ({ page }) => {
   await openHome(page);
   await expect(page.locator('.tab[data-route="help"]')).toHaveCount(0);
   await expect(page.locator('.tab[data-route="coach"]')).toHaveCount(1);
   await page.locator('.tab[data-route="settings"]').click();
   const settingsPage = page.locator('#page-settings');
-  await expect(settingsPage.locator('[data-settings-disclosure]')).toHaveCount(6);
+  // Seven, not the six PHASE6-DESIGN-FINAL listed: Raed later asked for a place
+  // to leave notes addressed to Claude, and Settings is where the other
+  // write-into sections already live. The invariant that matters is that every
+  // group starts COLLAPSED, not the exact count.
+  await expect(settingsPage.locator('[data-settings-disclosure]')).toHaveCount(7);
+  await expect(settingsPage.locator('[data-notes-card]')).toHaveCount(1);
   await expect(settingsPage.locator('[data-settings-disclosure][open]')).toHaveCount(0);
   console.log('PHASE6_SETTINGS_NAV_CONTRACT_PASSED');
 });

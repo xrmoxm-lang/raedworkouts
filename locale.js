@@ -22,6 +22,29 @@ export const LOCALE = Object.freeze({
   blocked_substitution_accepted: pair('User accepted blocked volume substitution.', 'قبِل المستخدم استبدالًا يخالف حدود الحجم.'),
   gym_day_plain: pair('Gym day', 'يوم نادٍ'),
   rest_day_plain: pair('Rest day', 'يوم راحة'),
+  // Notes addressed to Claude, not training-log fields. The copy has to make
+  // that unmistakable, otherwise they read like the session notes Raed removed.
+  note_add_short: pair('💬 Note', '💬 ملاحظة'),
+  note_prompt_exercise: pair('A note for Claude about {name}:', 'ملاحظة لكلود عن {name}:'),
+  note_prompt_general: pair('A note for Claude:', 'ملاحظة لكلود:'),
+  note_saved: pair('Saved. Claude will read it.', 'حُفظت. سيقرأها كلود.'),
+  notes_title: pair('Notes for Claude', 'ملاحظاتي لكلود'),
+  notes_hint: pair('Anything you want changed or looked at. It reaches Claude with the next sync.', 'أي شيء تريد تغييره أو مراجعته. تصل كلود مع المزامنة القادمة.'),
+  notes_empty: pair('No notes yet.', 'لا ملاحظات بعد.'),
+  notes_add_general: pair('+ Write a note', '+ اكتب ملاحظة'),
+  note_general_label: pair('General', 'عامة'),
+  note_delete: pair('Delete', 'احذف'),
+  video_add_short: pair('＋ Video', '＋ فيديو'),
+  video_prompt: pair('Paste a YouTube link (video or short) for this exercise:', 'الصق رابط يوتيوب (فيديو أو شورت) لهذا التمرين:'),
+  video_added: pair('Video added.', 'أُضيف الفيديو.'),
+  video_bad_url: pair('That is not a YouTube link. Nothing was added — a wrong video is worse than none.', 'هذا ليس رابط يوتيوب. لم يُضف شيء — فيديو خاطئ أسوأ من لا شيء.'),
+  // The Library card's video controls were shipped in English on an Arabic app.
+  video_tap_hint: pair('Tap to open. Tap the ⊘ corner to hide it from the session view.', 'اضغط للفتح. اضغط ⊘ في الزاوية لإخفائه من شاشة التمرين.'),
+  video_add_button: pair('+ Add video', '+ أضف فيديو'),
+  video_edit_jn: pair('✏️ Edit JN URL', '✏️ عدّل رابط JN'),
+  video_edit_jn_custom: pair('✏️ JN URL (custom)', '✏️ رابط JN (مخصّص)'),
+  video_clear_custom: pair('Clear custom', 'امسح المخصّصة'),
+  video_clear_confirm: pair('Remove all custom videos for this exercise?', 'أأحذف كل الفيديوهات المخصّصة لهذا التمرين؟'),
   // The coach quotes Raed's own 33 Nippard works and never writes prose of its
   // own, so the copy must promise searching — not answering.
   coach_intro: pair('Search the books you own. You get the passages themselves, with the book and page.', 'ابحث في كتبك التي تملكها. تصلك المقاطع نفسها، ومعها اسم الكتاب والصفحة.'),
