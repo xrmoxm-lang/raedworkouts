@@ -117,9 +117,9 @@ test('the coach never generates prose of its own', async ({ page }) => {
   // summarised, rephrased, or concluded — the whole point of the feature.
   const rendered = await page.locator('.coach-text').first().textContent();
   expect(rendered.trim()).toBe('RPE of 5-7 is recommended');
-  expect(sentBody).toMatchObject({ question: 'ما شدة التمرين المناسبة للعائد', top_k: 5 });
+  expect(sentBody).toMatchObject({ question: 'ما شدة التمرين المناسبة للعائد', top_k: 5, min_score: 0.5 });
   // No prompt, no system message, no model name — this is a search, not a chat.
-  expect(Object.keys(sentBody).sort()).toEqual(['question', 'top_k']);
+  expect(Object.keys(sentBody).sort()).toEqual(['min_score', 'question', 'top_k']);
   await expect(page.locator('#page-coach')).toContainText('لا شيء هنا من تأليف التطبيق');
   console.log('COACH_RETRIEVAL_ONLY');
 });

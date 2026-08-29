@@ -2215,7 +2215,12 @@ async function askCoach(question) {
     const res = await fetch(COACH_URL + '/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, top_k: 5 }),
+      // 0.5, not the service's 0.45 default. Measured on the re-embedded index:
+      // every genuine Arabic answer scored 0.573 or better, while «وصفة كبسة لحم»
+      // — a question the library cannot answer — scraped through at 0.486 onto a
+      // meal-macros page. Cross-lingual scores sit lower than English ones, so
+      // the floor has to clear that band without cutting into real answers.
+      body: JSON.stringify({ question, top_k: 5, min_score: 0.5 }),
       signal: AbortSignal.timeout(30000),
     });
     const data = await res.json();
