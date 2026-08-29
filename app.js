@@ -2198,6 +2198,21 @@ const COACH_URL = 'https://raed-hp.tail53bd35.ts.net:8444';
 const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
 let coachState = { status: 'idle', question: '', results: [], error: '' };
 
+// Raed's library deliberately keeps both editions of two Nippard programmes,
+// because their bytes differ and no supersession was ever proven. Retrieval does
+// not know that: "how many sets per week" came back with page 92 of file A AND
+// page 92 of file B, identical text, one above the other. Keep the first (they
+// arrive sorted by score) and drop later passages whose text repeats it.
+function dedupePassages(results) {
+  const seen = new Set();
+  return results.filter((passage) => {
+    const key = String(passage.text || '').replace(/\s+/g, ' ').trim().slice(0, 160).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // Arabic counts do not work like English ones. "2 مقاطع" is wrong: two takes the
 // dual (مقطعان), one takes the singular, and 3–10 take the plural. top_k caps at
 // 10 so those three cases are the whole range. English keeps its own simple rule.
@@ -2229,7 +2244,7 @@ async function askCoach(question) {
       // an empty result list dressed up as an answer.
       coachState = { status: 'no_match', question, results: [], error: '' };
     } else if (data.status === 'ok' && Array.isArray(data.results) && data.results.length) {
-      coachState = { status: 'ok', question, results: data.results, error: '' };
+      coachState = { status: 'ok', question, results: dedupePassages(data.results), error: '' };
     } else {
       coachState = { status: 'error', question, results: [], error: data.error || data.status || 'unknown' };
     }

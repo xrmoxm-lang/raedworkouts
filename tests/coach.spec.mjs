@@ -123,3 +123,30 @@ test('the coach never generates prose of its own', async ({ page }) => {
   await expect(page.locator('#page-coach')).toContainText('لا شيء هنا من تأليف التطبيق');
   console.log('COACH_RETRIEVAL_ONLY');
 });
+
+test('the same passage from two editions of one book is shown once', async ({ page }) => {
+  // Raed's library keeps file A and file B of two Nippard programmes on purpose.
+  // Retrieval returns both, identical text on the same page, stacked. Reading the
+  // same paragraph twice makes the answer look padded and hides the third result.
+  await page.route(COACH, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      status: 'ok',
+      results: [
+        { text: 'When it comes to per-week volume, James Krieger recommends an absolute minimum', work: 'Intermediate-Advanced PPL Hypertrophy Program (file B)', page: 92, score: 0.826 },
+        { text: 'When it comes to per-week volume,  James  Krieger recommends an absolute minimum', work: 'Intermediate-Advanced PPL Hypertrophy Program (file A)', page: 92, score: 0.826 },
+        { text: 'hitting a muscle twice per week with the same amount of volume', work: 'Upper Lower Size and Strength Program', page: 69, score: 0.71 },
+      ],
+    }),
+  }));
+  await openCoach(page);
+  await ask(page);
+
+  await expect(page.locator('[data-coach-passage]')).toHaveCount(2);
+  // The kept one is the highest-scoring, and the distinct third survives.
+  await expect(page.locator('[data-coach-passage]').first()).toContainText('file B');
+  await expect(page.locator('[data-coach-passage]').nth(1)).toContainText('Upper Lower Size and Strength Program');
+  await expect(page.locator('[data-coach-count]')).toHaveText('مقطعان من كتبك');
+  console.log('COACH_DEDUPES_EDITIONS');
+});
