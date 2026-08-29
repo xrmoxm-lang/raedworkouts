@@ -344,34 +344,6 @@ function getJNUrl(exerciseId) {
 function jnHasCustomOverride(exerciseId) {
   return Boolean(state.custom_jn_urls?.[exerciseId]);
 }
-// ---- Notes to Claude, and videos Raed adds himself -------------------
-// These are NOT the session notes he had removed. Those were training log
-// fields. These are messages addressed to me: "this hurt", "wrong video",
-// "this machine does not exist in my gym". They ride the normal sync to his
-// own server, so I read them from data.db and act on them.
-function addClaudeNote(exerciseId = null) {
-  const exercise = exerciseId ? getAllExercises().find((item) => item.id === exerciseId) : null;
-  const text = prompt(exercise ? tf('note_prompt_exercise', { name: exercise.name }) : t('note_prompt_general'));
-  if (!text || !text.trim()) return;
-  state.claude_notes = state.claude_notes || [];
-  state.claude_notes.push({
-    id: (crypto?.randomUUID?.() || String(Date.now())),
-    at: new Date().toISOString(),
-    exercise_id: exerciseId,
-    // Stored so a note keeps its meaning after a swap or a rename.
-    exercise_name: exercise?.name || null,
-    session_id: state.active_session?.session_id || null,
-    text: text.trim(),
-    status: 'new',
-  });
-  // saveLocal() already schedules the push to his server, which is how these
-  // reach me. No extra sync call — an optional-chained one would silently do
-  // nothing while reading as though it did.
-  saveLocal();
-  render();
-  toast(t('note_saved'));
-}
-
 function addCustomVideo(exerciseId) {
   const url = (prompt(t('video_prompt')) || '').trim();
   if (!url) return;
@@ -559,9 +531,6 @@ const defaultState = () => ({
   history: [],                 // [{ date, session_id, started_at, ended_at, exercises: {...}, substitutions: [...] }]
   bodyweight_log: [],          // [{ date, kg }]
   custom_videos: {},           // { exercise_id: [url, url, ...] }  — extra videos user adds
-  // Messages Raed writes TO Claude. They sync to his own server with the rest
-  // of state, which is the whole point: it is how a note reaches me at all.
-  claude_notes: [],            // [{ id, at, exercise_id, exercise_name, session_id, text, status }]
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
   video_hidden: {},            // { exercise_id: ['mohannad_0','jn','custom_2'] } — hidden video keys
   custom_exercises: [],        // [{ id, name, name_ar, primary, secondary, jeff_nippard, mohannad, ... }]
@@ -2771,10 +2740,6 @@ function renderExerciseCard(ex_id, exState) {
       class: 'btn tiny ghost', 'data-runner-skip-exercise': 'true',
       onClick: () => skipRunnerExercise(ex_id),
     }, t('runner_skip_exercise')),
-    // Two things Raed asked for, put where he notices he needs them: mid-set,
-    // looking at the exercise. Buried in the Library tab they may as well not
-    // exist — he will not leave a running session to go find them.
-    h('button', { class: 'btn tiny ghost', 'data-note-add': 'true', onClick: () => addClaudeNote(ex_id) }, t('note_add_short')),
     h('button', { class: 'btn tiny ghost', 'data-video-add': 'true', onClick: () => addCustomVideo(ex_id) }, t('video_add_short')),
   );
   body.appendChild(actions);
@@ -3707,44 +3672,7 @@ function renderSettings() {
   root.appendChild(disclosure('تفضيلات', preferencesContent));
   root.appendChild(disclosure('الموسيقى', musicCard));
   root.appendChild(disclosure('سحب البيانات', dataCard));
-  // Above المساعدة deliberately: this is the one section Raed writes INTO
-  // rather than reads, and the count tells him whether anything is waiting.
-  root.appendChild(disclosure(t('notes_title'), buildNotesCard()));
   root.appendChild(disclosure('المساعدة', buildHelpCard()));
-}
-
-function buildNotesCard() {
-  const card = h('div', { class: 'card compact', 'data-notes-card': 'true' });
-  card.appendChild(h('p', { class: 'tiny muted' }, t('notes_hint')));
-  card.appendChild(h('button', {
-    class: 'btn tiny', 'data-note-add-general': 'true',
-    onClick: () => { addClaudeNote(null); renderSettings(); },
-  }, t('notes_add_general')));
-
-  const notes = [...(state.claude_notes || [])].reverse(); // newest first
-  if (!notes.length) {
-    card.appendChild(h('p', { class: 'tiny muted', style: 'margin-top:8px;' }, t('notes_empty')));
-    return card;
-  }
-  notes.forEach((note) => {
-    card.appendChild(h('article', { class: 'note-item', 'data-note-item': 'true' },
-      h('div', { class: 'note-meta tiny muted' },
-        // The exercise name is English (T1) and h() isolates it on its own.
-        h('strong', {}, note.exercise_name || t('note_general_label')),
-        ' · ', fmtDate(note.at),
-      ),
-      h('p', { class: 'note-text' }, note.text),
-      h('button', {
-        class: 'btn tiny ghost', 'data-note-delete': 'true',
-        onClick: () => {
-          state.claude_notes = (state.claude_notes || []).filter((item) => item.id !== note.id);
-          saveLocal();
-          renderSettings();
-        },
-      }, t('note_delete')),
-    ));
-  });
-  return card;
 }
 
 function buildHelpCard() {

@@ -22,18 +22,6 @@ export const LOCALE = Object.freeze({
   blocked_substitution_accepted: pair('User accepted blocked volume substitution.', 'قبِل المستخدم استبدالًا يخالف حدود الحجم.'),
   gym_day_plain: pair('Gym day', 'يوم نادٍ'),
   rest_day_plain: pair('Rest day', 'يوم راحة'),
-  // Notes addressed to Claude, not training-log fields. The copy has to make
-  // that unmistakable, otherwise they read like the session notes Raed removed.
-  note_add_short: pair('💬 Note', '💬 ملاحظة'),
-  note_prompt_exercise: pair('A note for Claude about {name}:', 'ملاحظة لكلود عن {name}:'),
-  note_prompt_general: pair('A note for Claude:', 'ملاحظة لكلود:'),
-  note_saved: pair('Saved. Claude will read it.', 'حُفظت. سيقرأها كلود.'),
-  notes_title: pair('Notes for Claude', 'ملاحظاتي لكلود'),
-  notes_hint: pair('Anything you want changed or looked at. It reaches Claude with the next sync.', 'أي شيء تريد تغييره أو مراجعته. تصل كلود مع المزامنة القادمة.'),
-  notes_empty: pair('No notes yet.', 'لا ملاحظات بعد.'),
-  notes_add_general: pair('+ Write a note', '+ اكتب ملاحظة'),
-  note_general_label: pair('General', 'عامة'),
-  note_delete: pair('Delete', 'احذف'),
   video_add_short: pair('＋ Video', '＋ فيديو'),
   video_prompt: pair('Paste a YouTube link (video or short) for this exercise:', 'الصق رابط يوتيوب (فيديو أو شورت) لهذا التمرين:'),
   video_added: pair('Video added.', 'أُضيف الفيديو.'),
