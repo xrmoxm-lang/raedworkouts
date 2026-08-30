@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { LOCALE } from '../locale.js';
 
 const deployUrl = process.env.PWA_DEPLOY_URL || '';
 
@@ -27,8 +28,11 @@ test('Deploy PWA: HTTPS install metadata, controlled shell, and offline reload a
       activeScript: registration.active?.scriptURL || '',
     };
   });
-  expect(manifest.manifest.name).toBe('Raedworkouts');
-  expect(manifest.manifest.short_name).toBe('Raedworkouts');
+  // Renamed to «Raedworkouts Go» on Raed's instruction. Read it from the locale
+  // map rather than hardcoding it again — this assertion is the reason a rename
+  // has to be made in two places, and it should not be a third.
+  expect(manifest.manifest.name).toBe(LOCALE.app_name.en);
+  expect(manifest.manifest.short_name).toBe(LOCALE.app_name.en);
   expect(manifest.manifest.icons.map((icon) => icon.src)).toEqual([
     './icon-192.svg', './icon-512.svg', './icon-maskable-512.svg',
   ]);
