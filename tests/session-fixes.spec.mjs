@@ -190,3 +190,23 @@ test('an "always" substitution outlives the session it was made in', async ({ pa
   const title = (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
   expect(title).toBe(replacement);
 });
+
+test('every programmed exercise offers at least one alternative', async ({ page }) => {
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  const gaps = await page.evaluate(() => {
+    const byId = Object.fromEntries(window.RW.EXERCISES.map((e) => [e.id, e]));
+    const programmed = [...new Set(window.RW.PROGRAMME.blocks
+      .flatMap((b) => b.sessions.flatMap((s) => s.exercises.map((x) => x.exercise_id))))];
+    const dangling = [];
+    for (const e of window.RW.EXERCISES) for (const a of (e.alternatives || [])) if (!byId[a]) dangling.push(`${e.id}->${a}`);
+    return { none: programmed.filter((id) => !(byId[id]?.alternatives || []).length), dangling };
+  });
+  // An alternative pointing at an id that does not exist is worse than none:
+  // the swap sheet renders an empty row and Raed cannot tell why.
+  expect(gaps.dangling).toEqual([]);
+  // bicycle_crunch is the one deliberate blank: it appears nowhere in §8.4, so
+  // there is no sourced substitute and inventing one is forbidden (D8's logic
+  // applied to exercises). Raed decides that one.
+  expect(gaps.none).toEqual(['bicycle_crunch']);
+});
