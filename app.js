@@ -2252,6 +2252,13 @@ function previewedSession() {
 // Serve terminates TLS on :8444 and proxies to 127.0.0.1:8124. Tailnet only,
 // never Funnel: these passages are the text of books Raed paid for.
 const COACH_URL = 'https://raed-hp.tail53bd35.ts.net:8444';
+// The endpoint is reachable from the open internet now, not only the tailnet,
+// because Raed asked for the Tailscale requirement gone. That makes a key
+// mandatory: without one anyone who found the URL could read the text of books
+// he paid for. A key shipped in the app's JS is extractable by someone who
+// looks — that is the stated trade — but it stops crawlers and scanners dead
+// and can be rotated in one place on the server.
+const COACH_KEY = 'oQq1nmXFMvfZ1M6A2gyiGWQeLB9h6xCW1e5DQW5ARWk';
 const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
 let coachState = { status: 'idle', question: '', results: [], error: '' };
 
@@ -2286,7 +2293,7 @@ async function askCoach(question) {
   try {
     const res = await fetch(COACH_URL + '/search', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Coach-Key': COACH_KEY },
       // 0.5, not the service's 0.45 default. Measured on the re-embedded index:
       // every genuine Arabic answer scored 0.573 or better, while «وصفة كبسة لحم»
       // — a question the library cannot answer — scraped through at 0.486 onto a
@@ -2302,6 +2309,9 @@ async function askCoach(question) {
       coachState = { status: 'no_match', question, results: [], error: '' };
     } else if (data.status === 'ok' && Array.isArray(data.results) && data.results.length) {
       coachState = { status: 'ok', question, results: dedupePassages(data.results), error: '' };
+    } else if (res.status === 401 || data.status === 'unauthorized') {
+      // Distinct from "the server is down": the library answered, and refused.
+      coachState = { status: 'unauthorized', question, results: [], error: '' };
     } else {
       coachState = { status: 'error', question, results: [], error: data.error || data.status || 'unknown' };
     }
@@ -2361,6 +2371,13 @@ function renderCoach() {
     root.appendChild(h('div', { class: 'card compact', 'data-coach-no-match': 'true' },
       h('strong', {}, t('coach_no_match')),
       h('p', { class: 'tiny muted' }, t('coach_no_match_hint')),
+    ));
+    return;
+  }
+  if (coachState.status === 'unauthorized') {
+    root.appendChild(h('div', { class: 'card compact warn', 'data-coach-error': 'true' },
+      h('strong', {}, t('coach_unauthorized')),
+      h('p', { class: 'tiny muted' }, t('coach_unauthorized_hint')),
     ));
     return;
   }

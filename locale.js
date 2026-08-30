@@ -87,7 +87,11 @@ export const LOCALE = Object.freeze({
   coach_no_match_hint: pair('That is an answer, not a failure. Try different wording.', 'هذه إجابة لا عطل. جرّب صياغة أخرى.'),
   coach_offline: pair('Could not reach your library.', 'تعذّر الوصول إلى مكتبتك.'),
   coach_error: pair('The library server returned an error.', 'أعاد خادم المكتبة خطأ.'),
-  coach_offline_hint: pair('The books live on your own server. Connect to Tailscale and try again.', 'كتبك على خادمك الخاص. اتصل بـTailscale ثم أعد المحاولة.'),
+  // Tailscale is no longer required, so the offline copy must not tell him to
+  // connect to it — that would send him chasing a fix for the wrong problem.
+  coach_offline_hint: pair('The library server is not answering. Try again in a moment.', 'خادم المكتبة لا يستجيب. أعد المحاولة بعد قليل.'),
+  coach_unauthorized: pair('The library refused the request.', 'رفضت المكتبة الطلب.'),
+  coach_unauthorized_hint: pair('The access key is wrong or expired. Tell Claude and it will be reissued.', 'مفتاح الدخول خاطئ أو منتهٍ. أخبر كلود ليصدره من جديد.'),
   // The rest-day banner shipped hardcoded English on an Arabic-only screen. It
   // escaped the Arabic gate because that gate only ever rendered a training day.
   home_rest_next: pair('Next: {name}', 'القادم: {name}'),

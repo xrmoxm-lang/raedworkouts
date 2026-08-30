@@ -9,9 +9,18 @@
  */
 
 export function hasValidWorkingValues(set = {}) {
-  const weight = Number(set.weight);
+  // Zero is a real load: plenty of machines carry their own stack and Raed logs
+  // 0 for those. The old rule was `weight > 0`, which silently discarded those
+  // sets from volume, streak and progression.
+  //
+  // The reason it said `> 0` still matters though: an UNTOUCHED box holds '',
+  // and Number('') is 0. So blank and zero have to be told apart BEFORE the
+  // numeric check, or every empty set would start counting as a completed one.
+  const raw = set.weight;
+  if (raw === '' || raw === null || raw === undefined) return false;
+  const weight = Number(raw);
   const reps = Number(set.reps);
-  return Number.isFinite(weight) && weight > 0 && Number.isFinite(reps) && reps >= 1;
+  return Number.isFinite(weight) && weight >= 0 && Number.isFinite(reps) && reps >= 1;
 }
 
 export function isCountableWorkingSet(set = {}) {

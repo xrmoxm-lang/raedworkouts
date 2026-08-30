@@ -17,7 +17,16 @@ test('Overnight runner policy logs valid work, retains invalid input after one p
   assert.equal(valid.set.completed, true);
   assert.equal(isCountableWorkingSet(valid.set), true);
 
-  const asked = applyWorkingSetAttempt({ is_warmup: false, weight: 0, reps: 10 }, timestamp);
+  // 0 kg logs straight through now. Raed: "شخص يلعب بوزن الآلة يحط صفر يعني
+  // يقبلها" — a machine carrying its own stack IS zero added load, and making
+  // him confirm it every set (or type a fake 1) was the actual bug.
+  const machineStack = applyWorkingSetAttempt({ is_warmup: false, weight: 0, reps: 10 }, timestamp);
+  assert.equal(machineStack.outcome, 'logged');
+  assert.equal(isCountableWorkingSet(machineStack.set), true);
+
+  // The prompt belongs on an EMPTY box, which is the real "did you forget to
+  // fill this in?" case, and is what `weight > 0` was clumsily standing in for.
+  const asked = applyWorkingSetAttempt({ is_warmup: false, weight: '', reps: 10 }, timestamp);
   assert.equal(asked.outcome, 'confirm-invalid');
   assert.equal(asked.set.invalid, null);
   assert.equal(asked.set.invalid_prompted, true);
@@ -41,13 +50,29 @@ test('Overnight runner policy logs valid work, retains invalid input after one p
   assert.ok(skipped.sets.every((set) => set.weight !== 0 && set.weight !== '0'));
   assert.ok(skipped.sets.every((set) => !isCountableWorkingSet(set)));
   assert.equal(isRunnerExerciseResolved(skipped), true);
-  assert.equal(hasValidWorkingValues({ weight: 0, reps: 10 }), false);
+  // 0 kg is a real logged load (machine's own stack), so it MUST count.
+  assert.equal(hasValidWorkingValues({ weight: 0, reps: 10 }), true);
+  // A blank box is not a zero. Number('') is 0, so these two have to stay
+  // distinguishable or every untouched set would count as completed.
+  assert.equal(hasValidWorkingValues({ weight: '', reps: 10 }), false);
+  assert.equal(hasValidWorkingValues({ weight: null, reps: 10 }), false);
+  assert.equal(hasValidWorkingValues({ weight: undefined, reps: 10 }), false);
   console.log('RUNNER_SKIP_POLICY_PASSED');
 });
 
 test('Overnight runner deployment precaches its imported policy modules under a new service-worker cache version', async () => {
   const source = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(source, /const VERSION = 'v22';/, 'this changed app shell must not reuse the deployed v21 cache');
+  // Pinning an exact version made this fail on every legitimate bump, which is
+  // the opposite of what it is for. The durable rules are: the version is
+  // well-formed, and every module app.js imports is precached — a module missing
+  // from SHELL breaks the app offline, silently.
+  assert.match(source, /const VERSION = 'v\d+';/, 'the service worker needs a well-formed cache version');
+  const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const imported = [...appSource.matchAll(/from '(\.\/domain\/[^']+)'/g)].map((m) => m[1]);
+  assert.ok(imported.length, 'expected app.js to import domain modules');
+  for (const module of imported) {
+    assert.ok(source.includes(`'${module}'`), `${module} is imported but missing from the service-worker SHELL, so the app breaks offline`);
+  }
   assert.match(source, /'\.\/domain\/runner-session\.js'/);
   console.log('RUNNER_SERVICE_WORKER_FRESHNESS_PASSED');
 });

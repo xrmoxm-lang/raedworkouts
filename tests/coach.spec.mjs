@@ -75,7 +75,10 @@ test('an unreachable library says so; it never renders as an empty answer', asyn
   await expect(page.locator('[data-coach-passage]')).toHaveCount(0);
   // The distinction that matters: "cannot reach" must NOT read like "nothing found".
   await expect(page.locator('[data-coach-no-match]')).toHaveCount(0);
-  await expect(page.locator('#page-coach')).toContainText('Tailscale');
+  // The copy no longer names Tailscale: the endpoint works without it now, and
+  // telling him to connect would send him chasing the wrong fix. What must hold
+  // is that "cannot reach" still reads differently from "nothing found".
+  await expect(page.locator('#page-coach')).toContainText('لا يستجيب');
   console.log('COACH_OFFLINE_DISTINGUISHED');
 });
 
@@ -149,4 +152,36 @@ test('the same passage from two editions of one book is shown once', async ({ pa
   await expect(page.locator('[data-coach-passage]').nth(1)).toContainText('Upper Lower Size and Strength Program');
   await expect(page.locator('[data-coach-count]')).toHaveText('مقطعان من كتبك');
   console.log('COACH_DEDUPES_EDITIONS');
+});
+
+test('a refused key reads as a refusal, not as a dead server or an empty answer', async ({ page }) => {
+  // The endpoint is public now, so 401 is a state Raed can actually hit — an
+  // expired or rotated key. Collapsing it into "server down" would send him
+  // restarting a service that is running perfectly.
+  await page.route(COACH, (route) => route.fulfill({
+    status: 401,
+    contentType: 'application/json',
+    body: JSON.stringify({ status: 'unauthorized' }),
+  }));
+  await openCoach(page);
+  await ask(page);
+
+  await expect(page.locator('[data-coach-error]')).toHaveCount(1);
+  await expect(page.locator('#page-coach')).toContainText('رفضت المكتبة');
+  await expect(page.locator('[data-coach-passage]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-no-match]')).toHaveCount(0);
+  console.log('COACH_UNAUTHORIZED_DISTINGUISHED');
+});
+
+test('every request carries the access key', async ({ page }) => {
+  let sentKey = null;
+  await page.route(COACH, (route) => {
+    sentKey = route.request().headers()['x-coach-key'] || null;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'no_match', message: 'no match', results: [] }) });
+  });
+  await openCoach(page);
+  await ask(page);
+  // Without it the public endpoint answers 401 and the coach is simply dead.
+  expect(sentKey).toBeTruthy();
+  expect(sentKey.length).toBeGreaterThan(20);
 });
