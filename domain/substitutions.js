@@ -1,6 +1,9 @@
 /** Deterministic substitution ledger and safety classification (24 §5). */
 
-export const SUBSTITUTION_SCOPES = Object.freeze(['this_session', 'this_week', 'this_block']);
+// 'always' is the scope Raed actually wanted: a swap he makes because the machine
+// does not exist in his gym should still be in force next week, not expire with
+// the block. It matches every session, so scopeMatches needs no session check.
+export const SUBSTITUTION_SCOPES = Object.freeze(['this_session', 'this_week', 'this_block', 'always']);
 export const SUBSTITUTION_THRESHOLDS = Object.freeze({ cleanMin: 8, cleanMax: 14, floor: 4, ceiling: 15 });
 
 function fail(message) {

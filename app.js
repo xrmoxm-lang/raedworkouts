@@ -1606,6 +1606,7 @@ function workingRepTarget(planned) {
 function scopedReplacementFor(session, exerciseId) {
   const active = (state.substitutions || []).filter((entry) => {
     if (entry.from_exercise_id !== exerciseId) return false;
+    if (entry.scope === 'always') return true;
     if (entry.scope === 'this_week') return entry.expires_after_week === state.current_week;
     if (entry.scope === 'this_block') return entry.block === state.current_block;
     return false;
@@ -1914,18 +1915,21 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
     const assessment = assessSessionSubstitution(exercise_id, alt.id, scope);
     const status = assessment.classification;
     modal.innerHTML = '';
-    modal.appendChild(h('h3', {}, `Adopt ${alt.name}`));
-    modal.appendChild(h('p', { class: 'tiny muted' }, 'The fractional ledger is checked before adoption. Choose exactly how long this replacement lasts.'));
+    modal.appendChild(h('h3', {}, tf('adopt_named', { name: alt.name })));
+    modal.appendChild(h('p', { class: 'tiny muted' }, t('substitution_ledger')));
+    // This modal shipped entirely in English on an Arabic-only app. It escaped
+    // the Arabic gate because that gate never opens it.
     modal.appendChild(h('div', { class: 'scope-picker' }, [
-      ['this_session', 'This session'], ['this_week', 'This week'], ['this_block', 'This block'],
+      ['this_session', t('swap_scope_session')], ['this_week', t('scope_this_week')],
+      ['this_block', t('scope_this_block')], ['always', t('swap_scope_always')],
     ].map(([value, label]) => h('button', {
       class: 'btn tiny' + (scope === value ? ' primary' : ''),
       onClick: () => { scope = value; draw(); },
     }, label))));
     modal.appendChild(h('div', { class: `substitution-status ${status.severity}` },
-      h('strong', {}, status.severity === 'clean' ? 'Clean' : status.severity === 'warn' ? '⚠ Check this' : 'Blocked without override'),
+      h('strong', {}, status.severity === 'clean' ? t('clean_status') : status.severity === 'warn' ? t('check_this') : t('blocked_without_override')),
       h('div', { class: 'tiny' }, status.message),
-      Object.keys(assessment.ledger_delta).length ? h('div', { class: 'tiny muted' }, `Ledger change: ${Object.entries(assessment.ledger_delta).map(([muscle, value]) => `${muscle} ${value > 0 ? '+' : ''}${value}`).join(' · ')}`) : null,
+      Object.keys(assessment.ledger_delta).length ? h('div', { class: 'tiny muted' }, tf('ledger_change', { detail: Object.entries(assessment.ledger_delta).map(([muscle, value]) => `${muscleLabel(muscle)} ${value > 0 ? '+' : ''}${value}`).join(' · ') })) : null,
     ));
     const adopt = (override = null) => {
       recordSubstitution(exercise_id, alt.id, scope, assessment, override);
@@ -1936,16 +1940,22 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
       const original = getAllExercises().find((exercise) => exercise.id === exercise_id);
       const safe = (original?.alternatives || []).map((id) => getAllExercises().find((exercise) => exercise.id === id)).filter(Boolean)
         .find((candidate) => assessSessionSubstitution(exercise_id, candidate.id, scope).classification.severity !== 'block-with-override');
-      if (safe) modal.appendChild(h('div', { class: 'tiny muted', style: 'margin:10px 0;' }, `Safer option for this scope: ${safe.name}.`));
-      modal.appendChild(h('button', { class: 'btn danger full', onClick: () => adopt({ accepted_at: new Date().toISOString(), reason: 'User accepted blocked volume substitution.' }) }, 'Override and adopt'));
+      if (safe) modal.appendChild(h('div', { class: 'tiny muted', style: 'margin:10px 0;' }, tf('safer_option', { name: safe.name })));
+      modal.appendChild(h('button', { class: 'btn danger full', onClick: () => adopt({ accepted_at: new Date().toISOString(), reason: t('blocked_substitution_accepted') }) }, t('override_and_adopt')));
     } else {
-      modal.appendChild(h('button', { class: 'btn primary full', onClick: () => adopt() }, `Adopt for ${scope.replace('_', ' ')}`));
+      modal.appendChild(h('button', { class: 'btn primary full', 'data-adopt-swap': 'true', onClick: () => adopt() }, t('adopt_confirm')));
     }
-    modal.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:8px;', onClick: () => $('#modal-overlay').classList.remove('show') }, 'Cancel'));
+    modal.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:8px;', onClick: () => $('#modal-overlay').classList.remove('show') }, t('cancel')));
   };
   draw();
   $('#modal-overlay').classList.add('show');
 }
+// The programme's own movement for this slot, regardless of what is running in
+// it now. exercise_id is the planned id; swapped_to is the replacement.
+function originalExerciseName(plannedId) {
+  return getAllExercises().find((item) => item.id === plannedId)?.name || plannedId;
+}
+
 function swapExercise(exercise_id, alt_id) {
   if (!state.active_session) return;
   const ex = state.active_session.exercises[exercise_id];
@@ -2646,6 +2656,14 @@ function renderExerciseCard(ex_id, exState) {
         ex.primary.map(m => h('span', { class: 'muscle-tag' }, muscleLabel(m))),
         ` ${planned.sets} × ${planned.reps}`,
       ),
+      // A swapped card used to show only the replacement, so the programme's own
+      // movement vanished with no trace and Raed could not tell a substitution
+      // from the plan itself. Name both, and which direction it went.
+      exState.swapped_to ? h('div', { class: 'swap-note tiny', 'data-swap-note': 'true' },
+        h('span', { class: 'swap-badge' }, t('swapped_badge')),
+        ' ',
+        tf('swapped_from', { name: originalExerciseName(ex_id) }),
+      ) : null,
     ),
     h('div', { class: 'ex-status' + (allWorkingDone ? ' done' : '') }, allWorkingDone ? '✓' : '▸'),
   );

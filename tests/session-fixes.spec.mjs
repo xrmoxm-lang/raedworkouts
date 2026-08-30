@@ -111,3 +111,82 @@ test('number inputs force Latin digits so no keyboard switch is needed', async (
   await expect(weight).toHaveAttribute('dir', 'ltr');
   await expect(weight).toHaveAttribute('inputmode', 'decimal');
 });
+
+// app.js is an ES module, so `state` and swapExercise() are not on window.
+// These drive the real UI instead, which is the better test: it exercises the
+// swap button, the alternatives list and the scope modal exactly as Raed does.
+async function openSwap(page) {
+  await page.locator('.ex-actions button', { hasText: 'استبدال' }).first().click();
+  await page.waitForTimeout(600);
+}
+
+test('a swapped exercise says it was swapped and names what it replaced', async ({ page }) => {
+  await intoSession(page);
+  const before = (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
+  await expect(page.locator('[data-swap-note]')).toHaveCount(0);
+
+  await openSwap(page);
+  const option = page.locator('#modal .swap-option').first();
+  test.skip(!(await option.count()), 'this exercise has no alternatives to swap to');
+  await option.click();
+  await page.waitForTimeout(500);
+  // The ledger may classify this substitution as block-with-override, in which
+  // case the modal offers an override instead of a plain adopt. Both are real
+  // paths Raed can take, and the swap note must appear either way.
+  const adopt = page.locator('[data-adopt-swap]');
+  const override = page.locator('#modal .btn.danger.full').last();
+  if (await adopt.count()) await adopt.click();
+  else if (await override.count()) await override.click();
+  else throw new Error('the scope modal offered neither adopt nor override');
+  await page.waitForTimeout(800);
+
+  const note = page.locator('[data-swap-note]').first();
+  await expect(note).toHaveCount(1);
+  await expect(note).toContainText('مُستبدَل');
+  // The replaced movement must still be named, or the plan silently rewrites
+  // itself and Raed cannot tell a substitution from the programme.
+  await expect(note).toContainText(before);
+  const title = (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
+  expect(title).not.toBe(before);
+});
+
+test('an "always" substitution outlives the session it was made in', async ({ page }) => {
+  await intoSession(page);
+  await openSwap(page);
+  const option = page.locator('#modal .swap-option').first();
+  test.skip(!(await option.count()), 'this exercise has no alternatives to swap to');
+  await option.click();
+  await page.waitForTimeout(500);
+
+  const always = page.locator('.scope-picker button', { hasText: 'دائمًا' });
+  test.skip(!(await always.count()), 'the scope modal did not open for this substitution');
+  await always.click();
+  await page.waitForTimeout(400);
+  const adopt = page.locator('[data-adopt-swap]');
+  const override = page.locator('#modal .btn.danger.full').last();
+  if (await adopt.count()) await adopt.click();
+  else if (await override.count()) await override.click();
+  else throw new Error('the scope modal offered neither adopt nor override');
+  await page.waitForTimeout(900);
+
+  const replacement = (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
+
+  // Discard the session and start a fresh one. An "always" swap must come back;
+  // this_block would not, which is exactly what Raed lost before.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.active_session = null;
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(900);
+
+  await expect(page.locator('[data-swap-note]')).toHaveCount(1);
+  const title = (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
+  expect(title).toBe(replacement);
+});
