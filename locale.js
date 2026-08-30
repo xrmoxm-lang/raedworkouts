@@ -72,7 +72,7 @@ export const LOCALE = Object.freeze({
   // escaped the Arabic gate because that gate only ever rendered a training day.
   home_rest_next: pair('Next: {name}', 'القادم: {name}'),
   home_rest_rotation: pair('{day} · next in rotation', '{day} · التالي في الدورة'),
-  home_rest_recover: pair('Eat {protein} protein · Sleep 7+ hrs', 'بروتين {protein} · نوم ٧ ساعات فأكثر'),
+  home_rest_recover: pair('Eat {protein} protein · Sleep 7+ hrs', 'بروتين {protein} · نوم 7 ساعات فأكثر'),
   this_week_plain: pair('This week', 'هذا الأسبوع'),
   finish_and_save_session: pair('✓ Finish & save session', '✓ أنهِ الجلسة واحفظها'),
   end_session: pair('End session', 'أنهِ الجلسة'),

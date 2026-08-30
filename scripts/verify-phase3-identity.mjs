@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const excludedDirectories = new Set(['.git', 'node_modules']);
 const excludedDocumentation = /(?:SKILL|HOW_TO_USE|README|DEPLOY_FROM_ZERO|GATES)\.md$/;
-const retiredIdentity = /0[f]766e|19[c]2b0|0[a]574f|0[f]8d7f|d3[f]0eb|accent[-]glow|te[a]l|0[a]7d6c|2[e]e6c5/i;
+// `teal` needs word boundaries; without them it matched inside `evaluateAll`
+// (evalua-teAl-l) and reported an ordinary Playwright call as a retired v15
+// colour. The hex tokens are distinctive enough to stand alone.
+const retiredIdentity = /0[f]766e|19[c]2b0|0[a]574f|0[f]8d7f|d3[f]0eb|accent[-]glow|\bte[a]l\b|0[a]7d6c|2[e]e6c5/i;
+const selfPath = fileURLToPath(import.meta.url);
 const findings = [];
 
 async function scan(directory) {
@@ -18,6 +22,9 @@ async function scan(directory) {
     }
     if (!entry.isFile() || excludedDocumentation.test(entry.name)) continue;
     const path = resolve(directory, entry.name);
+    // This file necessarily contains every token it searches for, including the
+    // comment explaining them. Scanning itself makes it permanently red.
+    if (path === selfPath) continue;
     let contents;
     try {
       contents = await readFile(path, 'utf8');
