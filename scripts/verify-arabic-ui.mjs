@@ -146,7 +146,13 @@ for (const title of allowedPlaylists) {
   require(actualPlaylistTitles.has(title), `playlist-title allow-list contains a title absent from data.js: ${title}`);
 }
 for (const name of allowedProperNouns) {
-  require(appSource.includes(name), `proper-noun allow-list contains a name absent from app.js: ${name}`);
+  // The locale map counts, exactly as it does for abbreviations on the next
+  // line. The product name moved into LOCALE.app_name so a rename happens in
+  // one place; requiring a literal in app.js would force it to be duplicated.
+  require(
+    appSource.includes(name) || JSON.stringify(LOCALE).includes(name),
+    `proper-noun allow-list contains a name absent from app.js and the locale map: ${name}`,
+  );
 }
 for (const abbreviation of allowedProperNounAbbreviations) {
   require(appSource.includes(`'${abbreviation}'`) || appSource.includes(`\"${abbreviation}\"`) || JSON.stringify(LOCALE).includes(abbreviation), `proper-noun abbreviation allow-list contains a value absent from app.js or the locale map: ${abbreviation}`);

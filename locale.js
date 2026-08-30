@@ -10,7 +10,7 @@ const programmeTiedPair = (en, ar) => Object.freeze({ en, ar, programme_tied: tr
 
 export const LOCALE = Object.freeze({
   // Product name: a proper noun, never translated or transliterated.
-  app_name: pair('Raedworkouts', 'Raedworkouts'),
+  app_name: pair('Raedworkouts Go', 'Raedworkouts Go'),
   // ARABIC-TERMS.md Round 2 — approved whole UI copy and templates.
   family_profiles_offline: pair('Family training profiles. Offline-first, synced when reachable.', 'ملفات العائلة. تعمل دون اتصال، وتُزامَن عند توفّره.'),
   loading_server_profiles: pair('Loading server profiles…', 'جارٍ تحميل الملفات من الخادم…'),
@@ -50,6 +50,12 @@ export const LOCALE = Object.freeze({
   safer_option: pair('Safer option for this scope: {name}.', 'خيار أسلم لهذا النطاق: {name}.'),
   adopt_named: pair('Adopt {name}', 'اعتماد {name}'),
   adopt_confirm: pair('Adopt', 'اعتمد'),
+  // The week strip states facts only: the programme has no weekday mapping, so
+  // it never claims tomorrow is a rest day. Raed decides that.
+  week_today_is: pair('Today: {name}', 'اليوم: {name}'),
+  week_trained_today: pair('You trained today', 'تدرّبت اليوم'),
+  week_remaining: pair('{n} sessions left this week', 'باقي {n} جلسات هذا الأسبوع'),
+  week_target_met: pair('Four sessions done this week', 'أكملت أربع جلسات هذا الأسبوع'),
   video_add_short: pair('＋ Video', '＋ فيديو'),
   video_prompt: pair('Paste a YouTube link (video or short) for this exercise:', 'الصق رابط يوتيوب (فيديو أو شورت) لهذا التمرين:'),
   video_added: pair('Video added.', 'أُضيف الفيديو.'),
@@ -582,7 +588,7 @@ export const ALLOWED_PLAYLIST_TITLES = Object.freeze([
   'Beast Mode', 'Power Workout',
 ]);
 export const ALLOWED_PROPER_NOUNS = Object.freeze([
-  'Raedworkouts', 'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',
+  'Raedworkouts Go', 'Raedworkouts', 'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',
   'Apple Music', 'YT Music', 'Spotify', 'IN2', 'IN2 Fitness', '20IN2', 'App Store', 'iOS', 'JSON',
   // A deployment namespace is an identifier, not user-facing prose.
   'v16', 'scope.bit://', 'shortcuts://run-shortcut',

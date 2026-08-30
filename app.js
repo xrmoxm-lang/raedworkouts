@@ -119,7 +119,7 @@ function applyLang() {
   const lang = activeLanguage();
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  document.title = 'Raedworkouts';
+  document.title = t('app_name');
   $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   $$('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
   $$('[data-i18n-aria-label]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAriaLabel)); });
@@ -1238,7 +1238,7 @@ function renderWelcome() {
   }
   const wrap = h('div', { class: 'welcome-screen' },
     h('div', { class: 'welcome-head' },
-      h('div', { class: 'app-title big' }, brandMark(), h('span', {}, 'Raedworkouts')),
+      h('div', { class: 'app-title big' }, brandMark(), h('span', {}, t('app_name'))),
       h('p', {}, 'Family training profiles. Offline-first, synced when reachable.'),
     )
   );
@@ -2421,7 +2421,9 @@ function renderHome() {
     root.appendChild(h('div', { class: 'today-banner', 'data-home-overview': 'true' },
       h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
       h('h2', {}, parts[0]),
-      h('p', {}, parts[1] || planned.name),
+      // No subtitle when the name has no " — " half. The fallback was the FULL
+      // name, so a session called just «سفلي أ» printed its own title twice.
+      parts[1] ? h('p', {}, parts[1]) : null,
       h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ~', tf('home_minutes', { n: 70 })),
     ));
   } else {
@@ -2438,6 +2440,13 @@ function renderHome() {
   }
 
   // Stats row
+  // Raed wanted to see his week before leaving the house. The programme has NO
+  // weekday mapping on purpose — he decides which days he trains and the
+  // rotation follows his history — so this cannot invent a calendar. What it
+  // can say honestly: which days he actually trained (fact), what today is
+  // (fact), and how many sessions are left this week (arithmetic).
+  root.appendChild(buildWeekStrip());
+
   root.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
       h('div', { class: 'stat-num' }, String(streak)),
@@ -3816,6 +3825,57 @@ function renderSettings() {
   root.appendChild(disclosure('الموسيقى', musicCard));
   root.appendChild(disclosure('سحب البيانات', dataCard));
   root.appendChild(disclosure('المساعدة', buildHelpCard()));
+}
+
+function buildWeekStrip() {
+  const DAY_KEYS = ['weekday_sunday','weekday_monday','weekday_tuesday','weekday_wednesday','weekday_thursday','weekday_friday','weekday_saturday'];
+  const today = new Date();
+  // Week starts Saturday, as it does in Saudi.
+  const start = new Date(today);
+  start.setDate(today.getDate() - ((today.getDay() + 1) % 7));
+  const iso = (date) => date.toISOString().slice(0, 10);
+
+  const trainedOn = new Map();
+  for (const entry of state.history || []) {
+    if (!entry?.date) continue;
+    trainedOn.set(String(entry.date).slice(0, 10), entry.session_name || entry.session_id || '');
+  }
+
+  const strip = h('div', { class: 'week-strip', 'data-week-strip': 'true' });
+  let doneThisWeek = 0;
+  for (let offset = 0; offset < 7; offset += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + offset);
+    const key = iso(day);
+    const trained = trainedOn.get(key);
+    const isToday = key === iso(today);
+    const isFuture = day > today && !isToday;
+    if (trained) doneThisWeek += 1;
+    strip.appendChild(h('div', {
+      class: 'week-day' + (trained ? ' trained' : '') + (isToday ? ' today' : '') + (isFuture ? ' future' : ''),
+      'data-week-day': key,
+      title: trained || '',
+    },
+      h('span', { class: 'wd-name' }, t(DAY_KEYS[day.getDay()])),
+      h('span', { class: 'wd-mark' }, trained ? '●' : (isFuture ? '' : '·')),
+    ));
+  }
+
+  const planned = getTodayPlannedSession();
+  const trainedToday = trainedOn.has(iso(today));
+  const remaining = Math.max(0, 4 - doneThisWeek);
+  return h('section', { class: 'card compact week-card', 'data-week-card': 'true' },
+    h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' },
+      trainedToday
+        ? t('week_trained_today')
+        // Localise the session name BEFORE interpolating. Passing it raw put
+        // "Lower A" inside the template, and the combined string matches no
+        // locale key, so the whole line rendered half-English.
+        : tf('week_today_is', { name: t((planned?.name || '').split(' — ')[0]) })),
+    strip,
+    h('div', { class: 'tiny muted', style: 'margin-top:6px;' },
+      remaining ? tf('week_remaining', { n: remaining }) : t('week_target_met')),
+  );
 }
 
 function buildHelpCard() {

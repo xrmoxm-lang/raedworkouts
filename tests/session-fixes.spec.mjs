@@ -210,3 +210,46 @@ test('every programmed exercise offers at least one alternative', async ({ page 
   // applied to exercises). Raed decides that one.
   expect(gaps.none).toEqual(['bicycle_crunch']);
 });
+
+test('the week strip states facts and never invents a calendar', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(800);
+
+  await expect(page.locator('[data-week-card]')).toHaveCount(1);
+  await expect(page.locator('[data-week-day]')).toHaveCount(7);
+  // Exactly one day is today.
+  await expect(page.locator('[data-week-day].today')).toHaveCount(1);
+  // A future day carries no mark: the programme has no weekday mapping, so
+  // claiming tomorrow is a training or a rest day would be an invention.
+  const futureMarks = await page.locator('[data-week-day].future .wd-mark').allTextContents();
+  expect(futureMarks.every((mark) => mark.trim() === '')).toBe(true);
+  // Trained days come from history, so they can never exceed the days elapsed.
+  const trained = await page.locator('[data-week-day].trained').count();
+  const notFuture = await page.locator('[data-week-day]:not(.future)').count();
+  expect(trained).toBeLessThanOrEqual(notFuture);
+  // The session name is localised, not left as the raw English id.
+  await expect(page.locator('[data-week-card]')).not.toContainText(/Upper [AB]|Lower [AB]/);
+});
+
+test('the home banner never prints the session name twice', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(800);
+  const banner = page.locator('[data-home-overview]').first();
+  const title = (await banner.locator('h2').textContent()).trim();
+  const sub = await banner.locator('p').count() ? (await banner.locator('p').first().textContent()).trim() : '';
+  // The subtitle used to fall back to the FULL name when a session had no
+  // " — " half, so the card printed its own title a second line down.
+  expect(sub).not.toBe(title);
+});

@@ -1341,3 +1341,22 @@ body.welcome-mode main {
    part of the prescription. */
 .set-grid.extra { background: var(--bg-elev); }
 .set-grid.extra .set-num::after { content: '+'; opacity: 0.55; font-size: 10px; }
+
+/* ---- Week strip: facts only, no invented calendar -------------------- */
+.week-card { padding: 10px 12px; }
+.week-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.week-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0; border-radius: var(--radius-sm);
+  border: 1px solid transparent; background: var(--bg-elev);
+}
+.week-day .wd-name { font-size: 10px; font-weight: 700; color: var(--text-muted, var(--text)); }
+.week-day .wd-mark { font-size: 13px; line-height: 1; color: var(--border); }
+/* A day he actually trained. Fact, from history. */
+.week-day.trained { background: var(--accent-soft); }
+.week-day.trained .wd-mark { color: var(--accent); }
+/* Today is outlined rather than filled, so it never looks like a logged session. */
+.week-day.today { border-color: var(--accent); }
+/* Days that have not happened carry no mark at all — the app does not know
+   whether he will train, and a hollow dot would imply a plan he never made. */
+.week-day.future { opacity: 0.55; }
