@@ -126,12 +126,17 @@ test('skipping is explicit, writes no zero row, and immediately resolves the exe
   console.log('RUNNER_SKIP_POLICY_PASSED');
 });
 
-test('an unseeded movement stays blank, while a real suggestion is a placeholder and never an input value', async ({ page }) => {
+test('an unseeded movement offers no number, while a real suggestion is a placeholder and never an input value', async ({ page }) => {
   await openSeededHome(page);
   const home = await startAndCompleteWarmup(page);
   const unseeded = home.locator('[data-session-set-row][data-set-kind="working"] [data-runner-weight-input]').first();
   await expect(unseeded).toHaveValue('');
-  await expect(unseeded).toHaveAttribute('placeholder', '');
+  // The invariant is NO NUMBER, not an empty string. A blank box could not be
+  // told apart from a broken one, so with no history the placeholder now reads
+  // «معايرة» -- this session is the calibration. Raed: "اكتب معايرة".
+  await expect(unseeded).toHaveAttribute('placeholder', 'معايرة');
+  const placeholder = await unseeded.getAttribute('placeholder');
+  expect(placeholder).not.toMatch(/[0-9٠-٩]/);
   await expect(home).not.toContainText('0 kg');
 
   await page.evaluate((user) => {

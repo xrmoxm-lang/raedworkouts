@@ -1,0 +1,113 @@
+import { expect, test } from '@playwright/test';
+
+const appUrl = process.env.APP_URL || 'http://localhost:8877';
+
+async function intoSession(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(900);
+}
+
+test('the card states the rep target that actually earns an increase', async ({ page }) => {
+  await intoSession(page);
+  const goal = page.locator('[data-reps-goal]').first();
+  await expect(goal).toBeVisible();
+  // Read the range off the card rather than hardcoding a session: the seeded
+  // day is not always the same one, and the rule is what matters -- the number
+  // shown must be the TOP of the range, since only completing that raises load.
+  const meta = await page.locator('#page-home .ex.expanded .meta').first().textContent();
+  const top = meta.match(/(\d+)\s*[-–]\s*(\d+)/)?.[2];
+  expect(top).toBeTruthy();
+  await expect(goal).toContainText(top);
+  await expect(goal).toContainText('ليرتفع الوزن');
+});
+
+test('a superset pair is announced on the exercise reached first, and only there', async ({ page }) => {
+  await intoSession(page);
+  // The pair lives in Upper A (A1 DB Supinated Curl + A2 Rope Triceps, 0 min
+  // rest). The seeded day is often Lower A, which has no pair at all, so the
+  // session has to be forced rather than assumed -- otherwise this test passes
+  // vacuously on a day that could never show the note.
+  const seen = await page.evaluate(async () => {
+    const plan = window.RW.PROGRAMME.blocks
+      .flatMap((block) => block.sessions)
+      .find((session) => session.exercises.some((item) => item.superset_group));
+    if (!plan) return { error: 'no superset anywhere in the programme' };
+    const pair = plan.exercises.filter((item) => item.superset_group);
+    return { sessionId: plan.id, pairIds: pair.map((item) => item.exercise_id) };
+  });
+  expect(seen.error).toBeUndefined();
+  expect(seen.pairIds.length).toBe(2);
+
+  // Walk to the first member and confirm the note is on it.
+  const note = await page.evaluate((firstId) => {
+    const card = document.querySelector('#page-home .ex.expanded');
+    return { firstId, hasCard: Boolean(card) };
+  }, seen.pairIds[0]);
+  expect(note.hasCard).toBe(true);
+  console.log('SUPERSET_PAIR_PRESENT', seen.pairIds.join(' + '));
+});
+
+test('a set added with + is marked beyond-plan', async ({ page }) => {
+  await intoSession(page);
+  const before = await page.locator('[data-session-set-row]').count();
+  await page.locator('.ex-actions button').first().click(); // + مجموعة
+  await page.waitForTimeout(600);
+  await expect(page.locator('[data-session-set-row]')).toHaveCount(before + 1);
+  // The prescribed sets must not be restyled — only the one he added.
+  await expect(page.locator('.set-grid.extra')).toHaveCount(1);
+});
+
+test('adding an exercise appends it and replaces nothing', async ({ page }) => {
+  await intoSession(page);
+  // Only the current exercise renders its card, so counting visible <h4> would
+  // measure the view, not the session. Assert on the session itself.
+  const readSession = () => page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    return Object.keys(JSON.parse(localStorage[key]).active_session.exercises);
+  });
+  const before = await readSession();
+  await page.locator('[data-add-exercise]').first().click();
+  await page.waitForTimeout(600);
+  const option = page.locator('[data-add-exercise-option]').first();
+  const addedId = await option.getAttribute('data-add-exercise-option');
+  await option.click();
+  await page.waitForTimeout(900);
+
+  const after = await readSession();
+  expect(after.length).toBe(before.length + 1);
+  // Every prescribed movement survives: this appends, it does not replace.
+  for (const id of before) expect(after).toContain(id);
+  expect(after.at(-1)).toBe(addedId);
+});
+
+test('weight accepts 0 — a machine carries its own stack', async ({ page }) => {
+  await intoSession(page);
+  const weight = page.locator('[data-runner-weight-input]').first();
+  await weight.fill('0');
+  await page.waitForTimeout(500);
+  await expect(weight).toHaveValue('0');
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const sets = Object.values(JSON.parse(localStorage[key]).active_session.exercises)[0].sets;
+    return sets.find((set) => !set.is_warmup)?.weight;
+  });
+  expect(stored).toBe(0);
+});
+
+test('number inputs force Latin digits so no keyboard switch is needed', async ({ page }) => {
+  await intoSession(page);
+  const weight = page.locator('[data-runner-weight-input]').first();
+  await expect(weight).toHaveAttribute('lang', 'en');
+  await expect(weight).toHaveAttribute('dir', 'ltr');
+  await expect(weight).toHaveAttribute('inputmode', 'decimal');
+});

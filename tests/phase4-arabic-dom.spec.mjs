@@ -92,7 +92,11 @@ async function scanVisibleLatin(page, screen) {
         .replace(westernNumeral, ' ')
         .replace(/\bkg\b/g, ' ')
         .replace(/\b[xX]\b/g, ' ')
-        .replace(/\b(?:M)(?=\d+\b)/g, ' ')
+        // A declared abbreviation immediately followed by digits is one label:
+        // M1, M2, R1... This was hardcoded to M alone, so adding an R-prefixed
+        // tile made the gate fail on a chip that is exactly as allowed as M1.
+        // Driven off the abbreviation list now, so the next label needs no edit.
+        .replace(new RegExp(`\\b(?:${abbreviations.filter((item) => /^[A-Za-z]+$/.test(item)).map(escape).join('|')})(?=\\d+\\b)`, 'g'), ' ')
         .replace(new RegExp(`\\b(?:${abbreviations.map(escape).join('|')})\\b`, 'g'), ' ')
         .replace(/\s+/g, ' ')
         .trim();

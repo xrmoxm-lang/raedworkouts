@@ -396,6 +396,17 @@ function buildExerciseVideos(exerciseId, ex, opts = {}) {
       title: jnHasCustomOverride(exerciseId) ? 'JN (custom)' : 'Jeff Nippard',
       nippard: true,
     }] : []),
+    // Clips Raed chose himself in the link picker. Stored as full URLs, not bare
+    // ids, because three of them carry a ?t= that points at the right exercise
+    // inside a long video — drop the timestamp and it becomes a different
+    // movement, which is the wrong-video case D8 forbids.
+    ...(ex.extra || []).map((url, i) => ({
+      key: 'extra_' + i,
+      id: ytIdFromUrl(url),
+      url,
+      label: 'R' + (i + 1),
+      title: t('raed_pick'),
+    })),
     ...customVids.map((url, i) => {
       const isShort = String(url || '').includes('/shorts/');
       return {
@@ -1440,6 +1451,12 @@ function roundToGymIncrement(value, step) {
 function fmtKgValue(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
 }
+// Zero is a legitimate load: plenty of machines carry their own stack, and Raed
+// logs 0 for those. It used to be rejected, which forced him to invent a 1.
+function isLoggableWeight(value) {
+  const weight = typeof value === 'number' ? value : parseFloat(value);
+  return Number.isFinite(weight) && weight >= 0;
+}
 function hasWorkingWeight(value) {
   const weight = Number(value);
   return Number.isFinite(weight) && weight > 0;
@@ -1447,8 +1464,22 @@ function hasWorkingWeight(value) {
 function displaySuggestedWeight(value) {
   return hasWorkingWeight(value) ? `${fmtKgValue(value)} ${t('kg')}` : '—';
 }
+// The exercise this one is supersetted with: same superset_group, different row.
+// Returns null for the second half of the pair, so the note renders once, on the
+// exercise you reach first.
+function supersetPartner(session, planned) {
+  const group = planned?.superset_group;
+  if (!group || !session?.exercises) return null;
+  const members = session.exercises.filter((item) => item.superset_group === group);
+  if (members.length < 2) return null;
+  return members[0].exercise_id === planned.exercise_id ? members[1] : null;
+}
+
 function suggestedWeightPlaceholder(value) {
-  return hasWorkingWeight(value) ? fmtKgValue(value) : '';
+  // An empty box told Raed nothing -- he could not tell "no suggestion yet" from
+  // "the app is broken". With no logged history there IS no number to suggest,
+  // so the honest word is «معايرة»: this session is the calibration.
+  return hasWorkingWeight(value) ? fmtKgValue(value) : t('calibrate');
 }
 function editableWeightValue(value) {
   return hasWorkingWeight(value) ? Number(value) : '';
@@ -2641,6 +2672,25 @@ function renderExerciseCard(ex_id, exState) {
     // Note: video selection + JN URL editing live in Library, not here.
   }
 
+  // The one number that actually moves the weight. The engine raises load only
+  // when EVERY working set hits the TOP of the rep range, so a range alone left
+  // Raed guessing whether 10 or 12 was the point -- and 10 would have held the
+  // weight still forever without explaining why.
+  const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
+  if (repTop) {
+    body.appendChild(h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, tf('reps_goal', { n: repTop })));
+  }
+
+  // A1/A2 run back to back. superset_group has been in data.js since the
+  // programme was transcribed and was read by nothing, so the app rested 2:00
+  // between the paired curl and triceps extension where Jeff prescribes 0.
+  const activeSessionPlan = getActiveProgramme()?.sessions?.find((item) => item.id === state.active_session?.session_id);
+  const partner = supersetPartner(activeSessionPlan, planned);
+  if (partner) {
+    body.appendChild(h('div', { class: 'superset-note tiny', 'data-superset': 'true' },
+      tf('superset_with', { name: getAllExercises().find((item) => item.id === partner.exercise_id)?.name || partner.exercise_id })));
+  }
+
   // Sets table
   body.appendChild(h('div', { class: 'spacer-12' }));
   body.appendChild(h('div', { class: 'set-grid-headers' },
@@ -2655,7 +2705,7 @@ function renderExerciseCard(ex_id, exState) {
     const workingSets = exState.sets.filter((item) => !item.is_warmup);
     const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
     const row = h('div', {
-      class: 'set-grid' + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : ''),
+      class: 'set-grid' + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : '') + (set.is_extra ? ' extra' : ''),
       style: isWarm ? 'opacity:0.7;' : '',
       'data-session-set-row': String(idx),
       'data-set-kind': isWarm ? 'warmup' : 'working',
@@ -2663,6 +2713,9 @@ function renderExerciseCard(ex_id, exState) {
       h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
       h('input', {
         type: 'number', step: '0.5', inputmode: 'decimal',
+        // lang/dir force Latin digits and a number pad. Without them an Arabic
+        // keyboard opens and Raed has to switch language for every set.
+        lang: 'en', dir: 'ltr',
         placeholder: suggestedWeightPlaceholder(sug.weight),
         value: editableWeightValue(set.weight),
         'data-runner-weight-input': 'true',
@@ -2672,6 +2725,7 @@ function renderExerciseCard(ex_id, exState) {
       }),
       h('input', {
         type: 'number', step: '1', inputmode: 'numeric',
+        lang: 'en', dir: 'ltr',
         placeholder: String(planned.reps),
         value: set.reps ?? '',
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
@@ -2726,7 +2780,10 @@ function renderExerciseCard(ex_id, exState) {
   const actions = h('div', { class: 'ex-actions' },
     h('button', { class: 'btn tiny', onClick: () => {
       const lastWorking = [...exState.sets].reverse().find(s => !s.is_warmup);
-      exState.sets.push({ is_warmup: false, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
+      // Marked as beyond-plan. Raed asked that a set he adds himself be visibly
+      // distinct from the prescribed ones, so the card never implies the
+      // programme called for it.
+      exState.sets.push({ is_warmup: false, is_extra: true, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
       saveLocal(); render();
     }}, '+ Set'),
     h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, tf('rest_seconds', {
@@ -2741,11 +2798,79 @@ function renderExerciseCard(ex_id, exState) {
       onClick: () => skipRunnerExercise(ex_id),
     }, t('runner_skip_exercise')),
     h('button', { class: 'btn tiny ghost', 'data-video-add': 'true', onClick: () => addCustomVideo(ex_id) }, t('video_add_short')),
+    h('button', { class: 'btn tiny ghost', 'data-add-exercise': 'true', onClick: () => showAddExerciseModal() }, t('add_exercise_button')),
   );
   body.appendChild(actions);
 
   card.appendChild(body);
   return card;
+}
+
+// Raed: "الـexercise هذا ما تبدل، أضف لي exercise على نهاية التمرين". Swapping
+// REPLACES a prescribed movement and charges the volume ledger against it.
+// Appending adds a movement the programme never asked for, at the end, without
+// touching anything above it. They are different actions and he wanted both.
+function showAddExerciseModal() {
+  const inSession = new Set(Object.keys(state.active_session?.exercises || {}));
+  const options = getAllExercises()
+    .filter((item) => !inSession.has(item.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Same modal plumbing as showAltModal -- #modal + the .show class on the
+  // overlay. There is no openModal()/closeModal() helper in this file.
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  modal.appendChild(h('h3', {}, t('add_exercise_title')));
+  modal.appendChild(h('p', { class: 'tiny muted' }, t('add_exercise_hint')));
+  const search = h('input', {
+    type: 'search', class: 'search-input', placeholder: t('search_exercise'),
+    onInput: (e) => {
+      const needle = e.target.value.trim().toLowerCase();
+      modal.querySelectorAll('[data-add-exercise-option]').forEach((node) => {
+        node.hidden = Boolean(needle) && !node.textContent.toLowerCase().includes(needle);
+      });
+    },
+  });
+  modal.appendChild(search);
+  options.forEach((item) => modal.appendChild(h('button', {
+    class: 'btn full', style: 'margin-top:6px; text-align:start;',
+    'data-add-exercise-option': item.id,
+    onClick: () => {
+      appendExerciseToSession(item.id);
+      $('#modal-overlay').classList.remove('show');
+    },
+  },
+    h('strong', {}, item.name),
+    h('span', { class: 'tiny muted' }, ' · ', muscleLabel(item.primary?.[0])),
+  )));
+  modal.appendChild(h('button', {
+    class: 'btn ghost full', style: 'margin-top:10px;',
+    onClick: () => $('#modal-overlay').classList.remove('show'),
+  }, t('cancel')));
+  $('#modal-overlay').classList.add('show');
+}
+
+function appendExerciseToSession(exerciseId) {
+  const active = state.active_session;
+  if (!active) return;
+  const exercise = getAllExercises().find((item) => item.id === exerciseId);
+  if (!exercise || active.exercises[exerciseId]) return;
+  // Three sets of ten is the app's own default, not a prescription from the
+  // programme, so the entry is flagged added_by_user and its sets are extra.
+  const planned = { exercise_id: exerciseId, sets: 3, reps: '10-12', added_by_user: true };
+  const suggested = suggestNextWeight(exerciseId, planned);
+  active.exercises[exerciseId] = {
+    planned,
+    added_by_user: true,
+    sets: Array.from({ length: 3 }, () => ({
+      is_warmup: false, is_extra: true,
+      weight: suggested.weight, reps: workingRepTarget(planned), effort: null, completed: false,
+    })),
+    swapped_to: null,
+  };
+  saveLocal();
+  render();
+  toast(tf('added_to_today', { name: exercise.name }));
 }
 
 function showAltModal(ex_id, exState) {

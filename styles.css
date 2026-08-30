@@ -671,8 +671,14 @@ body.runner-mode .page-runner.active {
   text-decoration: none;
   display: block;
 }
-.video-thumb.shorts { width: 54px; }
-.video-thumb.regular { width: 170px; }
+/* One size for every clip. Width used to depend on whether the URL was a
+   /shorts/ link (54px) or a watch?v= link (170px), so a Jeff Nippard demo
+   rendered three times wider than Mohannad's beside it -- Raed: "حق جيفري بارد
+   لا يكون كذا بهالكبر". Provenance is not a reason to be bigger; the JN chip
+   already says which one it is. object-fit: cover on the img handles the 9:16
+   vs 16:9 difference without changing the box. */
+.video-thumb.shorts,
+.video-thumb.regular { width: 104px; }
 .video-thumb img {
   position: absolute; inset: 0; z-index: 0;
   width: 100%; height: 100%; object-fit: cover; display: block;
@@ -1320,3 +1326,18 @@ body.welcome-mode main {
   /* PDF extraction leaves long unbroken runs; never let one widen the page. */
   overflow-wrap: anywhere;
 }
+
+/* The two lines that tell Raed what the plan actually wants from him. */
+.reps-goal {
+  margin-top: 8px; padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--text); font-weight: 700;
+}
+.superset-note {
+  margin-top: 6px; padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); border: 1px dashed var(--accent);
+  color: var(--accent-label, var(--text)); font-weight: 700;
+}
+/* A set added with + is beyond the written plan; shade it so it never reads as
+   part of the prescription. */
+.set-grid.extra { background: var(--bg-elev); }
+.set-grid.extra .set-num::after { content: '+'; opacity: 0.55; font-size: 10px; }

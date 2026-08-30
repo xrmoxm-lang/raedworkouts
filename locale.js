@@ -22,6 +22,20 @@ export const LOCALE = Object.freeze({
   blocked_substitution_accepted: pair('User accepted blocked volume substitution.', 'قبِل المستخدم استبدالًا يخالف حدود الحجم.'),
   gym_day_plain: pair('Gym day', 'يوم نادٍ'),
   rest_day_plain: pair('Rest day', 'يوم راحة'),
+  // Clips Raed picked himself in the link picker, as opposed to Mohannad's (M)
+  // or the Nippard demo (JN).
+  raed_pick: pair('Your pick', 'من اختيارك'),
+  // Shown in the weight box when there is no logged history to suggest from.
+  calibrate: pair('calibrate', 'معايرة'),
+  reps_goal: pair('Complete {n} on every set to earn a load increase', 'أكمل {n} في كل المجموعات ليرتفع الوزن'),
+  superset_with: pair('Superset — no rest before {name}', 'سوبرست — بلا راحة قبل {name}'),
+  extra_set: pair('extra set', 'مجموعة زائدة'),
+  // Appending is not swapping: it adds a movement at the END without replacing
+  // anything the programme prescribed.
+  add_exercise_title: pair('Add an exercise', 'أضف تمرينًا'),
+  add_exercise_hint: pair('Added at the end. Nothing in the plan is replaced.', 'يُضاف في النهاية. لا يُستبدل شيء من الخطة.'),
+  add_exercise_button: pair('＋ Exercise', '＋ تمرين'),
+  search_exercise: pair('Search…', 'ابحث…'),
   video_add_short: pair('＋ Video', '＋ فيديو'),
   video_prompt: pair('Paste a YouTube link (video or short) for this exercise:', 'الصق رابط يوتيوب (فيديو أو شورت) لهذا التمرين:'),
   video_added: pair('Video added.', 'أُضيف الفيديو.'),
