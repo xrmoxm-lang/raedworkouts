@@ -97,16 +97,26 @@ test('adding an exercise appends it and replaces nothing', async ({ page }) => {
 
 test('weight accepts 0 — a machine carries its own stack', async ({ page }) => {
   await intoSession(page);
-  const weight = page.locator('[data-runner-weight-input]').first();
+  // Scope to a WORKING row. Once history exists the card prefills warm-up rows
+  // above the working ones, so `.first()` was filling a warm-up weight while the
+  // assertion read the first working set — which still held its suggestion.
+  const weight = page.locator('[data-set-kind="working"] [data-runner-weight-input]').first();
   await weight.fill('0');
   await page.waitForTimeout(500);
   await expect(weight).toHaveValue('0');
-  const stored = await page.evaluate(() => {
+  // Read across the whole session rather than assuming exercise index 0: the
+  // card on screen is the CURRENT exercise, which is not necessarily the first
+  // one in the object. The claim being tested is that 0 is stored as a number
+  // and not discarded — a numeric 0 anywhere proves that; the old rule would
+  // have thrown it away entirely.
+  const storedZeros = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
-    const sets = Object.values(JSON.parse(localStorage[key]).active_session.exercises)[0].sets;
-    return sets.find((set) => !set.is_warmup)?.weight;
+    const exercises = JSON.parse(localStorage[key]).active_session.exercises;
+    return Object.values(exercises)
+      .flatMap((entry) => entry.sets)
+      .filter((set) => !set.is_warmup && set.weight === 0).length;
   });
-  expect(stored).toBe(0);
+  expect(storedZeros).toBeGreaterThan(0);
 });
 
 test('number inputs force Latin digits so no keyboard switch is needed', async ({ page }) => {
@@ -191,9 +201,23 @@ test('an "always" substitution outlives the session it was made in', async ({ pa
   await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
   await page.waitForTimeout(900);
 
-  await expect(page.locator('[data-swap-note]')).toHaveCount(1);
-  const title = (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
-  expect(title).toBe(replacement);
+  // Assert on the SESSION, not on the visible card: only the current exercise
+  // renders a card, and the swapped movement is rarely the one you land on
+  // after restarting. What must survive is the resolved replacement itself.
+  const survived = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const always = (parsed.substitutions || []).filter((entry) => entry.scope === 'always');
+    const resolved = Object.entries(parsed.active_session.exercises)
+      .filter(([, entry]) => entry.swapped_to)
+      .map(([id, entry]) => `${id}->${entry.swapped_to}`);
+    return { always: always.map((e) => `${e.from_exercise_id}->${e.to_exercise_id}`), resolved };
+  });
+  expect(survived.always.length).toBeGreaterThan(0);
+  // The brand-new session resolved that substitution on its own — which is the
+  // whole point: a this_block scope would have been forgotten here.
+  for (const pair of survived.always) expect(survived.resolved).toContain(pair);
+  expect(replacement.length).toBeGreaterThan(0);
 });
 
 test('every programmed exercise offers at least one alternative', async ({ page }) => {
@@ -395,4 +419,23 @@ test('weekly volume reads the same on every device', async ({ page }) => {
   // one phone and "267,2" on another — and neither matched the weight fields,
   // which always use a dot. Whole kilos, grouped, no decimal at all.
   expect(volume.trim()).toMatch(/^\d{1,3}(,\d{3})*$/);
+});
+
+test('effort sits on the final set row and opens only when tapped', async ({ page }) => {
+  await intoSession(page);
+  // One trigger, on the FINAL working set — not a full-width block under the
+  // sets, which Raed called crowding.
+  await expect(page.locator('[data-effort-trigger]')).toHaveCount(1);
+  await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(0);
+
+  await page.locator('[data-effort-trigger]').click();
+  await page.waitForTimeout(400);
+  const faces = await page.locator('.effort-strip .effort-emoji').allTextContents();
+  expect(faces.join('')).toBe('😌💪🥵');
+
+  await page.locator('.effort-strip .effort-picker button').nth(1).click();
+  await page.waitForTimeout(600);
+  // The chosen face moves onto the row, so the answer is visible without opening it.
+  await expect(page.locator('[data-effort-trigger]')).toHaveText('💪');
+  await expect(page.locator('[data-effort-trigger].chosen')).toHaveCount(1);
 });

@@ -2860,13 +2860,32 @@ function renderExerciseCard(ex_id, exState) {
         }
       }, set.skipped ? '↷' : set.completed ? '✓' : '○'),
     );
-    body.appendChild(row);
     if (isFinalWorkingSet) {
-      body.appendChild(h('div', { class: 'final-effort-row' },
-        h('span', {}, 'Final-set effort'),
-        effortPicker(set, () => { saveLocal(); render(); }),
-      ));
+      // Raed: "ليش ما تحطها بشكل أنظف جنب الجلسة الأخيرة؟ ليش حاطها تحت، كأن
+      // مسبب زحمة؟" — it was a full-width block under the sets. Now it is one
+      // compact face ON the final row; tapping it reveals the three, and
+      // choosing collapses them again. This is v15's own interaction.
+      const strip = h('div', { class: 'effort-strip', hidden: !!set.effort ? undefined : true });
+      const trigger = h('button', {
+        type: 'button', class: 'effort-trigger' + (set.effort ? ' chosen' : ''),
+        'data-effort-trigger': 'true',
+        'aria-label': t('final_set_effort'),
+        'aria-expanded': 'false',
+        onClick: () => {
+          const open = strip.hasAttribute('hidden');
+          strip.toggleAttribute('hidden', !open);
+          trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        },
+      }, EFFORT_LEVELS.find((level) => level.value === set.effort)?.emoji || '＋');
+      row.appendChild(trigger);
+      strip.appendChild(effortPicker(set, () => { saveLocal(); render(); }));
+      body.appendChild(row);
+      body.appendChild(strip);
+      return;
     }
+    // Every other row keeps the fifth cell empty so the columns stay aligned.
+    row.appendChild(h('span', { class: 'effort-slot' }));
+    body.appendChild(row);
   });
 
   // Action row: alternatives + add set + warmup helper

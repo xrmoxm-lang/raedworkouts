@@ -529,7 +529,13 @@ const phase5Exercise = ({ id, name, primary, secondary = [], pattern, aliases = 
 EXERCISES.push(
   // The fourteen programme movements which were not in the v15 library.
   phase5Exercise({ id: 'reverse_grip_lat_pulldown', name: 'Reverse-Grip Lat Pulldown', primary: 'back', secondary: ['biceps', 'rear_delts', 'upper_back'], pattern: 'vertical_pull', alternatives: ['reverse_grip_assisted_pullup', 'single_arm_pulldown'] }),
-  phase5Exercise({ id: 'assisted_dip', name: 'Assisted Dip', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'compound_push', alternatives: ['decline_db_press', 'chest_press_machine'] }),
+  // Raed: "خليه لترايسبس ما هو للصدر". The dip he actually performs is the
+  // close-grip version — which is also what the Nippard PDF's own clip shows —
+  // and that loads triceps, not chest. Chest keeps a secondary claim because it
+  // still contributes. This MOVES the exercise's volume in the weekly ledger
+  // from chest to triceps, so what counts as a safe substitution for it changes
+  // too; that is the intended consequence, not a side effect.
+  phase5Exercise({ id: 'assisted_dip', name: 'Assisted Dip', primary: 'triceps', secondary: ['chest', 'shoulders'], pattern: 'compound_push', alternatives: ['decline_db_press', 'chest_press_machine'], jeff_nippard: 'https://youtu.be/mpcPTUAhfto?si=VHNG-WmxfbY9hmjn' }),
   phase5Exercise({ id: 'single_arm_rope_triceps_extension', name: 'Single-Arm Rope Triceps Extension', primary: 'triceps', pattern: 'isolation_push', alternatives: ['tricep_pushdown'] }),
   phase5Exercise({ id: 'lying_leg_curl', name: 'Lying Leg Curl', primary: 'hamstrings', pattern: 'isolation_hamstring', alternatives: ['seated_leg_curl', 'glute_ham_raise'] }),
   phase5Exercise({ id: 'goblet_squat', name: 'Goblet Squat', primary: 'quads', secondary: ['glutes', 'hamstrings'], pattern: 'compound_quad', alternatives: ['hack_squat', 'leg_press'] }),

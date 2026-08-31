@@ -57,13 +57,12 @@ test('a Nippard link is a video or an honest search, never a broken half-link', 
   }
 });
 
-test('close-grip assisted dip was NOT adopted for the chest-primary assisted dip', () => {
-  // The one candidate rejected on review. The PDF anchor reads "Close-Grip
-  // Assisted Dip", which shifts emphasis to triceps, while this catalogue entry
-  // is chest-primary. Same family, different exercise, so it stays Raed's call.
-  assert.equal(byId.assisted_dip.primary[0], 'chest');
-  assert.ok(
-    !String(byId.assisted_dip.jeff_nippard).includes('mpcPTUAhfto'),
-    'the close-grip dip video was adopted for a chest-primary movement without Raed deciding',
-  );
+test('the close-grip dip video now matches the exercise it is attached to', () => {
+  // This test used to assert the OPPOSITE. The PDF anchor reads "Close-Grip
+  // Assisted Dip", which loads triceps, and the catalogue entry was chest —
+  // so the clip was withheld and the mismatch left for Raed. He then ruled the
+  // exercise itself is triceps ("خليه لترايسبس ما هو للصدر"), which removes the
+  // mismatch: the clip and the movement are now the same thing.
+  assert.equal(byId.assisted_dip.primary[0], 'triceps');
+  assert.ok(String(byId.assisted_dip.jeff_nippard).includes('mpcPTUAhfto'));
 });

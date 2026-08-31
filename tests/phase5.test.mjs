@@ -117,6 +117,10 @@ test('Phase 5 hand-reviewed catalogue crosswalk resolves programmes and every su
   }
   assert.notEqual(catalogue.get('Reverse Pec Deck')?.id, catalogue.get('Pec Deck')?.id);
   assert.notEqual(catalogue.get('Leg Press Toe Press')?.id, catalogue.get('Leg Press')?.id);
+  // Chest 9->6 direct and Triceps 2->5 is assisted_dip's three sets moving, on
+  // Raed's instruction that the dip he performs is close-grip and therefore a
+  // triceps movement. It is a better distribution as well: 2 direct triceps sets
+  // was the thinnest number in the whole ledger.
   assert.deepEqual(catalogue.get('Leg Press Toe Press')?.primary_muscle, 'calves');
   assert.deepEqual(catalogue.get('Machine Crunch')?.video_records, []);
   console.log('PHASE5_CATALOGUE_CROSSWALK_PASSED');
@@ -296,14 +300,14 @@ test('Phase 5 real catalogue re-derives the anatomy-corrected weekly volume ledg
     below_floor: [],
   });
   assert.deepEqual(perMuscle, {
-    Chest: { direct: 9, indirect: 3 },
+    Chest: { direct: 6, indirect: 6 },
     Lats: { direct: 6, indirect: 6 },
     'Mid-back': { direct: 6, indirect: 8 },
     'Front delts': { direct: 3, indirect: 9 },
     'Side delts': { direct: 6, indirect: 3 },
     'Rear delts': { direct: 2, indirect: 12 },
     Biceps: { direct: 5, indirect: 12 },
-    Triceps: { direct: 2, indirect: 12 },
+    Triceps: { direct: 5, indirect: 9 },
     Quads: { direct: 12, indirect: 0 },
     Hamstrings: { direct: 9, indirect: 9 },
     Glutes: { direct: 3, indirect: 12 },

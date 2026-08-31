@@ -1221,7 +1221,7 @@ body.welcome-mode main {
 .v15-set-panel { display: block; margin-top: 0; min-height: 0; overflow: visible; }
 .v15-set-list { display: grid; gap: 7px; }
 .v15-set-list .set-grid-headers,
-.v15-set-list .set-grid { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px; }
+.v15-set-list .set-grid { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px 40px; }
 .v15-workout-card > .ex-body > .set-grid-headers {
   grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px;
 }
@@ -1378,3 +1378,18 @@ body.welcome-mode main {
 #page-home { display: flex; flex-direction: column; }
 #page-home > * { order: 1; }
 body.session-active #page-home > .home-context { order: 2; }
+
+
+/* ---- Effort, on the final set's own row ----------------------------- */
+/* It used to be a full-width block under the sets — Raed called it crowding.
+   One face on the row, tap to reveal the three, tap one to collapse. */
+.effort-slot { display: block; }
+.effort-trigger {
+  min-height: 34px; width: 100%; padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); font-size: 17px; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+.effort-trigger.chosen { background: var(--accent-soft); border-color: var(--accent); }
+.effort-strip { grid-column: 1 / -1; margin: 2px 0 6px; }
+.effort-strip[hidden] { display: none; }
