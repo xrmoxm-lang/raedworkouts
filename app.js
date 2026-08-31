@@ -1506,11 +1506,11 @@ function suggestNextWeight(exercise_id, planned) {
   const last2 = getLastTwoPerformances(exercise_id);
   const ex = getAllExercises().find(e => e.id === exercise_id);
   const startKg = effectiveStartKg(planned);
-  if (!ex) return { weight: startKg, note: 'First exposure — use the seeded load, then log the real result.' };
+  if (!ex) return { weight: startKg, note: t('why_first_exposure') };
   if (!last2.length) {
     return hasWorkingWeight(startKg)
-      ? { weight: startKg, note: `⚡ Re-entry seed: ${startKg} kg. Let completed reps find the right level; do not grind.` }
-      : { weight: null, note: '' };
+      ? { weight: startKg, note: tf('why_reentry_seed', { kg: startKg }) }
+      : { weight: null, note: t('why_calibrate') };
   }
   const latest = last2[0];
   const topReps = parseInt(String(planned.reps).split('-').pop(), 10) || 10;
@@ -1519,8 +1519,8 @@ function suggestNextWeight(exercise_id, planned) {
   if (!workingSets.length) {
     const historicWeight = (latest.sets || []).filter(isCountableWorkingSet).map((set) => set.weight).find(hasWorkingWeight);
     return hasWorkingWeight(historicWeight)
-      ? { weight: Number(historicWeight), note: 'Use the last logged working load and complete the prescribed reps.' }
-      : { weight: null, note: '' };
+      ? { weight: Number(historicWeight), note: t('why_last_logged') }
+      : { weight: null, note: t('why_calibrate') };
   }
   const lastTopSet = workingSets[workingSets.length - 1];
   const allHitTarget = workingSets.every(s => s.reps >= topReps);
@@ -1534,19 +1534,19 @@ function suggestNextWeight(exercise_id, planned) {
     const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
     if (prevAllHit) {
       if (finalEffort === 'very_hard') {
-        return { weight: lastTopSet.weight, note: 'Very hard on the final set: hold this reps-earned load once more.' };
+        return { weight: lastTopSet.weight, note: t('why_hold_very_hard') };
       }
       if (bump > 0) {
-        return { weight: lastTopSet.weight + bump, note: `Completed ${topReps} on every set twice. Bump +${bump} kg.` };
+        return { weight: lastTopSet.weight + bump, note: tf('why_bump_twice', { reps: topReps, kg: bump }) };
       } else {
-        return { weight: lastTopSet.weight, note: `Add a rep or a set instead of weight (accessory).` };
+        return { weight: lastTopSet.weight, note: t('why_accessory_reps') };
       }
     }
   }
   if (allHitTarget && finalEffort === 'easy' && bump > 0) {
-    return { weight: lastTopSet.weight + bump, note: `Easy on the final set after every set reached ${topReps}: reps-earned bump +${bump} kg lands one session sooner.` };
+    return { weight: lastTopSet.weight + bump, note: tf('why_easy_bump', { reps: topReps, kg: bump }) };
   }
-  return { weight: lastTopSet.weight, note: `Last session: ${lastTopSet.weight} kg × ${lastTopSet.reps}. Match or beat it.` };
+  return { weight: lastTopSet.weight, note: tf('why_match_or_beat', { kg: lastTopSet.weight, reps: lastTopSet.reps }) };
 }
 
 // ---- Streak / volume calc ----------------------------------
@@ -2743,6 +2743,14 @@ function renderExerciseCard(ex_id, exState) {
   // when EVERY working set hits the TOP of the rep range, so a range alone left
   // Raed guessing whether 10 or 12 was the point -- and 10 would have held the
   // weight still forever without explaining why.
+  // The engine has always explained WHY it suggests this weight. v16 kept the
+  // calculation and dropped the render, so the number looked arbitrary — the
+  // exact thing Raed complained about not understanding. Shown compactly, above
+  // the rep goal, and NOT as a form cue (those he removed on purpose).
+  if (sug.note) {
+    body.appendChild(h('div', { class: 'why-weight tiny', 'data-why-weight': 'true' }, sug.note));
+  }
+
   const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
   if (repTop) {
     body.appendChild(h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, tf('reps_goal', { n: repTop })));

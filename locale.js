@@ -55,6 +55,20 @@ export const LOCALE = Object.freeze({
   ledger_blocked: pair('{muscles} crosses the hard {low}–{high} set limit.', '{muscles} يتجاوز الحد الصارم {low}–{high} مجموعة.'),
   ledger_warn: pair('{muscles} sits outside the {low}–{high} band.', '{muscles} خارج نطاق {low}–{high} مجموعة.'),
   ledger_clean: pair('Every muscle stays inside the {low}–{high} band.', 'كل العضلات داخل نطاق {low}–{high} مجموعة.'),
+  // Why the suggested weight is what it is. The engine has always produced this
+  // reasoning and v16 threw it away, which made the number look arbitrary.
+  // The two branches that used to return an empty reason. These are the cases
+  // with the LEAST information, so saying nothing was the worst answer — it is
+  // why the weight box reads «معايرة».
+  why_calibrate: pair('No logged history yet — pick a weight you can control and log it. Today is the calibration.', 'لا سجلّ بعد — اختر وزنًا تتحكّم فيه وسجّله. اليوم معايرة.'),
+  why_first_exposure: pair('First time — use the seeded load, then log what really happened.', 'أول مرة — استعمل الوزن المبدئي، ثم سجّل ما حدث فعلًا.'),
+  why_reentry_seed: pair('⚡ Re-entry seed: {kg} kg. Let completed reps find the level; do not grind.', '⚡ وزن بداية العودة: {kg} كغ. دع التكرارات تجد المستوى، ولا تعاند.'),
+  why_last_logged: pair('Use the last logged load and complete the prescribed reps.', 'استعمل آخر وزن مسجّل وأكمل التكرارات المطلوبة.'),
+  why_hold_very_hard: pair('Final set was very hard — hold this load one more session.', 'المجموعة الأخيرة كانت صعبة جدًا — ابقَ على هذا الوزن جلسة أخرى.'),
+  why_bump_twice: pair('You completed {reps} on every set, twice. Up {kg} kg.', 'أكملت {reps} في كل المجموعات مرتين. ارفع {kg} كغ.'),
+  why_accessory_reps: pair('Add a rep or a set rather than weight — this is an accessory.', 'أضف تكرارًا أو مجموعة بدل الوزن — هذا تمرين مساعد.'),
+  why_easy_bump: pair('Easy on the final set after every set reached {reps} — the increase lands a session sooner: +{kg} kg.', 'سهل في الأخيرة بعد بلوغ {reps} في كل المجموعات — الزيادة تأتي أبكر بجلسة: +{kg} كغ.'),
+  why_match_or_beat: pair('Last time: {kg} kg × {reps}. Match it or beat it.', 'المرة الماضية: {kg} كغ × {reps}. اعدلها أو تجاوزها.'),
   // The week strip states facts only: the programme has no weekday mapping, so
   // it never claims tomorrow is a rest day. Raed decides that.
   week_today_is: pair('Today: {name}', 'اليوم: {name}'),

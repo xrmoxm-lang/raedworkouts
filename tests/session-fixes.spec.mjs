@@ -326,3 +326,16 @@ test('swiping moves through the exercises in programme order', async ({ page }) 
   expect(new Set(visited).size).toBe(visited.length);
   expect(visited.length).toBeLessThanOrEqual(order.length);
 });
+
+test('the card explains why the suggested weight is what it is', async ({ page }) => {
+  await intoSession(page);
+  const why = page.locator('[data-why-weight]').first();
+  await expect(why).toHaveCount(1);
+  const text = (await why.textContent()).trim();
+  expect(text.length).toBeGreaterThan(10);
+  // Arabic, not the engine's English reasoning leaking through.
+  expect(text).toMatch(/[؀-ۿ]/);
+  expect(text).not.toMatch(/Match or beat|Re-entry seed|every set|accessory/i);
+  // It is an explanation, not a form cue — Raed removed cues on purpose.
+  await expect(page.locator('#page-home')).not.toContainText('Cue:');
+});

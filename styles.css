@@ -1360,3 +1360,11 @@ body.welcome-mode main {
 /* Days that have not happened carry no mark at all — the app does not know
    whether he will train, and a hollow dot would imply a plan he never made. */
 .week-day.future { opacity: 0.55; }
+
+/* Why the suggested weight is what it is. Deliberately quieter than the rep
+   goal: the goal is an instruction, this is an explanation. */
+.why-weight {
+  margin-top: 8px; padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+  border-inline-start: 2px solid var(--border);
+}
