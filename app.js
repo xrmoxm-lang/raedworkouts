@@ -1448,6 +1448,18 @@ function roundToGymIncrement(value, step) {
   const s = Number(step) > 0 ? Number(step) : 2.5;
   return Math.max(s, Math.floor(n / s) * s);
 }
+// Weekly volume runs to thousands of kg, so it gets a grouping separator and no
+// decimal — whole kilos are plenty at that scale, and dropping the fraction
+// kills the ambiguity entirely.
+//
+// The bug this replaces: the locale-less formatter followed the DEVICE, so the
+// same app rendered "267.2" on one phone and "267,2" on another, and neither
+// matched fmtKgValue below, which always uses a dot. Pinning the locale makes
+// the number mean the same thing on every phone.
+function fmtKgTotal(value) {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(value) || 0);
+}
+
 function fmtKgValue(value) {
   return Number(value).toFixed(1).replace(/\.0$/, '');
 }
@@ -2021,6 +2033,11 @@ function render() {
     return;
   }
   document.body.classList.remove('welcome-mode');
+  // Drives the home ordering: while LIFTING the exercise leads and the week
+  // strip, tiles and music card drop below it. Warm-up keeps the normal order,
+  // because there is no set to log yet.
+  document.body.classList.toggle('session-active',
+    Boolean(state.active_session) && state.active_session.phase !== 'warmup');
   const route = window.location.hash.replace('#', '') || 'home';
   // Phase 6 intentionally returns the workout to the v15 card-in-app
   // treatment. It is a normal page, not the full-viewport Phase 4 takeover.
@@ -2474,9 +2491,16 @@ function renderHome() {
   // rotation follows his history — so this cannot invent a calendar. What it
   // can say honestly: which days he actually trained (fact), what today is
   // (fact), and how many sessions are left this week (arithmetic).
-  root.appendChild(buildWeekStrip());
+  // Everything from here to the music card is pre-workout context. During a
+  // running session it gets ordered BELOW the exercise (see .home-context in
+  // styles.css): the first set row sat at y=952 on an 844px screen, so logging
+  // the opening set of every exercise began with a scroll.
+  const context = h('div', { class: 'home-context', 'data-home-context': 'true' });
+  root.appendChild(context);
 
-  root.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
+  context.appendChild(buildWeekStrip());
+
+  context.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
       h('div', { class: 'stat-num' }, String(streak)),
       h('div', { class: 'stat-cap' }, t('home_streak')),
@@ -2488,7 +2512,7 @@ function renderHome() {
       h('div', { class: 'stat-sub' }, t('working_sets')),
     ),
     h('div', { class: 'stat-tile' },
-      h('div', { class: 'stat-num' }, vol.totalKg.toLocaleString()),
+      h('div', { class: 'stat-num' }, fmtKgTotal(vol.totalKg)),
       h('div', { class: 'stat-cap' }, t('home_tonnage')),
       h('div', { class: 'stat-sub' }, 'kg this week'),
     ),
@@ -2499,17 +2523,17 @@ function renderHome() {
 
   // Action button
   if (state.active_session) {
-    root.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('home') },
+    context.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('home') },
       t('continue_session')
     ));
     // عرض التمارين retired — the plan is already listed on this page.
 
   } else if (planned) {
-    root.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(planned) },
+    context.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(planned) },
       '▶ ', tf('start_session_named', { session: shortSessionName(planned) })
     ));
   } else {
-    root.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(next.session) },
+    context.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(next.session) },
       '▶ ', tf('start_session_named', { session: shortSessionName(next.session) })
     ));
   }
@@ -2533,7 +2557,7 @@ function renderHome() {
           toggle.textContent = chooserOpen ? 'Choose a different session ▴' : 'Choose a different session ▾';
         },
       }, 'Choose a different session ▾');
-      root.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
+      context.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
     }
   }
 
@@ -2546,7 +2570,7 @@ function renderHome() {
   const sessionForMusic = activeProgrammeSession || shownSession;
   const platformPlaylists = getCurrentPlaylists(sessionForMusic);
   if (platformPlaylists.length) {
-    root.appendChild(h('div', { class: 'card compact home-v15-spotify', 'data-home-v15-spotify': 'true' },
+    context.appendChild(h('div', { class: 'card compact home-v15-spotify', 'data-home-v15-spotify': 'true' },
       h('div', { class: 'tiny muted', 'data-home-spotify-handoff': 'true', style: 'margin-bottom:6px;' }, t('home_spotify_handoff')),
       h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
         platformPlaylists.map((playlist) => h('a', {
@@ -3356,7 +3380,7 @@ function renderHistory() {
       h('div', { class: 'date' }, fmtDate(sess.date) + ' · ' + (sess.session_name || fallbackSessionName)),
       h('h3', { style: 'margin:4px 0;' }, tf('history_total', {
         sets: totalSets,
-        kg: Math.round(totalKg).toLocaleString(),
+        kg: fmtKgTotal(totalKg),
       })),
       h('div', { class: 'summary' },
         Object.keys(sess.exercises).slice(0, 5).map(ex_id => {

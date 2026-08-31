@@ -1368,3 +1368,13 @@ body.welcome-mode main {
   background: var(--bg-elev); color: var(--text);
   border-inline-start: 2px solid var(--border);
 }
+
+/* ---- During a session, the workout leads --------------------------- */
+/* The week strip, the stat tiles and the music card are all pre-workout
+   context. While a session is running they belong BELOW the exercise: the
+   first set row measured y=952 on an 844px screen, so logging the opening set
+   of every exercise started with a scroll. Ordering rather than moving nodes
+   keeps one render path for both states. */
+#page-home { display: flex; flex-direction: column; }
+#page-home > * { order: 1; }
+body.session-active #page-home > .home-context { order: 2; }

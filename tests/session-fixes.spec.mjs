@@ -339,3 +339,60 @@ test('the card explains why the suggested weight is what it is', async ({ page }
   // It is an explanation, not a form cue — Raed removed cues on purpose.
   await expect(page.locator('#page-home')).not.toContainText('Cue:');
 });
+
+test('during a session the first set row is reachable without scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await intoSession(page);
+
+  const top = async (sel) => page.evaluate((s) => {
+    const el = document.querySelector(s);
+    return el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : null;
+  }, sel);
+
+  await expect(page.locator('body.session-active')).toHaveCount(1);
+  const firstRow = await top('[data-session-set-row]');
+  // It measured y=952 on an 844px screen before the context block was ordered
+  // below the workout, so logging the opening set of EVERY exercise began with
+  // a scroll. That is the core interaction of the app.
+  expect(firstRow).toBeLessThan(844);
+
+  // The pre-workout context is not deleted, only moved under the exercise.
+  const context = await top('[data-home-context]');
+  const exercise = await top('#page-home .ex.expanded');
+  expect(context).toBeGreaterThan(exercise);
+  await expect(page.locator('[data-week-card]')).toHaveCount(1);
+  await expect(page.locator('[data-home-stat-tiles]')).toHaveCount(1);
+});
+
+test('before a session home reads top to bottom in its natural order', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(800);
+  // Clear AFTER the app has loaded and written its state. Clearing beforehand
+  // does nothing on a first load, because there is nothing there yet.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.active_session = null;
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  // No session running, so the reorder must NOT apply — the week and the tiles
+  // are the point of the screen at that moment.
+  await expect(page.locator('body.session-active')).toHaveCount(0);
+});
+
+test('weekly volume reads the same on every device', async ({ page }) => {
+  await intoSession(page);
+  const volume = await page.locator('[data-home-stat-tiles] .stat-num').first().textContent();
+  // The locale-less formatter followed the DEVICE, so this rendered "267.2" on
+  // one phone and "267,2" on another — and neither matched the weight fields,
+  // which always use a dot. Whole kilos, grouped, no decimal at all.
+  expect(volume.trim()).toMatch(/^\d{1,3}(,\d{3})*$/);
+});
