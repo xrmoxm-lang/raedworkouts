@@ -2612,7 +2612,17 @@ function renderHome() {
       // so reviving v15's view had silently dropped it. RTL: swiping left moves
       // forward, matching the on-screen arrows.
       let swipeFrom = null;
+      // A horizontal swipe that STARTS on the header also fires the header's
+      // tap-to-collapse, so the card folded shut while it advanced. Recording
+      // the gesture lets the header ignore the click that follows it.
+      let swipeJustHappened = false;
       card.addEventListener('pointerdown', (e) => { swipeFrom = { x: e.clientX, y: e.clientY }; });
+      card.addEventListener('click', (e) => {
+        if (!swipeJustHappened) return;
+        swipeJustHappened = false;
+        e.stopPropagation();
+        e.preventDefault();
+      }, true);
       card.addEventListener('pointercancel', () => { swipeFrom = null; });
       card.addEventListener('pointerup', (e) => {
         if (!swipeFrom) return;
@@ -2621,6 +2631,7 @@ function renderHome() {
         swipeFrom = null;
         if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
         if (e.target.closest('input, textarea, button, a')) return;
+        swipeJustHappened = true;
         const step = dx < 0 ? 1 : -1;
         const nextIdx = Math.min(total - 1, Math.max(0, curIdx + step));
         if (nextIdx === curIdx) return;

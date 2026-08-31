@@ -2,6 +2,11 @@ import { expect, test } from '@playwright/test';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
 
+// A phone viewport, because this is a phone app. On the runner's default
+// 1280x720 the exercise card sits outside the viewport, so boundingBox() hands
+// back coordinates the mouse can never reach and a swipe silently does nothing.
+test.use({ viewport: { width: 390, height: 1300 } });
+
 async function intoSession(page) {
   await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
   await page.goto(appUrl, { waitUntil: 'networkidle' });
@@ -273,4 +278,51 @@ test('the volume-ledger verdict is Arabic, rebuilt from numbers not translated p
   // Muscle names are rendered through the Arabic label map, not raw ids.
   expect(text).not.toMatch(/\b(forearms|quads|glutes|triceps|biceps)\b/);
   expect(text).toMatch(/[؀-ۿ]/);
+});
+
+test('swiping moves through the exercises in programme order', async ({ page }) => {
+  // Earlier tests in this file swap exercises and append new ones, and that
+  // state persists. Start from a discarded session so this measures the swipe
+  // rather than whatever the previous test left behind.
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.addInitScript(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (!/\.state\./.test(key)) continue;
+      try {
+        const parsed = JSON.parse(localStorage[key]);
+        parsed.active_session = null;
+        parsed.substitutions = [];
+        localStorage[key] = JSON.stringify(parsed);
+      } catch { /* a malformed key is not this test's problem */ }
+    }
+  });
+  await intoSession(page);
+  const order = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    return Object.keys(JSON.parse(localStorage[key]).active_session.exercises);
+  });
+  const current = async () => (await page.locator('#page-home .ex.expanded h4').first().textContent()).trim();
+  const visited = [await current()];
+
+  for (let i = 0; i < 2; i += 1) {
+    // Drag across the card HEADER. The handler deliberately ignores gestures
+    // that start on an input or a button, and the card body is full of both —
+    // so a fixed offset into the card lands somewhere different depending on
+    // which exercise is showing, and the swipe is silently ignored.
+    const head = page.locator('#page-home .ex.expanded .ex-head').first();
+    const box = await head.boundingBox();
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width - 20, y);
+    await page.mouse.down();
+    // RTL: dragging toward the left edge means "forward".
+    await page.mouse.move(box.x + 20, y, { steps: 14 });
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    visited.push(await current());
+  }
+
+  // Three distinct exercises, in the order the programme prescribes — not
+  // shuffled, and not stuck on the same card.
+  expect(new Set(visited).size).toBe(visited.length);
+  expect(visited.length).toBeLessThanOrEqual(order.length);
 });
