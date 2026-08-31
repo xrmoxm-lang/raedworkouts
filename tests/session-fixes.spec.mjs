@@ -253,3 +253,24 @@ test('the home banner never prints the session name twice', async ({ page }) => 
   // " — " half, so the card printed its own title a second line down.
   expect(sub).not.toBe(title);
 });
+
+test('the volume-ledger verdict is Arabic, rebuilt from numbers not translated prose', async ({ page }) => {
+  await intoSession(page);
+  await page.locator('.ex-actions button', { hasText: 'استبدال' }).first().click();
+  await page.waitForTimeout(600);
+  const option = page.locator('#modal .swap-option').first();
+  test.skip(!(await option.count()), 'this exercise has no alternatives to swap to');
+  await option.click();
+  await page.waitForTimeout(700);
+
+  const verdict = page.locator('[data-ledger-message]').first();
+  await expect(verdict).toHaveCount(1);
+  const text = await verdict.textContent();
+  // The domain keeps its English sentence for tests and logs; the screen must
+  // not show it. "fractional-set", "crosses the hard", "efficiency band" are
+  // that sentence leaking through.
+  expect(text).not.toMatch(/fractional|efficiency band|crosses the hard|remains inside/i);
+  // Muscle names are rendered through the Arabic label map, not raw ids.
+  expect(text).not.toMatch(/\b(forearms|quads|glutes|triceps|biceps)\b/);
+  expect(text).toMatch(/[؀-ۿ]/);
+});

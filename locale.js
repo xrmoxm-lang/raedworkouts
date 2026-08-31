@@ -50,6 +50,11 @@ export const LOCALE = Object.freeze({
   safer_option: pair('Safer option for this scope: {name}.', 'خيار أسلم لهذا النطاق: {name}.'),
   adopt_named: pair('Adopt {name}', 'اعتماد {name}'),
   adopt_confirm: pair('Adopt', 'اعتمد'),
+  // Rebuilt from the domain's structured numbers, not translated from its
+  // English sentence — the domain stays locale-free and the screen stays Arabic.
+  ledger_blocked: pair('{muscles} crosses the hard {low}–{high} set limit.', '{muscles} يتجاوز الحد الصارم {low}–{high} مجموعة.'),
+  ledger_warn: pair('{muscles} sits outside the {low}–{high} band.', '{muscles} خارج نطاق {low}–{high} مجموعة.'),
+  ledger_clean: pair('Every muscle stays inside the {low}–{high} band.', 'كل العضلات داخل نطاق {low}–{high} مجموعة.'),
   // The week strip states facts only: the programme has no weekday mapping, so
   // it never claims tomorrow is a rest day. Raed decides that.
   week_today_is: pair('Today: {name}', 'اليوم: {name}'),

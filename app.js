@@ -1906,6 +1906,18 @@ function recordSubstitution(exercise_id, alt_id, scope, assessment, override = n
   state.substitutions = [...(state.substitutions || []), entry];
   return entry;
 }
+// The domain returns its own English sentence, which is right for tests and
+// logs but was being shown verbatim to Raed on an Arabic-only screen. Rebuild it
+// here from the structured fields instead of translating a formatted string.
+function ledgerMessage(status) {
+  const names = (status.offenders || []).map((item) => `${muscleLabel(item.muscle)} ${item.value}`).join(' · ');
+  const low = status.bounds?.low;
+  const high = status.bounds?.high;
+  if (status.severity === 'block-with-override') return tf('ledger_blocked', { muscles: names, low, high });
+  if (status.severity === 'warn') return tf('ledger_warn', { muscles: names, low, high });
+  return tf('ledger_clean', { low, high });
+}
+
 function showSubstitutionScopeModal(exercise_id, exState, alt) {
   const modal = $('#modal');
   let scope = 'this_session';
@@ -1928,7 +1940,7 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
     }, label))));
     modal.appendChild(h('div', { class: `substitution-status ${status.severity}` },
       h('strong', {}, status.severity === 'clean' ? t('clean_status') : status.severity === 'warn' ? t('check_this') : t('blocked_without_override')),
-      h('div', { class: 'tiny' }, status.message),
+      h('div', { class: 'tiny', 'data-ledger-message': 'true' }, ledgerMessage(status)),
       Object.keys(assessment.ledger_delta).length ? h('div', { class: 'tiny muted' }, tf('ledger_change', { detail: Object.entries(assessment.ledger_delta).map(([muscle, value]) => `${muscleLabel(muscle)} ${value > 0 ? '+' : ''}${value}`).join(' · ') })) : null,
     ));
     const adopt = (override = null) => {

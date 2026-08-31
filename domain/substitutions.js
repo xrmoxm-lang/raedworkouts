@@ -101,10 +101,17 @@ export function classifySubstitutionLedger(ledger, thresholds = SUBSTITUTION_THR
   const blockers = muscles.filter(({ value }) => value < thresholds.floor || value > thresholds.ceiling);
   const warnings = muscles.filter(({ value }) => value < thresholds.cleanMin || value > thresholds.cleanMax);
   const affected = [...new Set([...Object.keys(ledger.ledger_delta || {}), ...blockers.map(({ muscle }) => muscle), ...warnings.map(({ muscle }) => muscle)])];
+  // `message` stays English: it is the domain's own record, read by tests and
+  // logs, and this layer must not know about locales. The UI needs to say the
+  // same thing in Arabic though, so the numbers that BUILD the sentence travel
+  // beside it as data. Rendering from `offenders` is what lets the modal speak
+  // Arabic without the domain importing a translation map.
   if (blockers.length) {
     return Object.freeze({
       severity: 'block-with-override',
       muscles_affected: Object.freeze(affected),
+      offenders: Object.freeze(blockers.map(({ muscle, value }) => Object.freeze({ muscle, value }))),
+      bounds: Object.freeze({ low: thresholds.floor, high: thresholds.ceiling }),
       message: `${blockers.map(({ muscle, value }) => `${muscle} ${value}`).join(', ')} crosses the hard 4–15 fractional-set limit.`,
     });
   }
@@ -112,10 +119,18 @@ export function classifySubstitutionLedger(ledger, thresholds = SUBSTITUTION_THR
     return Object.freeze({
       severity: 'warn',
       muscles_affected: Object.freeze(affected),
+      offenders: Object.freeze(warnings.map(({ muscle, value }) => Object.freeze({ muscle, value }))),
+      bounds: Object.freeze({ low: thresholds.cleanMin, high: thresholds.cleanMax }),
       message: `${warnings.map(({ muscle, value }) => `${muscle} ${value}`).join(', ')} sits outside the 8–14 efficiency band.`,
     });
   }
-  return Object.freeze({ severity: 'clean', muscles_affected: Object.freeze(affected), message: 'All tracked muscles remain inside the 8–14 fractional-set efficiency band.' });
+  return Object.freeze({
+    severity: 'clean',
+    muscles_affected: Object.freeze(affected),
+    offenders: Object.freeze([]),
+    bounds: Object.freeze({ low: thresholds.cleanMin, high: thresholds.cleanMax }),
+    message: 'All tracked muscles remain inside the 8–14 fractional-set efficiency band.',
+  });
 }
 
 export function assessSubstitution(input) {
