@@ -404,14 +404,26 @@ const EXERCISES = [
   },
   {
     id: 'prone_leg_curl',
+    // Raed: "lying and prone leg curl، مو هم نفس الشيء؟" — they are. Both are
+    // face-down on the same machine, same primary, same pattern. They were two
+    // catalogue entries, and every clip he added went to THIS one while the
+    // programme ran the other, so the card he actually saw was empty.
+    // Merged into this id because it also carries five sessions of his v15
+    // history. 'Lying Leg Curl' stays as an alias: the programme names its rows,
+    // it does not reference ids.
     name: 'Prone Leg Curl',
+    aliases: ['Lying Leg Curl'],
     name_ar: 'ثني الرجل بطن',
     primary: ['hamstrings'],
-    secondary: ['glutes'],
+    // No glutes. A prone curl is knee flexion with the hip pinned to the pad;
+    // the glutes are hip extensors and the hip does not move. Its own siblings
+    // agree — seated and standing curls carry no glute claim, while glute-ham
+    // raise and RDL, which DO extend the hip, correctly do. This entry was the
+    // outlier, and the merge would have carried its error into the programme.
+    secondary: [],
     pattern: 'isolation_hamstring',
     mohannad: ['ANKSmhT0dTk', 'FMCq0hT3KRU', '0fuxdoKUCHA'],
-    extra: ['https://youtu.be/lGNeJsdqJwg'],
-    jeff_nippard: 'https://www.youtube.com/results?search_query=lying+leg+curl+jeff+nippard',
+    jeff_nippard: 'https://youtu.be/lGNeJsdqJwg',
     alternatives: ['standing_leg_curl', 'seated_leg_curl', 'rdl'],
     cue: 'Hips pressed into pad. Point toes — better hamstring activation.',
   },
@@ -537,7 +549,6 @@ EXERCISES.push(
   // too; that is the intended consequence, not a side effect.
   phase5Exercise({ id: 'assisted_dip', name: 'Assisted Dip', primary: 'triceps', secondary: ['chest', 'shoulders'], pattern: 'compound_push', alternatives: ['decline_db_press', 'chest_press_machine'], jeff_nippard: 'https://youtu.be/mpcPTUAhfto?si=VHNG-WmxfbY9hmjn' }),
   phase5Exercise({ id: 'single_arm_rope_triceps_extension', name: 'Single-Arm Rope Triceps Extension', primary: 'triceps', pattern: 'isolation_push', alternatives: ['tricep_pushdown'] }),
-  phase5Exercise({ id: 'lying_leg_curl', name: 'Lying Leg Curl', primary: 'hamstrings', pattern: 'isolation_hamstring', alternatives: ['seated_leg_curl', 'glute_ham_raise'] }),
   phase5Exercise({ id: 'goblet_squat', name: 'Goblet Squat', primary: 'quads', secondary: ['glutes', 'hamstrings'], pattern: 'compound_quad', alternatives: ['hack_squat', 'leg_press'] }),
   phase5Exercise({ id: 'db_walking_lunge', name: 'DB Walking Lunge', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad', alternatives: ['db_step_up'] }),
   phase5Exercise({ id: 'hanging_leg_raise', name: 'Hanging Leg Raise', primary: 'abs', pattern: 'isolation_core', jeff_nippard: 'https://youtu.be/2RrGnjxSsiA?t=247', alternatives: ['reverse_crunch', 'roman_chair_crunch'] }),
@@ -563,7 +574,7 @@ EXERCISES.push(
   phase5Exercise({ id: 'machine_squat', name: 'Machine Squat', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad', alternatives: ['leg_press', 'hack_squat'] }),
   phase5Exercise({ id: 'barbell_rdl', name: 'Barbell RDL', primary: 'hamstrings', secondary: ['glutes', 'back'], pattern: 'compound_hinge', alternatives: ['rdl'] }),
   phase5Exercise({ id: 'degree_45_hyperextension', name: '45 Degree Hyperextension', primary: 'hamstrings', secondary: ['glutes', 'back'], pattern: 'compound_hinge' }),
-  phase5Exercise({ id: 'glute_ham_raise', name: 'Glute-Ham Raise', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring', alternatives: ['lying_leg_curl', 'seated_leg_curl'] }),
+  phase5Exercise({ id: 'glute_ham_raise', name: 'Glute-Ham Raise', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring', alternatives: ['prone_leg_curl', 'seated_leg_curl'] }),
   phase5Exercise({ id: 'db_standing_calf_raise', name: 'DB Standing Calf Raise', primary: 'calves', pattern: 'isolation_calf', alternatives: ['standing_calf', 'leg_press_toe_press'] }),
   phase5Exercise({ id: 'crunch', name: 'Crunch', primary: 'abs', pattern: 'isolation_core', alternatives: ['ab_crunch', 'machine_crunch'] }),
   phase5Exercise({ id: 'machine_incline_press', name: 'Machine Incline Press', primary: 'chest', secondary: ['shoulders', 'triceps'], pattern: 'horizontal_push', alternatives: ['incline_db_press', 'incline_smith_press'] }),
@@ -576,7 +587,7 @@ EXERCISES.push(
   phase5Exercise({ id: 'cable_reverse_flye', name: 'Cable Reverse Flye', primary: 'rear_delts', secondary: ['upper_back'], pattern: 'isolation_pull', alternatives: ['rear_delt_fly', 'face_pull'] }),
   phase5Exercise({ id: 'db_single_leg_hip_thrust', name: 'DB Single-Leg Hip Thrust', primary: 'glutes', secondary: ['hamstrings'], pattern: 'compound_hinge', alternatives: ['hip_thrust', 'leg_extension_machine_hip_thrust'] }),
   phase5Exercise({ id: 'leg_extension_machine_hip_thrust', name: 'Leg-Extension-Machine Hip Thrust', primary: 'glutes', secondary: ['hamstrings'], pattern: 'compound_hinge', alternatives: ['hip_thrust', 'db_single_leg_hip_thrust'] }),
-  phase5Exercise({ id: 'db_leg_curl', name: 'DB Leg Curl', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring', alternatives: ['seated_leg_curl', 'lying_leg_curl'] }),
+  phase5Exercise({ id: 'db_leg_curl', name: 'DB Leg Curl', primary: 'hamstrings', secondary: ['glutes'], pattern: 'isolation_hamstring', alternatives: ['seated_leg_curl', 'prone_leg_curl'] }),
   phase5Exercise({ id: 'reverse_lunge', name: 'Reverse Lunge', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad' }),
   phase5Exercise({ id: 'db_step_up', name: 'DB Step-Up', primary: 'quads', secondary: ['glutes'], pattern: 'compound_quad', alternatives: ['db_walking_lunge'] }),
   phase5Exercise({ id: 'reverse_crunch', name: 'Reverse Crunch', primary: 'abs', pattern: 'isolation_core', alternatives: ['hanging_leg_raise', 'roman_chair_crunch'] }),

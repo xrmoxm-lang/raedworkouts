@@ -439,3 +439,30 @@ test('effort sits on the final set row and opens only when tapped', async ({ pag
   await expect(page.locator('[data-effort-trigger]')).toHaveText('💪');
   await expect(page.locator('[data-effort-trigger].chosen')).toHaveCount(1);
 });
+
+test('a finished session shows the time it took, not the exercise card again', async ({ page }) => {
+  await intoSession(page);
+  await expect(page.locator('[data-session-done]')).toHaveCount(0);
+
+  for (let i = 0; i < 12; i += 1) {
+    const skip = page.locator('[data-runner-skip-exercise]');
+    if (!(await skip.count())) break;
+    await skip.first().click();
+    await page.waitForTimeout(300);
+  }
+  await page.waitForTimeout(600);
+
+  // Raed: "إذا انتهى التمرين ما تطلع الصفحة اللي فوق الكبيرة". The full card,
+  // its clips and its set grid have nothing left to do on them once every
+  // exercise is resolved.
+  await expect(page.locator('[data-session-done]')).toHaveCount(1);
+  await expect(page.locator('#page-home .ex')).toHaveCount(0);
+  await expect(page.locator('[data-finish-session]')).toHaveCount(1);
+  // The elapsed time is the one number he cannot reconstruct from the log later.
+  await expect(page.locator('.session-done-time')).toContainText(/دقيقة|دقائق|دقيقتان/);
+
+  // He can still go back in without undoing the completion.
+  await page.locator('#page-home .btn.ghost.full').first().click();
+  await page.waitForTimeout(600);
+  await expect(page.locator('#page-home .ex')).not.toHaveCount(0);
+});

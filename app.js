@@ -597,6 +597,10 @@ let suppressNextPush = false;
 // Its declaration was lost in the phase-6 rewrite while eight references to it
 // survived, so the session view threw ReferenceError on render.
 let focusExerciseIdx = null;
+// Lets Raed go back into the cards after the done panel appears, without
+// undoing the completion. Reset whenever a session starts, so a new workout
+// never opens straight into the review state.
+let sessionDoneDismissed = false;
 
 function hasMeaningfulLocalData() {
   return (state.history || []).length > 0 || Boolean(state.active_session) || (state.bodyweight_log || []).length > 0;
@@ -1701,6 +1705,7 @@ function startSession(session) {
       swapped_to: replacementId === plan.exercise_id ? null : replacementId,
     };
   });
+  sessionDoneDismissed = false;
   state.active_session = {
     uid: (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : ('sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2))),
     date: todayISO(),
@@ -2615,6 +2620,22 @@ function renderHome() {
       focusExerciseIdx = curIdx;
 
       const total = exEntries.length;
+
+      // Every exercise resolved — done or skipped. Raed: "إذا انتهى التمرين ما
+      // تطلع الصفحة اللي فوق الكبيرة". Keeping the full exercise card, its
+      // clips and its set grid on screen after the work is finished left a long
+      // page with nothing left to do on it. Show what he asked for instead:
+      // how long it took, and the way out.
+      if (!sessionDoneDismissed && exEntries.every(([, entry]) => isRunnerExerciseResolved(entry))) {
+        root.appendChild(buildSessionDonePanel(a, exEntries));
+        root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
+          h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session')),
+          h('div', { class: 'spacer-12' }),
+          h('button', { class: 'btn ghost full', onClick: () => { focusExerciseIdx = 0; sessionDoneDismissed = true; render(); } }, t('review_exercises')),
+        ));
+        return;
+      }
+
       // Progress strip
     root.appendChild(h('div', { style: 'display:flex; gap:4px; margin-bottom:12px;', 'data-v15-session-progress': 'true' },
         exEntries.map(([id, ex], i) => {
@@ -3916,6 +3937,48 @@ function renderSettings() {
   root.appendChild(disclosure('الموسيقى', musicCard));
   root.appendChild(disclosure('سحب البيانات', dataCard));
   root.appendChild(disclosure('المساعدة', buildHelpCard()));
+}
+
+
+// Shown once every exercise is resolved. Raed asked for the elapsed time —
+// "أبغى بصفحة التمارين يقول لي إنه خلصت التمرين خلال كم" — and the duration is
+// worth more than the volume number here: it is the one thing he cannot
+// reconstruct later from the log.
+// Arabic counts again: 1 singular, 2 dual, 3-10 plural, 11+ back to singular.
+// A workout is usually 30-90 minutes so «دقيقة» is right most of the time, but a
+// short session lands squarely in the 3-10 band where it is wrong.
+function arabicMinutes(n) {
+  if (activeLanguage() !== 'ar') return tf('session_done_minutes', { n });
+  if (n === 1) return t('minutes_one_ar');
+  if (n === 2) return t('minutes_two_ar');
+  if (n >= 3 && n <= 10) return tf('minutes_few_ar', { n });
+  return tf('session_done_minutes', { n });
+}
+
+function buildSessionDonePanel(active, entries) {
+  const started = new Date(active.started_at);
+  const minutes = Math.max(1, Math.round((Date.now() - started.getTime()) / 60000));
+  let sets = 0;
+  let volume = 0;
+  let skipped = 0;
+  for (const [, entry] of entries) {
+    for (const set of entry.sets || []) {
+      if (set.skipped) { skipped += 1; continue; }
+      if (!isCountableWorkingSet(set)) continue;
+      sets += 1;
+      volume += (Number(set.weight) || 0) * (Number(set.reps) || 0);
+    }
+  }
+  return h('section', { class: 'card session-done', 'data-session-done': 'true' },
+    h('h2', {}, t('session_done_title')),
+    h('p', { class: 'session-done-time' }, arabicMinutes(minutes)),
+    h('div', { class: 'session-done-stats tiny muted' },
+      tf('session_done_sets', { n: sets }),
+      ' · ',
+      tf('session_done_volume', { kg: fmtKgTotal(volume) }),
+      skipped ? h('span', {}, ' · ', tf('session_done_skipped', { n: skipped })) : null,
+    ),
+  );
 }
 
 function buildWeekStrip() {

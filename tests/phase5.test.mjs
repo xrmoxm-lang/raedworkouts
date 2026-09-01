@@ -1,3 +1,6 @@
+// 'Lying Leg Curl' resolves to prone_leg_curl: they are the same movement and
+// were merged. The programme names its rows, so the alias is what keeps the
+// Lower A row resolving after the duplicate entry was removed.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
@@ -64,7 +67,7 @@ const CROSSWALK = [
   ['Reverse-Grip Lat Pulldown', 'reverse_grip_lat_pulldown'],
   ['Assisted Dip', 'assisted_dip'],
   ['Single-Arm Rope Triceps Extension', 'single_arm_rope_triceps_extension'],
-  ['Lying Leg Curl', 'lying_leg_curl'],
+  ['Lying Leg Curl', 'prone_leg_curl'],
   ['Goblet Squat', 'goblet_squat'],
   ['DB Walking Lunge', 'db_walking_lunge'],
   ['Hanging Leg Raise', 'hanging_leg_raise'],

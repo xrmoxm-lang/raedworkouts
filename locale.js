@@ -60,6 +60,17 @@ export const LOCALE = Object.freeze({
   // The two branches that used to return an empty reason. These are the cases
   // with the LEAST information, so saying nothing was the worst answer — it is
   // why the weight box reads «معايرة».
+  // Shown when every exercise is resolved. The elapsed time is the one number he
+  // cannot reconstruct from the log afterwards.
+  session_done_title: pair('Workout finished', 'انتهى التمرين'),
+  session_done_minutes: pair('{n} minutes', '{n} دقيقة'),
+  minutes_one_ar: pair('1 minute', 'دقيقة واحدة'),
+  minutes_two_ar: pair('2 minutes', 'دقيقتان'),
+  minutes_few_ar: pair('{n} minutes', '{n} دقائق'),
+  session_done_sets: pair('{n} working sets', '{n} مجموعة عمل'),
+  session_done_volume: pair('{kg} kg total', '{kg} كغ إجمالًا'),
+  session_done_skipped: pair('{n} skipped', '{n} متخطّاة'),
+  review_exercises: pair('Go back to the exercises', 'رجوع إلى التمارين'),
   why_calibrate: pair('No logged history yet — pick a weight you can control and log it. Today is the calibration.', 'لا سجلّ بعد — اختر وزنًا تتحكّم فيه وسجّله. اليوم معايرة.'),
   why_first_exposure: pair('First time — use the seeded load, then log what really happened.', 'أول مرة — استعمل الوزن المبدئي، ثم سجّل ما حدث فعلًا.'),
   why_reentry_seed: pair('⚡ Re-entry seed: {kg} kg. Let completed reps find the level; do not grind.', '⚡ وزن بداية العودة: {kg} كغ. دع التكرارات تجد المستوى، ولا تعاند.'),

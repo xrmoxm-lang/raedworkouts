@@ -1393,3 +1393,9 @@ body.session-active #page-home > .home-context { order: 2; }
 .effort-trigger.chosen { background: var(--accent-soft); border-color: var(--accent); }
 .effort-strip { grid-column: 1 / -1; margin: 2px 0 6px; }
 .effort-strip[hidden] { display: none; }
+
+/* Shown once every exercise is resolved: what it cost him, and the way out. */
+.session-done { text-align: center; padding: 20px 16px; }
+.session-done h2 { margin: 0 0 6px; font-size: 20px; }
+.session-done-time { margin: 0 0 8px; font-size: 32px; font-weight: 800; color: var(--accent); }
+.session-done-stats { display: block; }
