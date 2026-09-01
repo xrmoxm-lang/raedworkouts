@@ -851,7 +851,7 @@ function persistLocal() {
 function markDirty() {
   syncDirty = true;
   writeDirtyMarker(settings.user_id);
-  setSyncStatus(navigator.onLine === false ? 'err' : 'off', navigator.onLine === false ? 'Pending — offline' : 'Pending sync');
+  setSyncStatus(navigator.onLine === false ? 'err' : 'off', navigator.onLine === false ? t('sync_pending_offline') : t('sync_pending'));
 }
 function schedulePush(delay = 2500) {
   if (!settings.user_id || !settings.sync_url || !settings.sync_key) return;
@@ -931,7 +931,14 @@ async function syncFetch(path, opts = {}) {
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     const res = await fetch(url, { ...fetchOpts, headers, signal: signal || controller?.signal });
-    if (!res.ok) throw new Error(`Sync ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      // Carry the status on the error itself. The status was previously only
+      // recoverable by re-parsing the message string, which is fragile — a
+      // three-digit number in the server's body could be read as the status.
+      const failure = new Error(`Sync ${res.status}: ${await res.text()}`);
+      failure.status = res.status;
+      throw failure;
+    }
     return res.json();
   } catch (err) {
     if (err?.name === 'AbortError') throw new Error('Sync timeout');
@@ -974,7 +981,7 @@ async function syncToCloud(opts = {}) {
   const rev = response?.rev || response?.latest_rev;
   if (response?.merged === true) {
     if (syncDirty) {
-      setSyncStatus('off', 'Merged remotely — pending local edits');
+      setSyncStatus('off', t('sync_merged_pending'));
       saveLocal._toastShown = false;
       return true;
     }
@@ -985,7 +992,7 @@ async function syncToCloud(opts = {}) {
     writeLastRev(rev, userIdAtStart);
     if (!syncDirty) clearDirtyMarker(userIdAtStart);
   }
-  setSyncStatus('ok', (response?.merged ? 'Merged + synced ' : 'Synced ') + fmtTime(Date.now()));
+  setSyncStatus('ok', (response?.merged ? t('sync_merged_ok') : t('sync_ok')) + ' ' + fmtTime(Date.now()));
   saveLocal._toastShown = false;
   return true;
 }
@@ -1001,7 +1008,7 @@ async function flushSync(opts = {}) {
     }
     if (!syncDirty && !readDirtyMarker(settings.user_id)) return true;
     if (navigator.onLine === false) {
-      setSyncStatus('err', 'Pending — offline');
+      setSyncStatus('err', t('sync_pending_offline'));
       return false;
     }
     clearScheduledPush();
@@ -1013,10 +1020,14 @@ async function flushSync(opts = {}) {
         ok = await syncToCloud(opts);
         return ok;
       } catch (err) {
-        setSyncStatus('err', 'Sync failed: ' + (err.message || 'unknown'));
+        // Name the likely cause instead of echoing a raw error. Unreachable and
+        // rejected are different problems with different fixes, and telling them
+        // apart on screen is what turns "فشلت المزامنة" into something he can act
+        // on — or report to me precisely.
+        setSyncStatus('err', syncFailureReason(err));
         if (!saveLocal._toastShown) {
           saveLocal._toastShown = true;
-          toast('Cloud sync failed — saved locally.', 3500);
+          toast(t('cloud_sync_failed'), 3500);
         }
         return false;
       } finally {
@@ -1043,7 +1054,7 @@ async function pullFromCloud() {
     throw e;
   }
   if (remote?.latest_rev && readLastRev(settings.user_id) === remote.latest_rev) {
-    setSyncStatus('ok', 'Synced');
+    setSyncStatus('ok', t('sync_ok'));
     return false;
   }
   if (remote && remote.state_json) {
@@ -1052,6 +1063,21 @@ async function pullFromCloud() {
     return true;
   }
   return false;
+}
+
+
+// Turns a fetch failure into something Raed can act on. A network-level failure
+// and a rejected request are different problems: one means the server cannot be
+// reached at all, the other means it answered and said no. Reporting them the
+// same way is what made a real outage take an investigation to diagnose.
+function syncFailureReason(err) {
+  const message = String(err?.message || err || '');
+  const status = Number(err?.status || (message.match(/\b(\d{3})\b/) || [])[1]);
+  if (navigator.onLine === false) return t('sync_pending_offline');
+  if (status === 401 || status === 403) return t('sync_rejected');
+  if (status >= 500) return t('sync_server_error');
+  if (/failed to fetch|networkerror|load failed|timeout|abort/i.test(message)) return t('sync_unreachable');
+  return t('sync_failed_generic');
 }
 
 function setSyncStatus(kind, text) {
@@ -4283,7 +4309,7 @@ function init() {
       .then(ok => { if (ok) { applyTheme(); render(); } })
       .catch(err => {
         setSyncStatus('err', 'Pull failed: ' + (err.message || 'unknown'));
-        toast('Sync failed — working offline.', 3000);
+        toast(t('sync_failed_offline'), 3000);
       });
   }
 

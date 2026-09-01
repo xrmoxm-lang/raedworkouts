@@ -548,6 +548,18 @@ export const LOCALE = Object.freeze({
   pending_sync: pair('Pending sync', 'المزامنة معلّقة'),
   pending_offline: pair('Pending — offline', 'معلّق — دون اتصال'),
   registration_pending: pair('Registration pending — offline', 'التسجيل معلّق — دون اتصال'),
+  // The status line used to concatenate a raw error onto an English prefix, so
+  // it read as English on an Arabic screen and said nothing he could act on.
+  // Unreachable and rejected are different problems with different fixes.
+  sync_ok: pair('Synced', 'تمت المزامنة'),
+  sync_merged_ok: pair('Merged + synced', 'دُمجت وتمت المزامنة'),
+  sync_pending: pair('Pending sync', 'بانتظار المزامنة'),
+  sync_pending_offline: pair('Pending — offline', 'بانتظار الاتصال'),
+  sync_merged_pending: pair('Merged remotely — local edits pending', 'دُمجت على الخادم — تعديلاتك المحلية بانتظار الرفع'),
+  sync_unreachable: pair('Cannot reach your server', 'تعذّر الوصول إلى خادمك'),
+  sync_rejected: pair('Your server refused the request', 'رفض خادمك الطلب'),
+  sync_server_error: pair('Your server returned an error', 'أعاد خادمك خطأ'),
+  sync_failed_generic: pair('Sync did not go through', 'لم تتم المزامنة'),
   cloud_sync_failed: pair('Cloud sync failed — saved locally.', 'فشلت المزامنة السحابية — حُفظت محلياً.'),
   sync_failed_offline: pair('Sync failed — working offline.', 'فشلت المزامنة — يعمل التطبيق دون اتصال.'),
   pull_failed: pair('Pull failed: ', 'فشل الجلب: '),
