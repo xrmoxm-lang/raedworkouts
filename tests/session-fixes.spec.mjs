@@ -466,3 +466,30 @@ test('a finished session shows the time it took, not the exercise card again', a
   await page.waitForTimeout(600);
   await expect(page.locator('#page-home .ex')).not.toHaveCount(0);
 });
+
+test('"machine weight only" removes the need to type a number at all', async ({ page }) => {
+  await intoSession(page);
+  const weight = page.locator('[data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(page.locator('[data-machine-weight]')).toHaveCount(1);
+
+  await page.locator('[data-machine-weight]').click();
+  await page.waitForTimeout(600);
+
+  // Raed: "ما أقدر، ما له رقم" — plenty of machines carry no number, and someone
+  // new to the gym has nothing to type. The box says what it is instead.
+  await expect(weight).toHaveAttribute('placeholder', 'الجهاز');
+  // h() writes attributes as strings, so readOnly renders as readonly="true".
+  await expect(weight).toHaveAttribute('readonly', 'true');
+  // And the card stops explaining a load that does not exist.
+  await expect(page.locator('[data-why-weight]')).toContainText('التكرارات');
+
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const exercises = JSON.parse(localStorage[key]).active_session.exercises;
+    const entry = Object.values(exercises).find((item) => item.machine_weight);
+    return entry ? entry.sets.filter((set) => !set.is_warmup).map((set) => set.weight) : null;
+  });
+  // Zero ADDED load, stored as a real number so the sets still count.
+  expect(stored).not.toBeNull();
+  expect(stored.every((w) => w === 0)).toBe(true);
+});

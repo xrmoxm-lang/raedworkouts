@@ -959,7 +959,7 @@ const SESSION_WARMUPS = {
     cap_minutes: 15,
     treadmill_minutes: [5, 7, 10],
     drills: [
-      { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: [] },
+      { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: ['https://youtube.com/shorts/lzR7tzI1JUI'] },
       { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: ['https://youtube.com/shorts/XTbPqeswd-Y'] },
       { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: ['https://youtu.be/n17FcALDB60'] },
       { id: 'cable_internal_rotation', movement: 'Cable internal rotation', reps: 10, videos: ['https://youtube.com/shorts/kBhQ4B7rl0w'] },
@@ -969,7 +969,7 @@ const SESSION_WARMUPS = {
     cap_minutes: 15,
     treadmill_minutes: [5, 7, 10],
     drills: [
-      { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: [] },
+      { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: ['https://youtube.com/shorts/lzR7tzI1JUI'] },
       { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: ['https://youtube.com/shorts/XTbPqeswd-Y'] },
       // Raed asked for bodyweight squats in the leg warm-up, and not as an
       // option: "مو optional، حط squatting". Before the swings, so the knees and

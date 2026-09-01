@@ -2811,7 +2811,11 @@ function renderExerciseCard(ex_id, exState) {
   // calculation and dropped the render, so the number looked arbitrary — the
   // exact thing Raed complained about not understanding. Shown compactly, above
   // the rep goal, and NOT as a form cue (those he removed on purpose).
-  if (sug.note) {
+  if (exState.machine_weight) {
+    // Replaces the load reasoning rather than sitting beside it: with no added
+    // weight there is no load to explain, and reps are the only lever left.
+    body.appendChild(h('div', { class: 'why-weight tiny', 'data-why-weight': 'true' }, t('machine_weight_note')));
+  } else if (sug.note) {
     body.appendChild(h('div', { class: 'why-weight tiny', 'data-why-weight': 'true' }, sug.note));
   }
 
@@ -2855,7 +2859,8 @@ function renderExerciseCard(ex_id, exState) {
         // lang/dir force Latin digits and a number pad. Without them an Arabic
         // keyboard opens and Raed has to switch language for every set.
         lang: 'en', dir: 'ltr',
-        placeholder: suggestedWeightPlaceholder(sug.weight),
+        placeholder: exState.machine_weight ? t('machine_weight_short') : suggestedWeightPlaceholder(sug.weight),
+        readOnly: Boolean(exState.machine_weight),
         value: editableWeightValue(set.weight),
         'data-runner-weight-input': 'true',
         disabled: Boolean(set.skipped),
@@ -2957,6 +2962,25 @@ function renderExerciseCard(ex_id, exState) {
     }, t('runner_skip_exercise')),
     h('button', { class: 'btn tiny ghost', 'data-video-add': 'true', onClick: () => addCustomVideo(ex_id) }, t('video_add_short')),
     h('button', { class: 'btn tiny ghost', 'data-add-exercise': 'true', onClick: () => showAddExerciseModal() }, t('add_exercise_button')),
+    // Raed: "كيف أحط رقم الجهاز فقط؟ ما أقدر، ما له رقم." Typing 0 was never the
+    // answer — plenty of machines carry no number at all, and someone new to
+    // the gym (his father, his brothers) has nothing to type. This says "the
+    // machine's own weight" once, for the exercise, and the rows stop asking.
+    h('button', {
+      class: 'btn tiny ghost' + (exState.machine_weight ? ' primary' : ''),
+      'data-machine-weight': 'true',
+      'aria-pressed': exState.machine_weight ? 'true' : 'false',
+      onClick: () => {
+        exState.machine_weight = !exState.machine_weight;
+        if (exState.machine_weight) {
+          // Zero ADDED load. The set still counts, and progression moves on
+          // reps instead of kilos — which is the only honest lever here.
+          for (const set of exState.sets) if (!set.is_warmup && !set.completed) set.weight = 0;
+        }
+        saveLocal();
+        render();
+      },
+    }, t('machine_weight_only')),
   );
   body.appendChild(actions);
 

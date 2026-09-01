@@ -70,6 +70,11 @@ export const LOCALE = Object.freeze({
   session_done_sets: pair('{n} working sets', '{n} مجموعة عمل'),
   session_done_volume: pair('{kg} kg total', '{kg} كغ إجمالًا'),
   session_done_skipped: pair('{n} skipped', '{n} متخطّاة'),
+  // For machines with no numbers on the stack, and for anyone new to the gym
+  // who has nothing to type. Says it once per exercise, not per set.
+  machine_weight_only: pair('⚙ Machine weight only', '⚙ وزن الجهاز فقط'),
+  machine_weight_short: pair('machine', 'الجهاز'),
+  machine_weight_note: pair('Zero added load. Progress by adding reps, not kilos.', 'بلا وزن مضاف. تقدّم بزيادة التكرارات لا الكيلوات.'),
   drill_clips: pair('Warm-up clips', 'مقاطع الإحماء'),
   drill_clips_hint: pair('Tap to watch. Ticking a drill above is what marks it done.', 'اضغط للمشاهدة. التأشير على الحركة فوق هو ما يحسبها منتهية.'),
   review_exercises: pair('Go back to the exercises', 'رجوع إلى التمارين'),
