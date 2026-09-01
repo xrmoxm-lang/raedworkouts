@@ -70,6 +70,8 @@ export const LOCALE = Object.freeze({
   session_done_sets: pair('{n} working sets', '{n} مجموعة عمل'),
   session_done_volume: pair('{kg} kg total', '{kg} كغ إجمالًا'),
   session_done_skipped: pair('{n} skipped', '{n} متخطّاة'),
+  drill_clips: pair('Warm-up clips', 'مقاطع الإحماء'),
+  drill_clips_hint: pair('Tap to watch. Ticking a drill above is what marks it done.', 'اضغط للمشاهدة. التأشير على الحركة فوق هو ما يحسبها منتهية.'),
   review_exercises: pair('Go back to the exercises', 'رجوع إلى التمارين'),
   why_calibrate: pair('No logged history yet — pick a weight you can control and log it. Today is the calibration.', 'لا سجلّ بعد — اختر وزنًا تتحكّم فيه وسجّله. اليوم معايرة.'),
   why_first_exposure: pair('First time — use the seeded load, then log what really happened.', 'أول مرة — استعمل الوزن المبدئي، ثم سجّل ما حدث فعلًا.'),
@@ -615,6 +617,10 @@ export const ALLOWED_EXERCISE_NAMES = Object.freeze([
 export const ALLOWED_WARMUP_DRILL_NAMES = Object.freeze([
   'Arm swings', 'Arm circles', 'Cable external rotation',
   'Front/back leg swings', 'Side/side leg swings',
+  // Bodyweight squat: Raed asked for it in the leg warm-up, not as an option.
+  // Cable internal rotation: he asked for both directions — "we need two
+  // internal and external" — and supplied a clip for each.
+  'Bodyweight squat', 'Cable internal rotation',
 ]);
 export const ALLOWED_PLAYLIST_TITLES = Object.freeze([
   // Upper/Lower keeps these v15 Spotify titles literally so the hand-off

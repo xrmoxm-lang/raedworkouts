@@ -960,8 +960,9 @@ const SESSION_WARMUPS = {
     treadmill_minutes: [5, 7, 10],
     drills: [
       { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: [] },
-      { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: [] },
-      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: [] },
+      { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: ['https://youtube.com/shorts/XTbPqeswd-Y'] },
+      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: ['https://youtu.be/n17FcALDB60'] },
+      { id: 'cable_internal_rotation', movement: 'Cable internal rotation', reps: 10, videos: ['https://youtube.com/shorts/kBhQ4B7rl0w'] },
     ],
   },
   lower: {
@@ -969,10 +970,15 @@ const SESSION_WARMUPS = {
     treadmill_minutes: [5, 7, 10],
     drills: [
       { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: [] },
-      { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: [] },
-      { id: 'front_back_leg_swings', movement: 'Front/back leg swings', reps: 10, videos: [] },
-      { id: 'side_side_leg_swings', movement: 'Side/side leg swings', reps: 10, videos: [] },
-      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: [] },
+      { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: ['https://youtube.com/shorts/XTbPqeswd-Y'] },
+      // Raed asked for bodyweight squats in the leg warm-up, and not as an
+      // option: "مو optional، حط squatting". Before the swings, so the knees and
+      // hips move through full range before anything ballistic.
+      { id: 'bodyweight_squat', movement: 'Bodyweight squat', reps: 10, videos: ['https://youtube.com/shorts/n_xLyzPEX7A'] },
+      { id: 'front_back_leg_swings', movement: 'Front/back leg swings', reps: 10, videos: ['https://youtube.com/shorts/ya7xU4Obypg'] },
+      { id: 'side_side_leg_swings', movement: 'Side/side leg swings', reps: 10, videos: ['https://youtube.com/shorts/fDZozdHbXww'] },
+      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: ['https://youtu.be/n17FcALDB60'] },
+      { id: 'cable_internal_rotation', movement: 'Cable internal rotation', reps: 10, videos: ['https://youtube.com/shorts/kBhQ4B7rl0w'] },
     ],
   },
 };

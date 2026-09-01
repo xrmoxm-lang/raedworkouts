@@ -1650,8 +1650,27 @@ function renderWarmupPhase(activeSession) {
       class: 'warmup-drill' + (drill.completed ? ' done' : ''),
       disabled: !treadmillDone,
       onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
-    }, h('span', {}, isolate(drill.movement), ' · ', h('bdi', { class: 'ltr-run' }, String(drill.reps))), h('span', {}, drill.completed ? '✓' : '○'))))
+    }, h('span', {}, isolate(drill.movement), ' · ', h('bdi', { class: 'ltr-run' }, String(drill.reps))), h('span', {}, drill.completed ? '✓' : '○')))),
   ));
+  // The clips Raed supplied for the drills. Separate from the tick buttons on
+  // purpose: tapping a drill marks it DONE, so putting a link inside it would
+  // mean opening a video and completing the drill in the same tap.
+  const drillClips = warmup.drills.filter((drill) => (drill.videos || []).length);
+  if (drillClips.length) {
+    card.appendChild(h('div', { class: 'warmup-step' },
+      h('div', {}, h('strong', {}, t('drill_clips')), h('div', { class: 'tiny muted' }, t('drill_clips_hint'))),
+      h('div', { class: 'video-row' }, drillClips.flatMap((drill, index) => (drill.videos || []).map((url, i) => buildVideoTile({
+        key: drill.id + '_' + i,
+        id: ytIdFromUrl(url),
+        url,
+        // Numbered, not initials. "CE" and "CI" were invented Latin that meant
+        // nothing to Raed, and the Arabic gate rightly refused them. The tile's
+        // title carries the movement name for anyone who needs it.
+        label: String(index + 1),
+        title: drill.movement,
+      })))),
+    ));
+  }
   const complete = generalWarmupComplete(warmup);
   card.appendChild(h('button', {
     class: 'btn primary full', disabled: !complete,
