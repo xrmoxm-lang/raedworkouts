@@ -493,3 +493,53 @@ test('"machine weight only" removes the need to type a number at all', async ({ 
   expect(stored).not.toBeNull();
   expect(stored.every((w) => w === 0)).toBe(true);
 });
+
+test('ramp sets are built from the programme count, not a dead v15 string', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(900);
+  // A ramp is a percentage of a working weight, so one has to exist first.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.active_session = null;
+    const exercises = {};
+    window.RW.EXERCISES.forEach((e) => {
+      exercises[e.id] = { sets: [{ is_warmup: false, weight: 30, reps: 10, effort: 'medium', completed: true }] };
+    });
+    parsed.history = [{ date: '2026-08-30', session_id: 'seed', exercises }];
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(1000);
+
+  const built = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const exercises = JSON.parse(localStorage[key]).active_session.exercises;
+    return Object.entries(exercises).map(([id, entry]) => ({
+      id,
+      ramp: entry.sets.filter((set) => set.is_warmup).length,
+      planned: entry.planned?.ramp_sets,
+    }));
+  });
+
+  // The builder used to test `plan.warmup` — a v15 STRING the Upper/Lower
+  // programme does not carry — so the branch never ran and NOT ONE ramp set was
+  // ever created. Raed noticed they had vanished; they had.
+  expect(built.some((row) => row.ramp > 0)).toBe(true);
+  for (const row of built) {
+    if (Number.isFinite(row.planned)) expect(row.ramp).toBe(row.planned);
+  }
+});

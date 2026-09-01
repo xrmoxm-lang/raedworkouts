@@ -1704,14 +1704,22 @@ function startSession(session) {
     const suggestedWorkingWeight = editableWeightValue(sug.weight);
     const sets = [];
     // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle`
-    if (plan.is_first_of_muscle && plan.warmup) {
-      if (/^2\s+sets/i.test(plan.warmup) && hasWorkingWeight(sug.weight)) {
-        twoSetWarmupFrom(sug.weight).forEach(warm =>
-          sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
-        );
-      } else if (/^1\s+light\s+set/i.test(plan.warmup) && hasWorkingWeight(sug.weight)) {
-        sets.push({ is_warmup: true, weight: roundToGymIncrement(sug.weight * 0.5), reps: 10, effort: null, completed: false });
-      }
+    // §8.4 gives every row an explicit `ramp_sets` count: 2 on the openers, 1 on
+    // most, 0 on a few. This used to read `plan.warmup` — a v15 STRING like
+    // "2 sets: 12.5kg×10" — which the Upper/Lower programme does not have, so
+    // the condition was never true and NO ramp sets were built at all. Raed
+    // noticed his warm-up sets had vanished; they had.
+    const rampSets = Number.isFinite(plan.ramp_sets)
+      ? plan.ramp_sets
+      : (plan.warmup ? (/^2\s+sets/i.test(plan.warmup) ? 2 : 1) : 0);
+    if (rampSets > 0 && hasWorkingWeight(sug.weight)) {
+      // Sourced ramp: 50% then 70% of the working load (ML L11160/L11162).
+      // A single ramp set uses the 50% entry, not the 70% one — the point is to
+      // groove the movement, not to pre-fatigue it.
+      const ramps = twoSetWarmupFrom(sug.weight);
+      (rampSets >= 2 ? ramps : [ramps[0]]).forEach((warm) =>
+        sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
+      );
     }
     for (let i = 0; i < plan.sets; i++) {
       // A suggestion is a placeholder, never an already-entered prescription.
