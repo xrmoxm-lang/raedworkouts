@@ -1915,8 +1915,11 @@ function renderSessionEnd() {
       ),
     ),
 
-    prs.length ? h('div', { class: 'pr-card' },
-      h('h3', {}, '🏆 Personal Records'),
+    // Honour the setting. It was written and toggled in Settings and read by
+    // NOTHING, so turning "show PR summary" off changed nothing on screen — a
+    // control that lies about what it does.
+    (settings.show_pr_summary !== false && prs.length) ? h('div', { class: 'pr-card' },
+      h('h3', {}, t('personal_records')),
       prs.map(pr => {
         const ex = getAllExercises().find(e => e.id === pr.exercise_id);
         return h('div', { class: 'pr-line' },
@@ -1939,10 +1942,10 @@ function renderSessionEnd() {
           total: Math.max(...((state.programme_overrides || RW.PROGRAMME).blocks || []).map((b) => b.week_end || 0), 1),
         })
       ),
-      h('strong', {}, 'Next: '),
+      h('strong', {}, t('next_label')),
       (() => {
         const next = getNextPlannedSession();
-        return next ? (next.session ? next.session.name : next.name) : 'Block complete.';
+        return next ? (next.session ? next.session.name : next.name) : t('block_complete');
       })()
     ),
 
@@ -3604,7 +3607,7 @@ async function undoPreRestore() {
   toast(pushed ? 'Restored previous local snapshot.' : 'Restored locally. Cloud sync is pending.');
 }
 function notifyUndoRestore() {
-  toast('Snapshot restored.', 7000, 'Undo', undoPreRestore);
+  toast(t('snapshot_restored'), 7000, t('undo'), undoPreRestore);
 }
 function exportPayload() {
   return {
@@ -3647,7 +3650,7 @@ async function restoreRevision(rev) {
   applyTheme();
   render();
   if (pushed) notifyUndoRestore();
-  else toast('Restored locally. Cloud sync is pending.', 5000, 'Undo', undoPreRestore);
+  else toast(t('restored_locally_pending'), 5000, t('undo'), undoPreRestore);
 }
 async function openRestoreModal() {
   const overlay = $('#modal-overlay');
@@ -3655,9 +3658,9 @@ async function openRestoreModal() {
   m.innerHTML = '';
   m.appendChild(h('h3', {}, 'Restore from backup'));
   m.appendChild(h('p', { class: 'muted' }, 'Restoring creates a new head. Older revisions stay on the server.'));
-  const list = h('div', { class: 'revision-list' }, h('div', { class: 'tiny muted' }, 'Loading...'));
+  const list = h('div', { class: 'revision-list' }, h('div', { class: 'tiny muted' }, t('loading_ellipsis')));
   m.appendChild(list);
-  m.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:12px;', onClick: () => overlay.classList.remove('show') }, 'Close'));
+  m.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:12px;', onClick: () => overlay.classList.remove('show') }, t('close')));
   overlay.classList.add('show');
   try {
     const rows = await syncFetch('/revisions?user=' + syncUserQuery(settings.user_id) + '&limit=30');
@@ -3693,7 +3696,7 @@ async function importJsonFile(file) {
   const pushed = await flushSync({ mode: 'replace' });
   applyTheme();
   render();
-  toast(pushed ? 'Imported.' : 'Imported locally. Cloud sync is pending.', 7000, 'Undo', undoPreRestore);
+  toast(pushed ? t('imported') : t('imported_locally_pending'), 7000, t('undo'), undoPreRestore);
 }
 async function switchProfile() {
   if (syncDirty || readDirtyMarker(settings.user_id) || syncInFlightPromise) {

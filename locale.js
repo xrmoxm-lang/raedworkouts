@@ -78,6 +78,16 @@ export const LOCALE = Object.freeze({
   // A prescribed rest of zero means "go straight into the paired movement",
   // which is an instruction, not a timer.
   block_week_of: pair('{block} · week {week} of {total}', '{block} · الأسبوع {week} من {total}'),
+  // Paths the Arabic gates never open — restore, import, the finish screen.
+  // English survived here precisely because these screens are rare, which is the
+  // same way the swap modal and the rest-day banner hid.
+  personal_records: pair('🏆 Personal Records', '🏆 أرقامك الشخصية'),
+  next_label: pair('Next: ', 'التالي: '),
+  block_complete: pair('Block complete.', 'اكتملت الكتلة.'),
+  undo: pair('Undo', 'تراجع'),
+  loading_ellipsis: pair('Loading…', 'جارٍ التحميل…'),
+  close: pair('Close', 'إغلاق'),
+  imported: pair('Imported.', 'تم الاستيراد.'),
   no_rest_superset: pair('no rest — straight into the pair', 'بلا راحة — انتقل للمزدوج فورًا'),
   drill_clips: pair('Warm-up clips', 'مقاطع الإحماء'),
   drill_clips_hint: pair('Tap to watch. Ticking a drill above is what marks it done.', 'اضغط للمشاهدة. التأشير على الحركة فوق هو ما يحسبها منتهية.'),

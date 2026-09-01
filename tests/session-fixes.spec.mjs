@@ -282,10 +282,15 @@ test('every programmed exercise offers at least one alternative', async ({ page 
   // An alternative pointing at an id that does not exist is worse than none:
   // the swap sheet renders an empty row and Raed cannot tell why.
   expect(gaps.dangling).toEqual([]);
-  // bicycle_crunch is the one deliberate blank: it appears nowhere in §8.4, so
-  // there is no sourced substitute and inventing one is forbidden (D8's logic
-  // applied to exercises). Raed decides that one.
-  expect(gaps.none).toEqual(['bicycle_crunch']);
+  // Was `toEqual(['bicycle_crunch'])`, pinning an exception list — which locked
+  // in a defect instead of asserting the rule. And the premise was wrong: I had
+  // told Raed that exercise "appears nowhere in §8.4", having checked whether it
+  // was a programme ROW rather than whether the table gave it substitutes. It
+  // has two, Cable Crunch and Machine Crunch, on its Block B row.
+  //
+  // The invariant is what he actually asked for: "لا يكون فيه شيء لها بديل وما
+  // لها بديل" — nothing that should have an alternative may lack one.
+  expect(gaps.none).toEqual([]);
 });
 
 test('the week strip states facts and never invents a calendar', async ({ page }) => {
@@ -724,4 +729,23 @@ test('the swap sheet leads with the programme\'s own substitutes', async ({ page
   // §8.4 authors a sub1/sub2 per row; the sheet used to show only the catalogue's
   // generic alternatives, so swapping offered movements the programme never chose.
   expect(offered[0].trim()).toBe(prescribed[0]);
+});
+
+test('the PR-summary setting actually controls the PR summary', async ({ page }) => {
+  // It was written and toggled in Settings and read by NOTHING, so turning it
+  // off changed nothing — a control that lies about what it does.
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(800);
+  const readsSetting = await page.evaluate(async () => {
+    const source = await (await fetch('./app.js')).text();
+    // The setting must be READ somewhere that renders, not only written.
+    return /settings\.show_pr_summary\s*!==\s*false/.test(source);
+  });
+  expect(readsSetting).toBe(true);
 });

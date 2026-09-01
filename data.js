@@ -561,7 +561,12 @@ EXERCISES.push(
   phase5Exercise({ id: 'hanging_leg_raise', name: 'Hanging Leg Raise', primary: 'abs', pattern: 'isolation_core', jeff_nippard: 'https://youtu.be/2RrGnjxSsiA?t=247', alternatives: ['reverse_crunch', 'roman_chair_crunch'] }),
   phase5Exercise({ id: 'ez_bar_curl', name: 'EZ Bar Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull', jeff_nippard: 'https://www.youtube.com/watch?v=Dd0t5UOCEUc', alternatives: ['biceps_curl', 'cable_ez_curl'] }),
   phase5Exercise({ id: 'machine_lateral_raise', name: 'Machine Lateral Raise', primary: 'side_delts', pattern: 'isolation_push', jeff_nippard: 'https://youtu.be/-9QsrJ542ao', alternatives: ['lateral_raise_cable', 'lateral_raise_db'] }),
-  phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', pattern: 'isolation_core', jeff_nippard: 'https://youtu.be/OXs4DCS8Ei8?si=0WCCbNRrf2eaWePi' }),
+  // §8.4 DOES give this one substitutes — Cable Crunch and Machine Crunch, on its
+// Block B Lower A row. I previously told Raed it "appears nowhere in §8.4" and
+// therefore had no sourced alternative; that was wrong. I had checked whether it
+// appeared as a programme ROW in Block A rather than whether the table gave it
+// subs, and he made a decision on that bad information.
+phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', pattern: 'isolation_core', alternatives: ['ab_crunch', 'machine_crunch'], jeff_nippard: 'https://youtu.be/OXs4DCS8Ei8?si=0WCCbNRrf2eaWePi' }),
   phase5Exercise({ id: 'db_incline_curl', name: 'DB Incline Curl', primary: 'biceps', secondary: ['forearms'], pattern: 'isolation_pull', alternatives: ['hammer_curl', 'bayesian_cable_curl'] }),
   phase5Exercise({ id: 'single_leg_leg_extension', name: 'Single-Leg Leg Extension', primary: 'quads', pattern: 'isolation_quad', alternatives: ['leg_extension', 'goblet_squat'] }),
   phase5Exercise({ id: 'leg_press_toe_press', name: 'Leg Press Toe Press', primary: 'calves', pattern: 'isolation_calf', jeff_nippard: 'https://youtu.be/VJ_9xii47Sk', alternatives: ['standing_calf', 'db_standing_calf_raise', 'seated_calf'] }),
