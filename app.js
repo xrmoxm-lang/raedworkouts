@@ -1752,11 +1752,19 @@ function startSession(session) {
     const rampSets = Number.isFinite(plan.ramp_sets)
       ? plan.ramp_sets
       : (plan.warmup ? (/^2\s+sets/i.test(plan.warmup) ? 2 : 1) : 0);
-    if (rampSets > 0 && hasWorkingWeight(sug.weight)) {
+    if (rampSets > 0) {
       // Sourced ramp: 50% then 70% of the working load (ML L11160/L11162).
       // A single ramp set uses the 50% entry, not the 70% one — the point is to
       // groove the movement, not to pre-fatigue it.
-      const ramps = twoSetWarmupFrom(sug.weight);
+      //
+      // With no history there is no working weight to take a percentage of, but
+      // the programme still PRESCRIBES the ramp. Dropping the rows entirely
+      // silently discarded that instruction on exactly the sessions where he is
+      // least sure what to do. The rows are built either way; without a
+      // suggestion they carry a blank weight and read «معايرة», like the working
+      // sets on a first exposure.
+      const canSuggest = hasWorkingWeight(sug.weight);
+      const ramps = canSuggest ? twoSetWarmupFrom(sug.weight) : [{ weight: '', reps: 10 }, { weight: '', reps: 6 }];
       (rampSets >= 2 ? ramps : [ramps[0]]).forEach((warm) =>
         sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
       );
@@ -3165,7 +3173,19 @@ function showAltModal(ex_id, exState) {
   m.appendChild(h('h3', {}, t('swap')));
 
   // ===== SECTION 1: Replace =====
-  const validAlts = (ex?.alternatives || []).map(id => allEx.find(e => e.id === id)).filter(Boolean);
+  // The PROGRAMME's own substitutes come first. §8.4 authors a sub1/sub2 for
+  // every row — Chest Press Machine prescribes Flat DB Press and Hammer Strength
+  // Press — and this modal was reading only the catalogue's generic
+  // `alternatives`, which for that same exercise are Incline Chest Press and Pec
+  // Deck. Swapping therefore offered movements the programme never chose.
+  //
+  // The catalogue list still follows, so nothing is taken away; the sourced ones
+  // simply lead, because they were picked for THIS slot.
+  const plannedRow = exState?.planned || {};
+  const programmeSubs = [plannedRow.sub1, plannedRow.sub2].filter(Boolean);
+  const orderedIds = [...new Set([...programmeSubs, ...(ex?.alternatives || [])])]
+    .filter((id) => id !== (exState?.swapped_to || ex_id));
+  const validAlts = orderedIds.map(id => allEx.find(e => e.id === id)).filter(Boolean);
   if (validAlts.length) {
     m.appendChild(sectionHead('Replace with…', 'Tap to calculate the ledger before adopting.'));
     validAlts.forEach(alt => m.appendChild(altCard(alt, () => {

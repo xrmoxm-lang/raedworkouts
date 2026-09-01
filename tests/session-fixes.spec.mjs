@@ -656,3 +656,72 @@ test('a grouped number survives RTL as one run', async ({ page }) => {
   expect(runs.pieces).toBeLessThanOrEqual(1);
   expect(runs.text).toMatch(/^\d{1,3}(,\d{3})+$/);
 });
+
+test('a fresh profile still gets its prescribed ramp sets', async ({ page }) => {
+  // The earlier ramp test seeded a completed 30 kg record for EVERY exercise
+  // before starting, so it could never see this path. With no history there is
+  // no working weight to take a percentage of — but the programme still
+  // PRESCRIBES the ramp, and dropping the rows silently discarded that
+  // instruction on exactly the session where he is least sure what to do.
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.active_session = null;
+    parsed.history = [];
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(1000);
+
+  const built = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const exercises = JSON.parse(localStorage[key]).active_session.exercises;
+    return Object.values(exercises).map((entry) => ({
+      ramp: entry.sets.filter((set) => set.is_warmup).length,
+      prescribed: entry.planned?.ramp_sets,
+      weights: entry.sets.filter((set) => set.is_warmup).map((set) => set.weight),
+    }));
+  });
+  expect(built.length).toBeGreaterThan(0);
+  for (const row of built) {
+    if (Number.isFinite(row.prescribed)) expect(row.ramp).toBe(row.prescribed);
+    // Blank, never a made-up number: there is nothing to take a percentage of.
+    for (const weight of row.weights) expect(weight === '' || Number.isFinite(weight)).toBe(true);
+  }
+});
+
+test('the swap sheet leads with the programme\'s own substitutes', async ({ page }) => {
+  await intoSession(page);
+  await page.locator('.ex-actions button', { hasText: 'استبدال' }).first().click();
+  await page.waitForTimeout(700);
+  const offered = await page.locator('#modal .swap-option h4').allTextContents();
+  test.skip(!offered.length, 'this exercise has no alternatives at all');
+
+  const prescribed = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const session = JSON.parse(localStorage[key]).active_session;
+    const entry = Object.values(session.exercises).find((item) => item.planned?.sub1);
+    if (!entry) return null;
+    const byId = Object.fromEntries(window.RW.EXERCISES.map((e) => [e.id, e.name]));
+    return [entry.planned.sub1, entry.planned.sub2].filter(Boolean).map((id) => byId[id]).filter(Boolean);
+  });
+  test.skip(!prescribed || !prescribed.length, 'no programme substitutes on this row');
+  // §8.4 authors a sub1/sub2 per row; the sheet used to show only the catalogue's
+  // generic alternatives, so swapping offered movements the programme never chose.
+  expect(offered[0].trim()).toBe(prescribed[0]);
+});

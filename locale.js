@@ -643,7 +643,11 @@ export const ALLOWED_PROPER_NOUNS = Object.freeze([
   'v16', 'scope.bit://', 'shortcuts://run-shortcut',
 ]);
 export const ALLOWED_PROPER_NOUN_ABBREVIATIONS = Object.freeze([
-  'M', 'JN', 'RDL', 'R', 'B', 'A',
+  // 'W' numbers the warm-up ramp rows (W1, W2) in the set grid, exactly as 'M'
+  // numbers Mohannad's clips. It only became visible once fresh profiles started
+  // receiving their prescribed ramps — the label was always there, the rows
+  // were not.
+  'M', 'JN', 'RDL', 'R', 'B', 'A', 'W',
 ]);
 // The comma is a thousands separator, so "4,658" is one numeral and not a
 // number followed by stray punctuation followed by another number.
