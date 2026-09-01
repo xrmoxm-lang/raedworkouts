@@ -641,4 +641,6 @@ export const ALLOWED_PROPER_NOUNS = Object.freeze([
 export const ALLOWED_PROPER_NOUN_ABBREVIATIONS = Object.freeze([
   'M', 'JN', 'RDL', 'R', 'B', 'A',
 ]);
-export const ALLOWED_NUMERALS = /\b\d+(?:[.:×x/+-]\d+)*\b/g;
+// The comma is a thousands separator, so "4,658" is one numeral and not a
+// number followed by stray punctuation followed by another number.
+export const ALLOWED_NUMERALS = /\b\d+(?:[.,:×x/+-]\d+)*\b/g;

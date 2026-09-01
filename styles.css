@@ -1375,7 +1375,10 @@ body.welcome-mode main {
    first set row measured y=952 on an 844px screen, so logging the opening set
    of every exercise started with a scroll. Ordering rather than moving nodes
    keeps one render path for both states. */
-#page-home { display: flex; flex-direction: column; }
+/* .active, or this beats `.page { display: none }` on specificity and leaves
+   Home rendered underneath every other tab — which is exactly what happened:
+   opening the coach showed the whole home screen stacked above it. */
+#page-home.active { display: flex; flex-direction: column; }
 #page-home > * { order: 1; }
 body.session-active #page-home > .home-context { order: 2; }
 

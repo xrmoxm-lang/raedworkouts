@@ -543,3 +543,52 @@ test('ramp sets are built from the programme count, not a dead v15 string', asyn
     if (Number.isFinite(row.planned)) expect(row.ramp).toBe(row.planned);
   }
 });
+
+test('switching tabs leaves exactly one page on screen', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(900);
+
+  // `#page-home { display: flex }` was written unscoped during the design pass
+  // and beat `.page { display: none }` on specificity, so Home stayed rendered
+  // underneath every other tab. Opening the coach showed the entire home screen
+  // stacked above it.
+  for (const label of ['المكتبة', 'السجل', 'الإعدادات', 'المدرب', 'الرئيسية']) {
+    await page.evaluate((name) => {
+      const tab = [...document.querySelectorAll('.tab')].find((el) => el.textContent.includes(name));
+      if (tab) tab.click();
+    }, label);
+    await page.waitForTimeout(500);
+    const visible = await page.evaluate(() =>
+      [...document.querySelectorAll('.page')].filter((el) => el.offsetParent !== null).map((el) => el.id));
+    expect(visible, `${label} should show one page, saw ${visible.join(' + ')}`).toHaveLength(1);
+  }
+});
+
+test('a grouped number survives RTL as one run', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(900);
+
+  // "4,658" used to split into "4" and "658" with the separator loose between
+  // them, and RTL reordered it on screen into "658,4" — a wrong number, read
+  // confidently. The comma has to be inside the isolated run.
+  const runs = await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.stat-num')].find((el) => el.textContent.includes(','));
+    if (!tile) return null;
+    return { text: tile.textContent.trim(), pieces: tile.querySelectorAll('bdi').length };
+  });
+  test.skip(!runs, 'no grouped number on screen yet — needs a four-figure volume');
+  expect(runs.pieces).toBeLessThanOrEqual(1);
+  expect(runs.text).toMatch(/^\d{1,3}(,\d{3})+$/);
+});

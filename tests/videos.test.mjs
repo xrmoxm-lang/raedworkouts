@@ -66,3 +66,28 @@ test('the close-grip dip video now matches the exercise it is attached to', () =
   assert.equal(byId.assisted_dip.primary[0], 'triceps');
   assert.ok(String(byId.assisted_dip.jeff_nippard).includes('mpcPTUAhfto'));
 });
+
+test('clips confirmed removed from YouTube are retired, not silently left in place', () => {
+  // Three legacy clips 404'd on BOTH the oEmbed endpoint and their thumbnail on
+  // 2026-09-01, while a control clip returned 200 on both — they are gone from
+  // YouTube. They rendered a broken tile and opened nothing, which is the same
+  // harm as a wrong video: Raed taps it mid-set and gets no demonstration.
+  //
+  // They were RETIRED, not deleted. `retired_videos` keeps the record so the
+  // removal is visible and reversible, and no rule about not deleting a working
+  // clip is bent to cover a clip that stopped working.
+  const RETIRED = ['dwb-ccqK1WE', 'n87rX0fNkBQ', 'vCOlZ-zk80o'];
+  for (const exercise of rawData.EXERCISES) {
+    const shown = [...(exercise.mohannad || []), ...(exercise.extra || []), exercise.jeff_nippard || ''].join(' ');
+    for (const id of RETIRED) {
+      assert.ok(!shown.includes(id), `${exercise.id} still shows the retired clip ${id}`);
+    }
+  }
+  const keepers = rawData.EXERCISES.filter((exercise) => exercise.retired_videos);
+  assert.equal(keepers.length, 3, 'the record of what was retired must survive');
+  // Each of the three keeps a working clip, which is why retiring cost nothing.
+  for (const exercise of keepers) {
+    const remaining = (exercise.mohannad || []).length + (exercise.extra || []).length + (exercise.jeff_nippard ? 1 : 0);
+    assert.ok(remaining > 0, `${exercise.id} lost its last clip when the dead one was retired`);
+  }
+});

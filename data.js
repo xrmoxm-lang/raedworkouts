@@ -318,7 +318,9 @@ const EXERCISES = [
     primary: ['rear_delts'],
     secondary: ['upper_back'],
     pattern: 'isolation_pull',
-    mohannad: ['dwb-ccqK1WE', 'PZq3CJGLj6M'],
+    mohannad: ['PZq3CJGLj6M'],
+    // dwb-ccqK1WE removed from YouTube (oEmbed + thumbnail both 404, 2026-09-01).
+    retired_videos: ['dwb-ccqK1WE'],
     jeff_nippard: 'https://www.youtube.com/shorts/P5CXx_jgTDE',
     alternatives: ['face_pull'],
     cue: 'Lead with elbows, hands stay neutral. Slow eccentric.',
@@ -344,7 +346,9 @@ const EXERCISES = [
     primary: ['biceps'],
     secondary: ['forearms'],
     pattern: 'isolation_pull',
-    mohannad: ['n87rX0fNkBQ', '8nCxfkRSN4o'],
+    mohannad: ['8nCxfkRSN4o'],
+    // n87rX0fNkBQ removed from YouTube (oEmbed + thumbnail both 404, 2026-09-01).
+    retired_videos: ['n87rX0fNkBQ'],
     extra: ['https://youtu.be/VuEclXR7sZY'],
     jeff_nippard: 'https://www.youtube.com/watch?v=Kd3tbUnbueU',
     alternatives: ['biceps_curl', 'reverse_curl'],
@@ -497,7 +501,10 @@ const EXERCISES = [
     primary: ['calves'],
     secondary: [],
     pattern: 'isolation_calf',
-    mohannad: ['vCOlZ-zk80o'],
+    mohannad: [],
+    // vCOlZ-zk80o removed from YouTube (oEmbed + thumbnail both 404, 2026-09-01).
+    // The Jeff Nippard clip still covers this movement.
+    retired_videos: ['vCOlZ-zk80o'],
     jeff_nippard: 'https://www.youtube.com/shorts/baEXLy09Ncc',
     alternatives: ['standing_calf'],
     cue: 'Targets soleus. Slow, controlled — calves love volume.',

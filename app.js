@@ -95,7 +95,10 @@ const experienceLabel = (experience) => ({
 // Keep an approved technical URI together. The general run deliberately
 // leaves sentence punctuation outside <bdi>; the URI alternative prevents a
 // scheme such as scope.bit:// from being split into a false English fragment.
-const LTR_RUN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[A-Za-z0-9:/?&=._%+-]*|[A-Za-z0-9][A-Za-z0-9 .:×x/()+_-]*[A-Za-z0-9)]|[A-Za-z0-9]/g;
+// The comma belongs in the run class. Without it "4,658" split into two runs —
+// "4" and "658" — with the separator loose between them, and RTL reordered the
+// whole thing into "658,4" on screen. A grouped number is ONE token.
+const LTR_RUN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[A-Za-z0-9:/?&=._%+-]*|[A-Za-z0-9][A-Za-z0-9 .,:×x/()+_-]*[A-Za-z0-9)]|[A-Za-z0-9]/g;
 const localizedTextNode = (value) => {
   const localized = localizeText(value);
   if (typeof localized !== 'string' || activeLanguage() !== 'ar' || !/[A-Za-z0-9]/.test(localized)) return document.createTextNode(localized);
