@@ -1059,7 +1059,7 @@ async function pullFromCloud() {
   }
   if (remote && remote.state_json) {
     applyRemotePayload(remote, settings.user_id);
-    setSyncStatus('ok', 'Pulled from cloud');
+    setSyncStatus('ok', t('sync_pulled'));
     return true;
   }
   return false;
@@ -1095,11 +1095,13 @@ async function testCloudConnection() {
   toast('Testing…');
   try {
     await syncFetch('/health', { timeoutMs: 8000 });
-    setSyncStatus('ok', 'Connected ✓');
+    setSyncStatus('ok', t('sync_connected') + ' ✓');
     toast('Connection OK.');
   } catch (e) {
-    setSyncStatus('err', 'Failed: ' + (e.message || 'unknown'));
-    toast('Connection failed: ' + (e.message || 'unknown'), 3500);
+    setSyncStatus('err', syncFailureReason(e));
+    // Concatenating onto a literal defeats localisation: the joined string can
+    // never match a locale entry, so this always rendered in English.
+    toast(tf('sync_connection_failed', { reason: syncFailureReason(e) }), 3500);
   }
 }
 
@@ -1837,8 +1839,12 @@ function startSession(session) {
   else {
     toast('Session started — let\'s go.');
     if (isBlockTransition) {
-      const blockNames = { 1: 'foundation', 2: 'strength', 3: 'peak intensity' };
-      setTimeout(() => toast(`Block ${curBlock} — ${blockNames[curBlock] || 'new block'} phase begins.`, 4000), 800);
+      // Reaching a new block is a milestone, and it was announced in English on
+      // an Arabic-only screen. A template literal is joined before it reaches
+      // toast(), so it could never match a locale entry however it was worded.
+      const blockKeys = { 1: 'block_name_foundation', 2: 'block_name_strength', 3: 'block_name_peak' };
+      const blockName = t(blockKeys[curBlock] || 'block_name_new');
+      setTimeout(() => toast(tf('block_begins', { block: curBlock, name: blockName }), 4000), 800);
     }
   }
 }
@@ -3950,7 +3956,7 @@ function renderSettings() {
   // backend is paused/unreachable (no toast; updates only the badge).
   if (configured) {
     syncFetch('/health', { timeoutMs: 8000 })
-      .then(() => setSyncStatus('ok', 'Connected'))
+      .then(() => setSyncStatus('ok', t('sync_connected')))
       .catch(() => setSyncStatus('err', t('offline')));
   }
 
@@ -4308,7 +4314,7 @@ function init() {
     bootSync
       .then(ok => { if (ok) { applyTheme(); render(); } })
       .catch(err => {
-        setSyncStatus('err', 'Pull failed: ' + (err.message || 'unknown'));
+        setSyncStatus('err', syncFailureReason(err));
         toast(t('sync_failed_offline'), 3000);
       });
   }
