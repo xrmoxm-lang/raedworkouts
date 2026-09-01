@@ -76,3 +76,15 @@ test('Overnight runner deployment precaches its imported policy modules under a 
   assert.match(source, /'\.\/domain\/runner-session\.js'/);
   console.log('RUNNER_SERVICE_WORKER_FRESHNESS_PASSED');
 });
+
+test('an explicit zero counts and an untouched box does not — one rule, in the domain', () => {
+  // The session card used to duplicate this rule with `weight > 0`, which is why
+  // «وزن الجهاز فقط» sets could be created and never completed. Two copies of a
+  // rule is how they drift; this asserts the domain owns it.
+  assert.equal(hasValidWorkingValues({ weight: 0, reps: 10 }), true, 'a machine carrying its own stack is 0 added load');
+  assert.equal(hasValidWorkingValues({ weight: '', reps: 10 }), false, 'an untouched box is not a zero');
+  assert.equal(hasValidWorkingValues({ weight: null, reps: 10 }), false);
+  assert.equal(hasValidWorkingValues({ weight: undefined, reps: 10 }), false);
+  assert.equal(hasValidWorkingValues({ weight: 25, reps: '' }), false, 'reps are still required');
+  assert.equal(hasValidWorkingValues({ weight: 0, reps: 0 }), false, 'zero reps is not a set');
+});

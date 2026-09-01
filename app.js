@@ -11,6 +11,7 @@ import {
 } from './domain/sync-identity.js';
 import {
   applyWorkingSetAttempt,
+  hasValidWorkingValues,
   isCountableWorkingSet,
   isRunnerExerciseResolved,
   isRunnerSetResolved,
@@ -1487,11 +1488,21 @@ function displaySuggestedWeight(value) {
 // Returns null for the second half of the pair, so the note renders once, on the
 // exercise you reach first.
 function supersetPartner(session, planned) {
-  const group = planned?.superset_group;
-  if (!group || !session?.exercises) return null;
-  const members = session.exercises.filter((item) => item.superset_group === group);
+  // A1 and A2 are a PAIR, not a shared label: the letter is the group and the
+  // digit is the position. Matching on exact equality — which is what this did
+  // originally — found one member every time and returned null, so the note it
+  // renders had never once appeared. The gate did not catch it because it only
+  // asserted that some expanded card existed.
+  const tag = String(planned?.superset_group || '');
+  const match = tag.match(/^([A-Z])(\d)$/);
+  if (!match || !session?.exercises) return null;
+  const [, letter, position] = match;
+  const members = session.exercises
+    .filter((item) => String(item.superset_group || '').startsWith(letter))
+    .sort((a, b) => String(a.superset_group).localeCompare(String(b.superset_group)));
   if (members.length < 2) return null;
-  return members[0].exercise_id === planned.exercise_id ? members[1] : null;
+  // Announced once, on the movement reached first, so both cards do not claim it.
+  return position === '1' ? members[1] : null;
 }
 
 function suggestedWeightPlaceholder(value) {
@@ -2033,6 +2044,19 @@ function swapExercise(exercise_id, alt_id) {
 
 // ---- Rest timer --------------------------------------------
 let restTimer = { interval: null, end: 0 };
+// The programme prescribes rest PER EXERCISE — 2.5 min on the openers, 2.0, 1.5,
+// and 0 on the first half of a superset. `rest_min` has been in data.js since the
+// programme was transcribed and app.js consumed it NOWHERE: every set fell back
+// to one global 120s. Worst case, the card told Raed A1/A2 run back-to-back with
+// no rest and then started a two-minute timer on the same tap.
+//
+// The setting stays as the fallback for anything the programme does not specify.
+function prescribedRestSeconds(planned) {
+  const minutes = Number(planned?.rest_min);
+  if (!Number.isFinite(minutes)) return settings.rest_seconds;
+  return Math.round(minutes * 60);
+}
+
 function startRest(seconds) {
   if (restTimer.interval) clearInterval(restTimer.interval);
   restTimer.end = Date.now() + seconds * 1000;
@@ -2891,12 +2915,18 @@ function renderExerciseCard(ex_id, exState) {
         disabled: Boolean(set.skipped),
         onClick: () => {
           if (!set.completed) {
-            if (!isWarm && (!hasWorkingWeight(set.weight) || !Number.isFinite(Number(set.reps)) || Number(set.reps) < 1)) {
+            // hasValidWorkingValues, NOT hasWorkingWeight. The card carried its
+            // own stricter copy of the rule requiring weight > 0, so a
+            // «وزن الجهاز فقط» set — which is legitimately 0 kg — could be
+            // created but never ticked complete. The domain function already
+            // distinguishes an explicit 0 from an untouched empty box; keeping
+            // a second rule here is what let the two drift apart.
+            if (!isWarm && !hasValidWorkingValues(set)) {
               toast(t('required'));
               return;
             }
             if (isFinalWorkingSet && !set.effort) {
-              toast('Final set: tap easy, medium, or very hard first.');
+              toast(t('final_set_prompt'));
               return;
             }
             if (!isWarm && exState.sets.some((prior, priorIndex) => priorIndex < idx && prior.is_warmup && !prior.completed)) {
@@ -2910,7 +2940,8 @@ function renderExerciseCard(ex_id, exState) {
           saveLocal();
           render();
           if (set.completed && !isWarm) {
-            startRest(settings.rest_seconds);
+            const restSeconds = prescribedRestSeconds(planned);
+            if (restSeconds > 0) startRest(restSeconds);
             if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
           }
         }
@@ -2960,9 +2991,15 @@ function renderExerciseCard(ex_id, exState) {
       exState.sets.push({ is_warmup: false, is_extra: true, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
       saveLocal(); render();
     }}, '+ Set'),
-    h('button', { class: 'btn tiny', onClick: () => startRest(settings.rest_seconds) }, tf('rest_seconds', {
-      seconds: `${Math.floor(settings.rest_seconds / 60)}:${String(settings.rest_seconds % 60).padStart(2, '0')}`,
-    })),
+    (() => {
+      const rest = prescribedRestSeconds(planned);
+      // A prescribed zero is not a short rest, it is an instruction to go
+      // straight into the paired movement. Offering a 0:00 timer would be absurd.
+      if (rest <= 0) return h('span', { class: 'btn tiny ghost no-rest', 'data-no-rest': 'true' }, t('no_rest_superset'));
+      return h('button', { class: 'btn tiny', 'data-rest-button': 'true', onClick: () => startRest(rest) }, tf('rest_seconds', {
+        seconds: `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}`,
+      }));
+    })(),
     h('button', {
       class: 'btn tiny',
       onClick: () => showAltModal(ex_id, exState)

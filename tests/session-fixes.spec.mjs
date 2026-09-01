@@ -36,30 +36,78 @@ test('the card states the rep target that actually earns an increase', async ({ 
   await expect(goal).toContainText('ليرتفع الوزن');
 });
 
-test('a superset pair is announced on the exercise reached first, and only there', async ({ page }) => {
-  await intoSession(page);
-  // The pair lives in Upper A (A1 DB Supinated Curl + A2 Rope Triceps, 0 min
-  // rest). The seeded day is often Lower A, which has no pair at all, so the
-  // session has to be forced rather than assumed -- otherwise this test passes
-  // vacuously on a day that could never show the note.
-  const seen = await page.evaluate(async () => {
-    const plan = window.RW.PROGRAMME.blocks
-      .flatMap((block) => block.sessions)
-      .find((session) => session.exercises.some((item) => item.superset_group));
-    if (!plan) return { error: 'no superset anywhere in the programme' };
-    const pair = plan.exercises.filter((item) => item.superset_group);
-    return { sessionId: plan.id, pairIds: pair.map((item) => item.exercise_id) };
+test('the superset pair is announced on the first movement, and the rest timer obeys it', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
   });
-  expect(seen.error).toBeUndefined();
-  expect(seen.pairIds.length).toBe(2);
+  await page.waitForTimeout(900);
+  // Force Upper A: it is the session that actually holds the A1/A2 pair. The
+  // seeded day is often Lower A, where this test would pass vacuously — which
+  // is exactly how the old version of it missed that the note never rendered.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.active_session = null;
+    parsed.forced_next_session = 'upper_a';
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(900);
 
-  // Walk to the first member and confirm the note is on it.
-  const note = await page.evaluate((firstId) => {
-    const card = document.querySelector('#page-home .ex.expanded');
-    return { firstId, hasCard: Boolean(card) };
-  }, seen.pairIds[0]);
-  expect(note.hasCard).toBe(true);
-  console.log('SUPERSET_PAIR_PRESENT', seen.pairIds.join(' + '));
+  const seen = [];
+  for (let i = 0; i < 8; i += 1) {
+    seen.push(await page.evaluate(() => ({
+      name: document.querySelector('#page-home .ex.expanded h4')?.textContent.trim(),
+      superset: document.querySelector('[data-superset]')?.textContent.trim() || null,
+      rest: document.querySelector('[data-rest-button]')?.textContent.trim() || null,
+      noRest: Boolean(document.querySelector('[data-no-rest]')),
+    })));
+    const moved = await page.evaluate(() => {
+      const next = [...document.querySelectorAll('button')].find((el) => /التمرين التالي/.test(el.textContent));
+      if (!next) return false;
+      next.click();
+      return true;
+    });
+    if (!moved) break;
+    await page.waitForTimeout(600);
+  }
+
+  // Announced exactly once — on the movement reached first, naming its partner.
+  const announced = seen.filter((row) => row.superset);
+  expect(announced).toHaveLength(1);
+  expect(announced[0].superset).toMatch(/سوبرست/);
+
+  // And the timer obeys the prescription. `rest_min` sat in data.js consumed by
+  // NOTHING, so every set fell back to one global 2:00 — including the half of
+  // the superset the card was simultaneously telling him to take at zero rest.
+  const zeroRest = seen.filter((row) => row.noRest);
+  expect(zeroRest.length).toBeGreaterThan(0);
+  // Not every exercise can share one duration, or the prescription is ignored again.
+  const durations = new Set(seen.map((row) => row.rest).filter(Boolean));
+  expect(durations.size).toBeGreaterThan(1);
+
+  // Put the forced session back. It is global, persisted state, and leaving it
+  // set made the ramp-set test downstream measure a session it never chose —
+  // green alone, red in the suite.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.forced_next_session = null;
+    localStorage[key] = JSON.stringify(parsed);
+  });
 });
 
 test('a set added with + is marked beyond-plan', async ({ page }) => {
@@ -492,6 +540,22 @@ test('"machine weight only" removes the need to type a number at all', async ({ 
   // Zero ADDED load, stored as a real number so the sets still count.
   expect(stored).not.toBeNull();
   expect(stored.every((w) => w === 0)).toBe(true);
+
+  // The invariant this test USED to miss: storing 0 is not the point, TICKING
+  // the set is. The card carried its own stricter copy of the validity rule
+  // (weight > 0), so a machine-weight set could be created and then never
+  // completed — the feature was half-built and this test blessed it.
+  const row = page.locator('[data-set-kind="working"]').first();
+  await row.locator('input').nth(1).fill('10');
+  await page.waitForTimeout(300);
+  await row.locator('.set-check').click();
+  await page.waitForTimeout(700);
+  const completed = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const entry = Object.values(JSON.parse(localStorage[key]).active_session.exercises).find((item) => item.machine_weight);
+    return entry ? entry.sets.filter((set) => !set.is_warmup && set.completed).length : 0;
+  });
+  expect(completed).toBeGreaterThan(0);
 });
 
 test('ramp sets are built from the programme count, not a dead v15 string', async ({ page }) => {
