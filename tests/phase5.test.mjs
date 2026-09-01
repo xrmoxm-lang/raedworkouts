@@ -319,3 +319,30 @@ test('Phase 5 real catalogue re-derives the anatomy-corrected weekly volume ledg
   });
   console.log('PHASE5_LEDGER_REDERIVED');
 });
+
+test('the programme clock advances with logged sessions, so Block B is reachable', async () => {
+  // state.current_week was initialised to 1 and assigned NOWHERE, so the
+  // resolver picked Block A forever and Block B — weeks 5-8, with its own arm
+  // work (EZ Bar Curl, Overhead Rope, Machine Lateral Raise) — could never be
+  // reached. Raed could train for months and never see half his own programme.
+  //
+  // The week is derived from history now, four sessions to a week, which is the
+  // programme's own frequency and the same history-driven rule the session
+  // rotation already uses. Nothing to forget to advance.
+  const programme = rawData.PROGRAMME;
+  const lastWeek = Math.max(...programme.blocks.map((block) => block.week_end));
+  const weekFor = (sessions) => Math.min(lastWeek, 1 + Math.floor(sessions / 4));
+  const blockFor = (week) => programme.blocks.find((block) => week >= block.week_start && week <= block.week_end);
+
+  assert.equal(weekFor(0), 1);
+  assert.equal(blockFor(weekFor(0)).id, 'A');
+  assert.equal(blockFor(weekFor(12)).id, 'A', 'week 4 is still the first block');
+  assert.equal(blockFor(weekFor(16)).id, 'B', 'sixteen sessions must reach Block B');
+  // And it stops at the end of the programme rather than running away.
+  assert.equal(weekFor(400), lastWeek);
+
+  // The two blocks must actually differ, or reaching B would be pointless.
+  const armsA = programme.blocks[0].sessions.find((s) => s.id === 'upper_a').exercises.map((e) => e.exercise_id);
+  const armsB = programme.blocks[1].sessions.find((s) => s.id === 'upper_a').exercises.map((e) => e.exercise_id);
+  assert.notDeepEqual(armsA, armsB, 'Block B is supposed to change the exercises');
+});

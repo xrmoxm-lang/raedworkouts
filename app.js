@@ -1382,11 +1382,37 @@ function showSkinSuggestion(suggestion) {
 }
 
 // ---- Programme resolver --------------------------------------
+// The week is DERIVED from logged sessions, not stored. state.current_week was
+// initialised to 1 and never assigned anywhere, so the resolver always picked
+// Block A and Block B — weeks 5-8, with its own exercises (EZ Bar Curl, Overhead
+// Rope, Machine Lateral Raise instead of the Block A three) — was unreachable
+// forever. He could have trained for months and never seen the second half of
+// his own programme.
+//
+// Four sessions to a week, which is the programme's own frequency, and the same
+// history-driven principle the session rotation already uses. Deriving it means
+// there is no counter to forget to advance, and it self-corrects if he misses a
+// week or logs two sessions in a day.
+function completedSessionCount() {
+  return (state.history || []).length;
+}
+function derivedWeek() {
+  const programme = state.programme_overrides || RW.PROGRAMME;
+  const lastWeek = Math.max(...(programme.blocks || []).map((block) => block.week_end || 0), 1);
+  return Math.min(lastWeek, 1 + Math.floor(completedSessionCount() / 4));
+}
+function derivedBlock() {
+  const programme = state.programme_overrides || RW.PROGRAMME;
+  const week = derivedWeek();
+  const found = (programme.blocks || []).find((block) => week >= (block.week_start || 1) && week <= (block.week_end || 99));
+  return found?.block || 1;
+}
+
 function getActiveProgramme() {
   const programme = state.programme_overrides || RW.PROGRAMME;
   return resolveProgrammeBlock(programme, {
-    currentWeek: state.current_week,
-    currentBlock: state.current_block,
+    currentWeek: derivedWeek(),
+    currentBlock: derivedBlock(),
   });
 }
 function getActiveProgrammeId() {
@@ -1637,8 +1663,8 @@ function scopedReplacementFor(session, exerciseId) {
   const active = (state.substitutions || []).filter((entry) => {
     if (entry.from_exercise_id !== exerciseId) return false;
     if (entry.scope === 'always') return true;
-    if (entry.scope === 'this_week') return entry.expires_after_week === state.current_week;
-    if (entry.scope === 'this_block') return entry.block === state.current_block;
+    if (entry.scope === 'this_week') return entry.expires_after_week === derivedWeek();
+    if (entry.scope === 'this_block') return entry.block === derivedBlock();
     return false;
   });
   return active.length ? active[active.length - 1].to_exercise_id : exerciseId;
@@ -1896,8 +1922,14 @@ function renderSessionEnd() {
 
     h('div', { class: 'next-up' },
       h('div', { class: 'tiny muted', style: 'margin-bottom:4px;' },
-        `Block ${state.current_block || 1}, Week ${state.current_week || 1} of 12 — ` +
-        (['foundation', 'strength', 'peak'][Math.min((state.current_block||1)-1, 2)]) + ' phase'
+        // Was "of 12" with a foundation/strength/peak split — neither of which
+        // this programme has. It is 8 weeks in two blocks, and the block carries
+        // its own name in the data.
+        tf('block_week_of', {
+          block: getActiveProgramme()?.block_name || derivedBlock(),
+          week: derivedWeek(),
+          total: Math.max(...((state.programme_overrides || RW.PROGRAMME).blocks || []).map((b) => b.week_end || 0), 1),
+        })
       ),
       h('strong', {}, 'Next: '),
       (() => {
@@ -1954,8 +1986,8 @@ function recordSubstitution(exercise_id, alt_id, scope, assessment, override = n
     to_exercise_id: alt_id,
     scope,
     session_id: scope === 'this_session' ? state.active_session?.session_id : null,
-    expires_after_week: scope === 'this_week' ? state.current_week : null,
-    block: scope === 'this_block' ? state.current_block : null,
+    expires_after_week: scope === 'this_week' ? derivedWeek() : null,
+    block: scope === 'this_block' ? derivedBlock() : null,
     created_at: new Date().toISOString(),
     ledger_delta: assessment.ledger_delta,
     warning: assessment.classification.severity === 'clean' ? null : assessment.classification,

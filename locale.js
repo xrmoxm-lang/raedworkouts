@@ -77,6 +77,7 @@ export const LOCALE = Object.freeze({
   machine_weight_note: pair('Zero added load. Progress by adding reps, not kilos.', 'بلا وزن مضاف. تقدّم بزيادة التكرارات لا الكيلوات.'),
   // A prescribed rest of zero means "go straight into the paired movement",
   // which is an instruction, not a timer.
+  block_week_of: pair('{block} · week {week} of {total}', '{block} · الأسبوع {week} من {total}'),
   no_rest_superset: pair('no rest — straight into the pair', 'بلا راحة — انتقل للمزدوج فورًا'),
   drill_clips: pair('Warm-up clips', 'مقاطع الإحماء'),
   drill_clips_hint: pair('Tap to watch. Ticking a drill above is what marks it done.', 'اضغط للمشاهدة. التأشير على الحركة فوق هو ما يحسبها منتهية.'),
