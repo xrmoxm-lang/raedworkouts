@@ -1555,6 +1555,14 @@ function roundToGymIncrement(value, step) {
 // same app rendered "267.2" on one phone and "267,2" on another, and neither
 // matched fmtKgValue below, which always uses a dot. Pinning the locale makes
 // the number mean the same thing on every phone.
+// A single lifted load, kept exact. Gym plates land on halves, so rounding to
+// whole kilos misreports what he did; trailing zeros are dropped so 60 stays
+// "60" rather than "60.0".
+function fmtLoadKg(value) {
+  const n = Number(value) || 0;
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
+}
+
 function fmtKgTotal(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(value) || 0);
 }
@@ -3267,6 +3275,32 @@ function appendExerciseToSession(exerciseId) {
 // here — what it is performed on, which machine, whether the load is the
 // machine's own, and what to swap it for — instead of being spread across a row
 // of seven small buttons under the sets.
+
+// The last few sessions for one movement, newest first, each labelled with the
+// machine it was performed on. Raed: "تضغط زر يوريك آخر وزن شلته هنا، كم
+// العداد، يوريك إياها بجدول بسيط". Deliberately every device, not just the
+// selected one — the point of the table is to SEE the difference between
+// machines, which is exactly what the per-device history hides while training.
+function exerciseHistoryRows(exerciseId, limit = 6) {
+  const rows = [];
+  for (let i = state.history.length - 1; i >= 0 && rows.length < limit; i--) {
+    const session = state.history[i];
+    const entry = session.exercises?.[exerciseId];
+    const sets = (entry?.sets || []).filter(isCountableWorkingSet);
+    if (!sets.length) continue;
+    const top = sets.reduce((best, set) =>
+      (Number(set.weight) || 0) > (Number(best.weight) || 0) ? set : best, sets[0]);
+    rows.push({
+      date: session.date,
+      device: entry.device || '',
+      sets: sets.length,
+      topWeight: Number(top.weight) || 0,
+      topReps: Number(top.reps) || 0,
+    });
+  }
+  return rows;
+}
+
 function showExerciseSettings(ex_id, exState) {
   const actualId = exState.swapped_to || ex_id;
   const ex = getAllExercises().find((e) => e.id === actualId);
@@ -3342,6 +3376,27 @@ function showExerciseSettings(ex_id, exState) {
         },
       }, exState.machine_weight ? t('on') : t('off')),
     ),
+  ));
+
+  // --- what he has actually lifted here ----------------------------------
+  const historyRows = exerciseHistoryRows(actualId);
+  modal.appendChild(h('div', { class: 'sheet-section' },
+    h('div', { class: 'sheet-label' }, t('exercise_log')),
+    historyRows.length
+      ? h('div', { class: 'mini-log', 'data-exercise-log': 'true' },
+          historyRows.map((row) => h('div', { class: 'mini-log-row' },
+            h('span', { class: 'mini-log-date' }, fmtDate(row.date)),
+            h('span', { class: 'mini-log-load' },
+              // NOT fmtKgTotal — that rounds to whole kilos, which is right for a
+              // weekly tonnage and wrong for a load he actually lifted: 57.5 kg
+              // was being shown back to him as 58.
+              h('bdi', { class: 'ltr-run' }, `${fmtLoadKg(row.topWeight)} × ${row.topReps}`)),
+            h('span', { class: 'mini-log-sets' }, tf('n_sets', { n: row.sets })),
+            row.device
+              ? h('span', { class: 'mini-log-device' }, h('bdi', { class: 'ltr-run' }, row.device))
+              : null,
+          )))
+      : h('div', { class: 'tiny muted' }, t('exercise_log_empty')),
   ));
 
   // --- substitution ------------------------------------------------------

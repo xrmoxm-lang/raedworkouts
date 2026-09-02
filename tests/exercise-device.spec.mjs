@@ -7,6 +7,8 @@ import { expect, test } from '@playwright/test';
 const appUrl = 'http://127.0.0.1:8899/index.html';
 const user = 'dev';
 
+// 57.5 is deliberate: fmtKgTotal rounds to whole kilos, so a half-plate load was
+// being reported back to him as 58. Gym plates land on halves constantly.
 function logged(dateISO, device, weight) {
   return {
     date: dateISO, session_id: 'upper_a', session_name: 'Upper A', duration_min: 60,
@@ -85,4 +87,31 @@ test('the settings sheet opens from the exercise card', async ({ page }) => {
   await page.waitForTimeout(500);
   await expect(page.locator('#modal-overlay.show')).toHaveCount(1);
   await expect(page.locator('#modal')).toContainText('إعدادات التمرين');
+});
+
+test('the sheet shows what he has lifted here, per machine', async ({ page }) => {
+  await boot(page, { chest_press_machine: { equipment: 'machine', device: 'Hammer Strength', known_devices: ['Hammer Strength', 'Old Machine'] } }, HISTORY);
+  await intoSession(page);
+  await page.locator('#ex-chest_press_machine [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  const log = page.locator('[data-exercise-log]');
+  await expect(log).toBeVisible();
+  const text = await log.textContent();
+  // Both machines must appear: the table exists precisely to show the
+  // difference between them, which the per-device history hides while training.
+  expect(text).toContain('60');
+  expect(text).toContain('25');
+  expect(text).toContain('Hammer Strength');
+  expect(text).toContain('Old Machine');
+});
+
+test('a half-plate load is shown exactly, not rounded', async ({ page }) => {
+  await boot(page, { chest_press_machine: { equipment: 'machine', device: 'Hammer Strength', known_devices: ['Hammer Strength'] } },
+    [logged('2026-08-16T09:00:00.000Z', 'Hammer Strength', 57.5)]);
+  await intoSession(page);
+  await page.locator('#ex-chest_press_machine [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  const text = await page.locator('[data-exercise-log]').textContent();
+  expect(text, 'must show 57.5, not 58').toContain('57.5');
+  expect(text).not.toContain('58 ×');
 });
