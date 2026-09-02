@@ -113,7 +113,10 @@ test('skipping is explicit, writes no zero row, and immediately resolves the exe
     return Object.keys(JSON.parse(localStorage.getItem(key)).active_session.exercises)[0];
   }, testUser);
 
-  await home.locator('[data-runner-skip-exercise]').click();
+  // Skipping belongs to the exercise, so it moved into the settings sheet.
+  await home.locator('.ex.expanded [data-exercise-settings]').first().click();
+  await page.waitForTimeout(400);
+  await page.locator('#modal [data-runner-skip-exercise]').click();
   const persisted = await page.evaluate((user) => {
     const key = `raedworkouts.${encodeURIComponent(user)}.state.v1`;
     return JSON.parse(localStorage.getItem(key)).active_session;

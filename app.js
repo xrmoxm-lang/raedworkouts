@@ -133,6 +133,13 @@ const fmtDate = (d) => new Date(d).toLocaleDateString(
   activeLanguage() === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US',
   { weekday: 'short', month: 'short', day: 'numeric' },
 );
+// Day and month only. fmtDate includes the weekday, which is right on a session
+// card but too long for a four-column table on a 390px screen — it overflowed
+// into the load beside it. Three rows of dates do not need a weekday to be read.
+const fmtDateShort = (d) => new Date(d).toLocaleDateString(
+  activeLanguage() === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US',
+  { month: 'short', day: 'numeric' },
+);
 const fmtTime = (d) => {
   const parts = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(new Date(d));
   const hour = parts.find((part) => part.type === 'hour')?.value || '';
@@ -575,6 +582,9 @@ const defaultSettings = () => ({
   focus_mode: true,            // one-exercise-at-a-time during active session
   show_cues: true,             // live-session control; defaults to useful form cues
   runner_video_open: true,     // persisted per profile; Raed wants the explanation open by default
+  // The coach may be told which exercise he is standing at. On by default; the
+  // switch is on the Coach screen while a session is running.
+  coach_use_context: true,
   runner_video_default_version: 1,
   music_platform: 'spotify',   // spotify | youtube_music | apple_music | none
   show_pr_summary: true,       // show end-of-session PR review
@@ -2533,7 +2543,11 @@ function coachFoundLabel(count) {
   return tf('coach_found', { n: count });
 }
 
-async function askCoach(question) {
+async function askCoach(question, context = null) {
+  // Only the NAME is sent, appended to the question. Sets, loads and history
+  // stay on the device — he asked for a coach that knows which exercise he is
+  // on, not one that reads his session.
+  const sent = context ? `${question} ${context.name}` : question;
   coachState = { status: 'loading', question, results: [], error: '' };
   renderCoach();
   try {
@@ -2545,7 +2559,7 @@ async function askCoach(question) {
       // — a question the library cannot answer — scraped through at 0.486 onto a
       // meal-macros page. Cross-lingual scores sit lower than English ones, so
       // the floor has to clear that band without cutting into real answers.
-      body: JSON.stringify({ question, top_k: 5, min_score: 0.5 }),
+      body: JSON.stringify({ question: sent, top_k: 5, min_score: 0.5 }),
       signal: AbortSignal.timeout(30000),
     });
     const data = await res.json();
@@ -2570,6 +2584,29 @@ async function askCoach(question) {
   renderCoach();
 }
 
+// What the coach is allowed to know about the session in progress.
+//
+// Raed asked for exactly this and explicitly NOT for more: "أبغى إذا انتقلت من
+// حصة تدريبية إلى المدرب، المدرب يدري أنا في أي تدريب، أو أقدر أفعل هذا الخيار
+// أو أطفيه". He turned down a coach that reads his sets and advises on them.
+//
+// So this is a search context, not an adviser: the name of the movement he is
+// standing at, added to the question so he can ask "كم راحة؟" without typing
+// which exercise he means. Nothing about his loads, his history or his
+// performance crosses over, and the switch is his.
+function activeCoachContext() {
+  const session = state.active_session;
+  if (!session || session.phase === 'warmup') return null;
+  const entries = Object.entries(session.exercises || {});
+  if (!entries.length) return null;
+  const index = Math.min(Math.max(focusExerciseIdx ?? 0, 0), entries.length - 1);
+  const [plannedId, exState] = entries[index];
+  const actualId = exState?.swapped_to || plannedId;
+  const exercise = getAllExercises().find((item) => item.id === actualId);
+  if (!exercise) return null;
+  return { id: actualId, name: exercise.name, sessionName: session.session_name || '' };
+}
+
 function renderCoach() {
   const root = $('#page-coach');
   root.innerHTML = '';
@@ -2585,8 +2622,37 @@ function renderCoach() {
     // The service rejects anything under 3 characters; catching it here keeps a
     // stray tap from rendering as a server error.
     if (question.length < 3) return;
-    askCoach(question);
+    // The movement name rides along with the question rather than replacing it,
+    // so "كم راحة؟" becomes a question about the machine he is standing at.
+    const ctx = activeCoachContext();
+    const useContext = ctx && settings.coach_use_context !== false;
+    askCoach(question, useContext ? ctx : null);
   };
+
+  // The handoff. Shown only while a session is actually running, because the
+  // rest of the time there is nothing to hand off and the row would be chrome.
+  const context = activeCoachContext();
+  if (context) {
+    root.appendChild(h('div', { class: 'coach-context', 'data-coach-context': 'true' },
+      h('div', { class: 'coach-context-text' },
+        h('span', { class: 'coach-context-label' }, t('coach_context_label')),
+        ' ',
+        h('bdi', { class: 'ltr-run' }, context.name),
+      ),
+      h('label', { class: 'coach-context-toggle' },
+        h('input', {
+          type: 'checkbox', 'data-coach-context-toggle': 'true',
+          ...(settings.coach_use_context !== false ? { checked: 'checked' } : {}),
+          onChange: (event) => {
+            settings.coach_use_context = event.target.checked;
+            saveLocal();
+            renderCoach();
+          },
+        }),
+        h('span', {}, t('coach_context_use')),
+      ),
+    ));
+  }
 
   root.appendChild(h('div', { class: 'card compact', 'data-coach-ask': 'true' },
     h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_intro')),
@@ -3138,23 +3204,17 @@ function renderExerciseCard(ex_id, exState) {
       // because by then he already knows the last one is coming and the picker
       // is what the last one needs. Waiting until he taps the final check makes
       // him tap twice and reads as the app blocking him.
+      // Raed: the trigger button is redundant — the picker already opens by
+      // itself when the SECOND-TO-LAST set is ticked, so a face whose only job
+      // is to open something that has already opened is chrome. The strip is
+      // shown directly: prompting when the prior set is done, and staying
+      // visible afterwards to show the choice he made.
       const priorSet = workingSets[workingSets.length - 2];
       const promptNow = Boolean(priorSet?.completed) && !set.effort;
       const openNow = Boolean(set.effort) || promptNow;
       const strip = h('div', { class: 'effort-strip' + (promptNow ? ' prompting' : ''),
                                hidden: openNow ? undefined : true });
-      const trigger = h('button', {
-        type: 'button', class: 'effort-trigger' + (set.effort ? ' chosen' : '') + (promptNow ? ' prompting' : ''),
-        'data-effort-trigger': 'true',
-        'aria-label': t('final_set_effort'),
-        'aria-expanded': openNow ? 'true' : 'false',
-        onClick: () => {
-          const open = strip.hasAttribute('hidden');
-          strip.toggleAttribute('hidden', !open);
-          trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-        },
-      }, EFFORT_LEVELS.find((level) => level.value === set.effort)?.emoji || '＋');
-      row.appendChild(trigger);
+      row.appendChild(h('span', { class: 'effort-slot' }));
       strip.appendChild(effortPicker(set, () => { saveLocal(); render(); }));
       body.appendChild(row);
       body.appendChild(strip);
@@ -3172,41 +3232,15 @@ function renderExerciseCard(ex_id, exState) {
     ));
   }
 
-  const actions = h('div', { class: 'ex-actions' },
-    h('button', { class: 'btn tiny', onClick: () => {
-      const lastWorking = [...exState.sets].reverse().find(s => !s.is_warmup);
-      // Marked as beyond-plan. Raed asked that a set he adds himself be visibly
-      // distinct from the prescribed ones, so the card never implies the
-      // programme called for it.
-      exState.sets.push({ is_warmup: false, is_extra: true, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
-      saveLocal(); render();
-    }}, '+ Set'),
-    (() => {
-      const rest = prescribedRestSeconds(planned);
-      // A prescribed zero is not a short rest, it is an instruction to go
-      // straight into the paired movement. Offering a 0:00 timer would be absurd.
-      if (rest <= 0) return h('span', { class: 'btn tiny ghost no-rest', 'data-no-rest': 'true' }, t('no_rest_superset'));
-      return h('button', { class: 'btn tiny', 'data-rest-button': 'true', onClick: () => startRest(rest) }, tf('rest_seconds', {
-        seconds: `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}`,
-      }));
-    })(),
-    h('button', {
-      class: 'btn tiny',
-      onClick: () => showAltModal(ex_id, exState)
-    }, t('swap')),
-    h('button', {
-      class: 'btn tiny ghost', 'data-runner-skip-exercise': 'true',
-      onClick: () => skipRunnerExercise(ex_id),
-    }, t('runner_skip_exercise')),
-    h('button', { class: 'btn tiny ghost', 'data-video-add': 'true', onClick: () => addCustomVideo(ex_id) }, t('video_add_short')),
-    h('button', { class: 'btn tiny ghost', 'data-add-exercise': 'true', onClick: () => showAddExerciseModal() }, t('add_exercise_button')),
-    // "وزن الجهاز فقط" now lives in the per-exercise settings sheet, with the
-    // rest of what belongs to this one movement. It is a once-per-exercise
-    // decision, not a per-set action, so it was the odd one out in a row of
-    // things he taps between sets. Not removed — relocated, one tap away on the
-    // gear, next to the machine it describes.
-  );
-  body.appendChild(actions);
+  // The per-set row is empty now. Everything that used to sit here — + مجموعة,
+  // راحة, استبدال, تخطي التمرين, + فيديو, + تمرين, وزن الجهاز فقط — belongs to
+  // the EXERCISE, not to the set he is in the middle of, and it now lives in
+  // the settings sheet behind the gear. Raed asked for the row under the sets to
+  // be clear of them. Nothing was removed; it is one tap away, grouped by what
+  // each control actually is.
+  //
+  // The gear in the card header is the way in, and the header still collapses
+  // on tap, so the row costs nothing to reach.
 
   card.appendChild(body);
   return card;
@@ -3280,16 +3314,10 @@ function appendExerciseToSession(exerciseId) {
 }
 
 
-// The per-exercise settings sheet. Everything specific to ONE movement lives
-// here — what it is performed on, which machine, whether the load is the
-// machine's own, and what to swap it for — instead of being spread across a row
-// of seven small buttons under the sets.
-
 // The last few sessions for one movement, newest first, each labelled with the
-// machine it was performed on. Raed: "تضغط زر يوريك آخر وزن شلته هنا، كم
-// العداد، يوريك إياها بجدول بسيط". Deliberately every device, not just the
-// selected one — the point of the table is to SEE the difference between
-// machines, which is exactly what the per-device history hides while training.
+// machine it was performed on. Deliberately every device, not just the selected
+// one — the table exists to SHOW the difference between machines, which is
+// exactly what the per-device history correctly hides while training.
 function exerciseHistoryRows(exerciseId, limit = 6) {
   const rows = [];
   for (let i = state.history.length - 1; i >= 0 && rows.length < limit; i--) {
@@ -3310,117 +3338,173 @@ function exerciseHistoryRows(exerciseId, limit = 6) {
   return rows;
 }
 
+// The per-exercise settings sheet.
+//
+// Everything that belongs to ONE movement lives here. Raed asked for it to be
+// designed properly — "neat, جميل, مرتب" — and the reason a flat stack of rows
+// would fail is that these controls are not the same KIND of thing:
+//
+//   الجهاز    what this movement is performed on. Configuration, set once.
+//   السجل     what he has actually lifted here. Evidence, read-only.
+//   إجراءات   things he can do to this exercise right now. Verbs.
+//
+// The sheet is structured in that order because it is true of the content, not
+// because three sections look tidy. Configuration is what he changes rarely and
+// wants to confirm; the record is what he opens the sheet to READ mid-workout;
+// the verbs are what he came to press.
+//
+// The table is the signature. It is the only surface in the app that shows one
+// movement across different machines side by side, which is the whole point of
+// remembering the machine — a weight history that mixes them is a history of
+// nothing. So it gets real typographic care: a header, tabular numerals, the
+// load dominant, the machine a quiet tag.
 function showExerciseSettings(ex_id, exState) {
   const actualId = exState.swapped_to || ex_id;
   const ex = getAllExercises().find((e) => e.id === actualId);
+  const planned = exState.planned;
   const prefs = exercisePrefs(actualId);
   const modal = $('#modal');
   modal.innerHTML = '';
 
+  const close = () => $('#modal-overlay').classList.remove('show');
   const reopen = () => { render(); showExerciseSettings(ex_id, exState); };
+  const closeThen = (fn) => { close(); fn(); };
 
-  modal.appendChild(h('div', { class: 'sheet-head' },
-    h('h3', {}, t('exercise_settings')),
-    h('div', { class: 'tiny muted' }, h('bdi', { class: 'ltr-run' }, ex?.name || actualId)),
+  // ---- header: the movement, and the machine it is on -------------------
+  modal.appendChild(h('div', { class: 'xs-head' },
+    h('h3', {}, h('bdi', { class: 'ltr-run' }, ex?.name || actualId)),
+    h('div', { class: 'xs-sub' },
+      prefs.device
+        ? h('bdi', { class: 'ltr-run' }, prefs.device)
+        : t('no_device_yet')),
   ));
 
-  // --- equipment kind ----------------------------------------------------
-  modal.appendChild(h('div', { class: 'sheet-section' },
-    h('div', { class: 'sheet-label' }, t('equipment_kind')),
-    // Chips, not a segmented control. Five options do not fit one row at 390px,
-    // and a wrapping .seg left an empty cell on the first line and a stranded
-    // button on the second. Chips wrap by design, and they match the device row
-    // directly below — one vocabulary in one sheet.
-    h('div', { class: 'device-chips', role: 'group', 'aria-label': t('equipment_kind') },
-      EQUIPMENT_KINDS.map((kind) => h('button', {
-        type: 'button',
-        class: 'chip' + (prefs.equipment === kind ? ' active' : ''),
-        'aria-pressed': prefs.equipment === kind ? 'true' : 'false',
-        onClick: () => {
-          prefs.equipment = prefs.equipment === kind ? '' : kind;
-          saveLocal(); reopen();
-        },
-      }, t('equip_' + kind)))
-    ),
-  ));
+  // ---- 1. الجهاز — configuration ----------------------------------------
+  const kindSelect = h('select', {
+    'data-equipment-kind': 'true',
+    'aria-label': t('equipment_kind'),
+    onChange: (e) => { prefs.equipment = e.target.value; saveLocal(); reopen(); },
+  },
+    h('option', { value: '' }, t('equipment_unset')),
+    EQUIPMENT_KINDS.map((kind) => h('option',
+      prefs.equipment === kind ? { value: kind, selected: 'selected' } : { value: kind },
+      t('equip_' + kind))),
+  );
 
-  // --- which machine -----------------------------------------------------
   const deviceInput = h('input', {
     type: 'text', class: 'search-input', maxLength: 40,
     placeholder: t('device_placeholder'), value: prefs.device || '',
   });
-  const commitDevice = () => { rememberDevice(actualId, deviceInput.value); reopen(); };
-  modal.appendChild(h('div', { class: 'sheet-section' },
-    h('div', { class: 'sheet-label' }, t('which_device')),
-    h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' }, t('which_device_hint')),
-    prefs.known_devices.length ? h('div', { class: 'device-chips' },
-      prefs.known_devices.map((name) => h('button', {
-        type: 'button',
-        class: 'chip' + (prefs.device === name ? ' active' : ''),
-        onClick: () => { prefs.device = prefs.device === name ? '' : name; saveLocal(); reopen(); },
-      }, h('bdi', { class: 'ltr-run' }, name)))
-    ) : null,
-    h('div', { class: 'card-row', style: 'margin-top:8px;' },
-      deviceInput,
-      h('button', { class: 'btn primary', onClick: commitDevice }, t('save')),
-    ),
-  ));
 
-  // --- machine-weight-only -----------------------------------------------
-  modal.appendChild(h('div', { class: 'sheet-section' },
-    h('div', { class: 'setting-row', style: 'padding:0;' },
-      h('div', { class: 'label' },
-        h('div', { class: 'name' }, t('machine_weight_only')),
-        h('div', { class: 'desc' }, t('machine_weight_hint')),
-      ),
+  modal.appendChild(h('section', { class: 'xs-section' },
+    h('div', { class: 'xs-label' }, t('equipment_section')),
+    // A dropdown, at his request: five kinds wrapped badly as chips, and this is
+    // a single-choice field with a stable list — exactly what a select is for.
+    h('div', { class: 'xs-field' }, kindSelect),
+    prefs.known_devices.length
+      ? h('div', { class: 'device-chips', 'data-known-devices': 'true' },
+          prefs.known_devices.map((name) => h('button', {
+            type: 'button',
+            class: 'chip' + (prefs.device === name ? ' active' : ''),
+            onClick: () => { prefs.device = prefs.device === name ? '' : name; saveLocal(); reopen(); },
+          }, h('bdi', { class: 'ltr-run' }, name))))
+      : null,
+    h('div', { class: 'xs-add-device' },
+      deviceInput,
       h('button', {
-        class: 'btn tiny' + (exState.machine_weight ? ' primary' : ''),
-        'data-machine-weight': 'true',
-        'aria-pressed': exState.machine_weight ? 'true' : 'false',
-        onClick: () => {
+        class: 'btn primary',
+        onClick: () => { rememberDevice(actualId, deviceInput.value); reopen(); },
+      }, t('save')),
+    ),
+    // Small and quiet: a once-per-exercise fact about the equipment, not an
+    // action. It sits with the machine it describes.
+    h('label', { class: 'xs-toggle' },
+      h('input', {
+        type: 'checkbox', 'data-machine-weight': 'true',
+        ...(exState.machine_weight ? { checked: 'checked' } : {}),
+        onChange: () => {
           exState.machine_weight = !exState.machine_weight;
           if (exState.machine_weight) {
             for (const set of exState.sets) if (!set.is_warmup && !set.completed) set.weight = 0;
           }
           saveLocal(); reopen();
         },
-      }, exState.machine_weight ? t('on') : t('off')),
+      }),
+      h('span', {}, t('machine_weight_only_short')),
     ),
   ));
 
-  // --- what he has actually lifted here ----------------------------------
-  const historyRows = exerciseHistoryRows(actualId);
-  modal.appendChild(h('div', { class: 'sheet-section' },
-    h('div', { class: 'sheet-label' }, t('exercise_log')),
-    historyRows.length
-      ? h('div', { class: 'mini-log', 'data-exercise-log': 'true' },
-          historyRows.map((row) => h('div', { class: 'mini-log-row' },
-            h('span', { class: 'mini-log-date' }, fmtDate(row.date)),
-            h('span', { class: 'mini-log-load' },
-              // NOT fmtKgTotal — that rounds to whole kilos, which is right for a
-              // weekly tonnage and wrong for a load he actually lifted: 57.5 kg
-              // was being shown back to him as 58.
+  // ---- 2. السجل — evidence ----------------------------------------------
+  const rows = exerciseHistoryRows(actualId, 3);
+  modal.appendChild(h('section', { class: 'xs-section' },
+    h('div', { class: 'xs-label' }, t('exercise_log')),
+    rows.length
+      ? h('table', { class: 'xs-log', 'data-exercise-log': 'true' },
+          h('thead', {}, h('tr', {},
+            h('th', {}, t('log_col_date')),
+            h('th', {}, t('log_col_best')),
+            h('th', {}, t('log_col_sets')),
+            h('th', {}, t('log_col_device')),
+          )),
+          h('tbody', {}, rows.map((row) => h('tr', {},
+            h('td', { class: 'xs-log-date' }, fmtDateShort(row.date)),
+            h('td', { class: 'xs-log-load' },
               h('bdi', { class: 'ltr-run' }, `${fmtLoadKg(row.topWeight)} × ${row.topReps}`)),
-            h('span', { class: 'mini-log-sets' }, tf('n_sets', { n: row.sets })),
-            row.device
-              ? h('span', { class: 'mini-log-device' }, h('bdi', { class: 'ltr-run' }, row.device))
-              : null,
-          )))
-      : h('div', { class: 'tiny muted' }, t('exercise_log_empty')),
+            h('td', { class: 'xs-log-sets' }, h('bdi', { class: 'ltr-run' }, String(row.sets))),
+            h('td', { class: 'xs-log-device' },
+              row.device ? h('bdi', { class: 'ltr-run' }, row.device) : '—'),
+          ))),
+        )
+      : h('div', { class: 'xs-empty' }, t('exercise_log_empty')),
   ));
 
-  // --- substitution ------------------------------------------------------
-  modal.appendChild(h('div', { class: 'sheet-section' },
-    h('div', { class: 'sheet-label' }, t('swap')),
-    h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' }, t('swap_from_settings_hint')),
-    h('button', { class: 'btn full', onClick: () => showAltModal(ex_id, exState) }, t('open_swap_list')),
+  // ---- 3. إجراءات — verbs ------------------------------------------------
+  const rest = prescribedRestSeconds(planned);
+  modal.appendChild(h('section', { class: 'xs-section' },
+    h('div', { class: 'xs-label' }, t('actions_section')),
+    // One button, straight to the list. He asked for exactly this: "لا أبغاك
+    // ترتبها تكون زر واحد استبدال وعلى طول" — no paragraph explaining it.
+    h('button', {
+      class: 'btn primary full xs-primary', 'data-open-swap': 'true',
+      onClick: () => closeThen(() => showAltModal(ex_id, exState)),
+    }, t('swap')),
+    h('div', { class: 'xs-grid' },
+      h('button', {
+        class: 'btn xs-action', 'data-add-set': 'true',
+        onClick: () => {
+          const lastWorking = [...exState.sets].reverse().find((set) => !set.is_warmup);
+          // Marked beyond-plan so the card never implies the programme asked for it.
+          exState.sets.push({ is_warmup: false, is_extra: true, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
+          saveLocal(); close(); render();
+        },
+      }, t('add_set')),
+      rest > 0
+        ? h('button', {
+            class: 'btn xs-action', 'data-rest-button': 'true',
+            onClick: () => closeThen(() => startRest(rest)),
+          }, tf('rest_seconds', { seconds: `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}` }))
+        // A prescribed zero is an instruction to go straight into the paired
+        // movement, not a short rest. Offering a 0:00 timer would be absurd.
+        : h('span', { class: 'btn xs-action is-static', 'data-no-rest': 'true' }, t('no_rest_superset')),
+      h('button', {
+        class: 'btn xs-action', 'data-video-add': 'true',
+        onClick: () => closeThen(() => addCustomVideo(ex_id)),
+      }, t('video_add_short')),
+      h('button', {
+        class: 'btn xs-action', 'data-add-exercise': 'true',
+        onClick: () => closeThen(() => showAddExerciseModal()),
+      }, t('add_exercise_button')),
+    ),
+    // Skipping ends this movement for the session. It is the one destructive
+    // thing in the sheet, so it sits apart from the grid rather than beside
+    // "+ set" at the same weight.
+    h('button', {
+      class: 'btn danger ghost full xs-skip', 'data-runner-skip-exercise': 'true',
+      onClick: () => closeThen(() => skipRunnerExercise(ex_id)),
+    }, t('runner_skip_exercise')),
   ));
 
-  modal.appendChild(h('button', {
-    class: 'btn primary full', style: 'margin-top:14px;',
-    onClick: () => $('#modal-overlay').classList.remove('show'),
-  }, t('done')));
-
+  modal.appendChild(h('button', { class: 'btn full xs-done', onClick: close }, t('done')));
   $('#modal-overlay').classList.add('show');
 }
 

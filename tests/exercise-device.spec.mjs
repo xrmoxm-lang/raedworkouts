@@ -86,7 +86,18 @@ test('the settings sheet opens from the exercise card', async ({ page }) => {
   await page.locator('#ex-chest_press_machine [data-exercise-settings]').first().click();
   await page.waitForTimeout(500);
   await expect(page.locator('#modal-overlay.show')).toHaveCount(1);
-  await expect(page.locator('#modal')).toContainText('إعدادات التمرين');
+  // The heading is the movement itself, not a generic "settings" label — the
+  // sheet is about this exercise and says so.
+  await expect(page.locator('#modal .xs-head h3')).toContainText('Chest Press Machine');
+  // The three sections the sheet is built around: what it is performed on,
+  // what he has lifted here, and what he can do now.
+  await expect(page.locator('#modal')).toContainText('الجهاز');
+  await expect(page.locator('#modal [data-exercise-log]')).toBeVisible();
+  await expect(page.locator('#modal [data-open-swap]')).toBeVisible();
+  // Everything that used to crowd the per-set row is reachable here.
+  for (const handle of ['data-add-set', 'data-video-add', 'data-add-exercise', 'data-runner-skip-exercise', 'data-machine-weight']) {
+    await expect(page.locator(`#modal [${handle}]`), handle).toHaveCount(1);
+  }
 });
 
 test('the sheet shows what he has lifted here, per machine', async ({ page }) => {

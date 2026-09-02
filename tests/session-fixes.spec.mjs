@@ -7,6 +7,18 @@ const appUrl = process.env.APP_URL || 'http://localhost:8877';
 // back coordinates the mouse can never reach and a swipe silently does nothing.
 test.use({ viewport: { width: 390, height: 1300 } });
 
+// Controls that belong to the EXERCISE rather than to a set now live in the
+// per-exercise settings sheet behind the gear in the card header. Same
+// behaviour, one tap further in.
+async function openExerciseSheet(page) {
+  await page.locator('#page-home .ex.expanded [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+}
+async function closeExerciseSheet(page) {
+  await page.locator('#modal .xs-done').click();
+  await page.waitForTimeout(400);
+}
+
 async function intoSession(page) {
   await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
   await page.goto(appUrl, { waitUntil: 'networkidle' });
@@ -69,12 +81,21 @@ test('the superset pair is announced on the first movement, and the rest timer o
 
   const seen = [];
   for (let i = 0; i < 8; i += 1) {
-    seen.push(await page.evaluate(() => ({
-      name: document.querySelector('#page-home .ex.expanded h4')?.textContent.trim(),
-      superset: document.querySelector('[data-superset]')?.textContent.trim() || null,
-      rest: document.querySelector('[data-rest-button]')?.textContent.trim() || null,
-      noRest: Boolean(document.querySelector('[data-no-rest]')),
-    })));
+    // The rest control moved into the per-exercise sheet along with everything
+    // else that belongs to the exercise rather than to a set, so the
+    // prescription has to be read from there now. The superset note stays on
+    // the card: it describes the pairing, which he needs to see while lifting.
+    const superset = await page.evaluate(() => document.querySelector('[data-superset]')?.textContent.trim() || null);
+    const name = await page.evaluate(() => document.querySelector('#page-home .ex.expanded h4')?.textContent.trim());
+    await openExerciseSheet(page);
+    seen.push({
+      name, superset,
+      ...(await page.evaluate(() => ({
+        rest: document.querySelector('#modal [data-rest-button]')?.textContent.trim() || null,
+        noRest: Boolean(document.querySelector('#modal [data-no-rest]')),
+      }))),
+    });
+    await closeExerciseSheet(page);
     const moved = await page.evaluate(() => {
       const next = [...document.querySelectorAll('button')].find((el) => /التمرين التالي/.test(el.textContent));
       if (!next) return false;
@@ -113,7 +134,8 @@ test('the superset pair is announced on the first movement, and the rest timer o
 test('a set added with + is marked beyond-plan', async ({ page }) => {
   await intoSession(page);
   const before = await page.locator('[data-session-set-row]').count();
-  await page.locator('.ex-actions button').first().click(); // + مجموعة
+  await openExerciseSheet(page);
+  await page.locator('#modal [data-add-set]').click();  // + مجموعة
   await page.waitForTimeout(600);
   await expect(page.locator('[data-session-set-row]')).toHaveCount(before + 1);
   // The prescribed sets must not be restyled — only the one he added.
@@ -129,7 +151,8 @@ test('adding an exercise appends it and replaces nothing', async ({ page }) => {
     return Object.keys(JSON.parse(localStorage[key]).active_session.exercises);
   });
   const before = await readSession();
-  await page.locator('[data-add-exercise]').first().click();
+  await openExerciseSheet(page);
+  await page.locator('#modal [data-add-exercise]').first().click();
   await page.waitForTimeout(600);
   const option = page.locator('[data-add-exercise-option]').first();
   const addedId = await option.getAttribute('data-add-exercise-option');
@@ -179,7 +202,9 @@ test('number inputs force Latin digits so no keyboard switch is needed', async (
 // These drive the real UI instead, which is the better test: it exercises the
 // swap button, the alternatives list and the scope modal exactly as Raed does.
 async function openSwap(page) {
-  await page.locator('.ex-actions button', { hasText: 'استبدال' }).first().click();
+  await openExerciseSheet(page);
+  await page.locator('#modal [data-open-swap]').click();
+  await page.waitForTimeout(400);
   await page.waitForTimeout(600);
 }
 
@@ -338,7 +363,9 @@ test('the home banner never prints the session name twice', async ({ page }) => 
 
 test('the volume-ledger verdict is Arabic, rebuilt from numbers not translated prose', async ({ page }) => {
   await intoSession(page);
-  await page.locator('.ex-actions button', { hasText: 'استبدال' }).first().click();
+  await openExerciseSheet(page);
+  await page.locator('#modal [data-open-swap]').click();
+  await page.waitForTimeout(400);
   await page.waitForTimeout(600);
   const option = page.locator('#modal .swap-option').first();
   test.skip(!(await option.count()), 'this exercise has no alternatives to swap to');
@@ -477,34 +504,61 @@ test('weekly volume reads the same on every device', async ({ page }) => {
   expect(volume.trim()).toMatch(/^\d{1,3}(,\d{3})*$/);
 });
 
-test('effort sits on the final set row and opens only when tapped', async ({ page }) => {
+test('the effort picker appears by itself when the second-to-last set is ticked', async ({ page }) => {
   await intoSession(page);
-  // One trigger, on the FINAL working set — not a full-width block under the
-  // sets, which Raed called crowding.
-  await expect(page.locator('[data-effort-trigger]')).toHaveCount(1);
+
+  // Raed removed the trigger button: "الزر الزائد هذا... ما يحتاج يكون ظاهر،
+  // لأنه هو أصلًا أوتوماتيك". A face whose only job is to open something that
+  // opens on its own is chrome, so there is no trigger to assert on any more.
+  await expect(page.locator('[data-effort-trigger]')).toHaveCount(0);
   await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(0);
 
-  await page.locator('[data-effort-trigger]').click();
-  await page.waitForTimeout(400);
+  // Ramp sets first — the app requires them before a working set can be ticked.
+  const ramps = page.locator('[data-set-kind="warmup"]');
+  for (let i = 0; i < await ramps.count(); i += 1) {
+    await ramps.nth(i).locator('.set-check').click();
+    await page.waitForTimeout(200);
+  }
+
+  // Tick every working set except the last. The picker must be open by then,
+  // because the last set is the one that needs it.
+  const working = page.locator('[data-set-kind="working"]');
+  const total = await working.count();
+  for (let i = 0; i < total - 1; i += 1) {
+    const row = working.nth(i);
+    await row.locator('input').nth(0).fill('40');
+    await row.locator('input').nth(1).fill('10');
+    await page.waitForTimeout(150);
+    await row.locator('.set-check').click();
+    await page.waitForTimeout(300);
+  }
+
+  await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(1);
   const faces = await page.locator('.effort-strip .effort-emoji').allTextContents();
   expect(faces.join('')).toBe('😌💪🥵');
 
   await page.locator('.effort-strip .effort-picker button').nth(1).click();
   await page.waitForTimeout(600);
-  // The chosen face moves onto the row, so the answer is visible without opening it.
-  await expect(page.locator('[data-effort-trigger]')).toHaveText('💪');
-  await expect(page.locator('[data-effort-trigger].chosen')).toHaveCount(1);
+  // The choice persists and the strip stays visible showing it.
+  await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(1);
 });
 
 test('a finished session shows the time it took, not the exercise card again', async ({ page }) => {
   await intoSession(page);
   await expect(page.locator('[data-session-done]')).toHaveCount(0);
 
+  // Skipping is a property of the exercise, so it lives in the settings sheet
+  // now. Each skip closes the sheet and advances, so the gear has to be reopened
+  // for the next one.
   for (let i = 0; i < 12; i += 1) {
-    const skip = page.locator('[data-runner-skip-exercise]');
+    const gear = page.locator('#page-home .ex.expanded [data-exercise-settings]');
+    if (!(await gear.count())) break;
+    await gear.first().click();
+    await page.waitForTimeout(400);
+    const skip = page.locator('#modal [data-runner-skip-exercise]');
     if (!(await skip.count())) break;
-    await skip.first().click();
-    await page.waitForTimeout(300);
+    await skip.click();
+    await page.waitForTimeout(400);
   }
   await page.waitForTimeout(600);
 
@@ -527,17 +581,13 @@ test('"machine weight only" removes the need to type a number at all', async ({ 
   await intoSession(page);
   const weight = page.locator('[data-set-kind="working"] [data-runner-weight-input]').first();
 
-  // "Machine weight only" moved into the per-exercise settings sheet: it is a
-  // once-per-exercise decision about the equipment, not a per-set action, so it
-  // sits with the machine it describes rather than in the row he taps between
-  // sets. Same behaviour, one tap further in.
-  await page.locator('#page-home .ex.expanded [data-exercise-settings]').first().click();
-  await page.waitForTimeout(500);
+  await openExerciseSheet(page);
   await expect(page.locator('[data-machine-weight]')).toHaveCount(1);
-  await page.locator('[data-machine-weight]').click();
-  await page.waitForTimeout(500);
-  await page.locator('#modal .btn.primary.full').last().click();  // close the sheet
-  await page.waitForTimeout(500);
+  // It is a checkbox now, not a button: a fact about the equipment rather than
+  // an action, so it reads as one.
+  await page.locator('[data-machine-weight]').check();
+  await page.waitForTimeout(400);
+  await closeExerciseSheet(page);
 
   // Raed: "ما أقدر، ما له رقم" — plenty of machines carry no number, and someone
   // new to the gym has nothing to type. The box says what it is instead.
@@ -733,7 +783,9 @@ test('a fresh profile still gets its prescribed ramp sets', async ({ page }) => 
 
 test('the swap sheet leads with the programme\'s own substitutes', async ({ page }) => {
   await intoSession(page);
-  await page.locator('.ex-actions button', { hasText: 'استبدال' }).first().click();
+  await openExerciseSheet(page);
+  await page.locator('#modal [data-open-swap]').click();
+  await page.waitForTimeout(400);
   await page.waitForTimeout(700);
   const offered = await page.locator('#modal .swap-option h4').allTextContents();
   test.skip(!offered.length, 'this exercise has no alternatives at all');

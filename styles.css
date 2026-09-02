@@ -724,8 +724,12 @@ body.runner-mode .page-runner.active {
    Arabic muscle tag still reads correctly inside an LTR row. */
 .plan-row .ex-info .meta { direction: rtl; justify-content: flex-end; }
 
-/* Per-exercise settings: the gear that replaced the collapse chevron, and the
-   sheet it opens. */
+/* ===== Per-exercise settings sheet =======================================
+   Three sections in the order the content actually has: what the movement is
+   performed on (configuration), what he has lifted on it (evidence), and what
+   he can do right now (verbs). The table is the signature — the only place in
+   the app showing one movement across different machines. */
+
 .ex-settings-btn {
   appearance: none; border: 1px solid var(--border); background: var(--bg-card);
   color: var(--text-muted); font-size: 16px; line-height: 1;
@@ -737,26 +741,91 @@ body.runner-mode .page-runner.active {
 .ex-settings-btn.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
 @media (hover: hover) { .ex-settings-btn:hover { border-color: var(--accent); color: var(--accent); } }
 
-/* The per-exercise log. A table would need a header row to be readable and
-   would then be mostly chrome for six rows; this is a list that happens to line
-   its columns up. Tabular numerals keep the loads aligned without a grid. */
-.mini-log { display: flex; flex-direction: column; gap: 2px; }
-.mini-log-row {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12.5px;
+/* The coach's session context. A band, not a card: it is a statement about
+   where he is, and it should not compete with the question box below it. */
+.coach-context {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px;
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px;
 }
-.mini-log-row:last-child { border-bottom: 0; }
-.mini-log-date { flex: 0 0 auto; color: var(--text-muted); min-width: 74px; }
-.mini-log-load { flex: 0 0 auto; font-weight: 750; font-variant-numeric: tabular-nums; }
-.mini-log-sets { flex: 0 0 auto; color: var(--text-muted); }
-/* The device name is an LTR run inside an RTL row, so `text-overflow: ellipsis`
-   clipped its START — "Hammer Strength" came back as "...mer Strength", losing
-   the word that identifies it. Let it wrap instead: a second line costs nothing
-   here and always shows the name that matters. */
-.mini-log-device {
-  flex: 1 1 auto; text-align: end; color: var(--text-muted);
-  min-width: 0; overflow-wrap: anywhere;
+.coach-context-text { font-size: 13px; font-weight: 700; color: var(--text); }
+.coach-context-label { color: var(--text-muted); font-weight: 600; }
+.coach-context-toggle {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--text-muted); cursor: pointer; min-height: 32px;
 }
+.coach-context-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.xs-head { margin: 0 0 4px; }
+.xs-head h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.xs-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+
+.xs-section { padding: 16px 0; border-top: 1px solid var(--border); }
+.xs-section:first-of-type { border-top: 0; padding-top: 10px; }
+/* The section label is the quietest thing on screen on purpose: it names the
+   group, then gets out of the way of the controls it names. */
+.xs-label {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
+}
+.xs-field select { min-height: 46px; font-size: 14px; font-weight: 600; }
+.xs-add-device { display: flex; gap: 8px; margin-top: 10px; }
+.xs-add-device .search-input { flex: 1 1 auto; min-width: 0; }
+.xs-add-device .btn { flex: 0 0 auto; }
+
+.device-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+  appearance: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 8px 12px; min-height: 40px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text);
+}
+.chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* A fact about the equipment, not an action — so a checkbox, not a button row. */
+.xs-toggle {
+  display: flex; align-items: center; gap: 10px; margin-top: 14px;
+  font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px;
+}
+.xs-toggle input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--accent); }
+
+/* The log. Tabular numerals so the loads line up as a column without a grid,
+   and the load is the only thing set in a heavy weight — it is what he opens
+   the sheet to read. */
+/* border-collapse with zero cell padding let the columns touch: the load ran
+   straight into the set count and three headers read as one word. Columns need
+   both a gap and a declared share of the width — otherwise the browser sizes
+   them from content and the longest date takes whatever it wants. */
+.xs-log { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+.xs-log th, .xs-log td { padding-inline-end: 10px; }
+.xs-log th:last-child, .xs-log td:last-child { padding-inline-end: 0; }
+.xs-log th {
+  text-align: start; font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-muted);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.xs-log td { padding-top: 11px; padding-bottom: 11px; border-bottom: 1px solid var(--border); vertical-align: baseline; }
+.xs-log tr:last-child td { border-bottom: 0; }
+.xs-log th:nth-child(1), .xs-log-date   { width: 22%; }
+.xs-log th:nth-child(2), .xs-log-load   { width: 30%; }
+.xs-log th:nth-child(3), .xs-log-sets   { width: 12%; }
+.xs-log th:nth-child(4), .xs-log-device { width: 36%; }
+.xs-log th:nth-child(4) { text-align: end; }
+.xs-log-date { color: var(--text-muted); white-space: nowrap; }
+.xs-log-load { font-weight: 800; font-size: 14.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.xs-log-sets { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.xs-log-device { color: var(--text-muted); text-align: end; overflow-wrap: anywhere; }
+.xs-empty { font-size: 12.5px; color: var(--text-muted); }
+
+.xs-primary { margin-bottom: 10px; }
+.xs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.xs-action { min-height: 48px; font-size: 12.5px; font-weight: 650; }
+.xs-action.is-static { display: flex; align-items: center; justify-content: center; opacity: 0.7; cursor: default; }
+.xs-skip { margin-top: 14px; }
+.xs-done { margin-top: 18px; min-height: 48px; }
+
+
 
 .sheet-head { margin-bottom: 4px; }
 .sheet-head h3 { margin: 0 0 2px; }

@@ -44,7 +44,11 @@ test('a non-YouTube link is refused rather than stored as a broken video', async
     seen.push(dialog.type());
     return dialog.type() === 'prompt' ? dialog.accept('https://vimeo.com/12345') : dialog.accept();
   });
-  await page.locator('[data-video-add]').first().click();
+  // "+ فيديو" moved into the per-exercise settings sheet with the rest of what
+  // belongs to the movement rather than to a set.
+  await page.locator('#page-home .ex.expanded [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('#modal [data-video-add]').first().click();
   await page.waitForTimeout(600);
 
   const stored = await page.evaluate(() => {
@@ -63,7 +67,11 @@ test('a real YouTube link is added and shows up as a tile', async ({ page }) => 
 
   const before = await page.locator('.video-row a, .video-row .video-thumb-wrap').count();
   page.once('dialog', (dialog) => dialog.accept('https://www.youtube.com/shorts/dQw4w9WgXcQ'));
-  await page.locator('[data-video-add]').first().click();
+  // "+ فيديو" moved into the per-exercise settings sheet with the rest of what
+  // belongs to the movement rather than to a set.
+  await page.locator('#page-home .ex.expanded [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('#modal [data-video-add]').first().click();
   await page.waitForTimeout(800);
 
   const stored = await page.evaluate(() => {
