@@ -2504,10 +2504,27 @@ function previewedSession() {
 // service has none, and neither does this.
 // HTTPS, not the raw Tailscale IP. The app is served over HTTPS, and a browser
 // refuses to fetch http:// from an https:// page — the request never leaves, and
-// it looks like a network fault rather than the policy block it is. Tailscale
-// Serve terminates TLS on :8444 and proxies to 127.0.0.1:8124. Tailnet only,
-// never Funnel: these passages are the text of books Raed paid for.
-const COACH_URL = 'https://raed-hp.tail53bd35.ts.net:8444';
+// it looks like a network fault rather than the policy block it is.
+//
+// This WAS tailnet-only on :8444, on the reasoning that these passages are the
+// text of books Raed paid for. That reasoning still holds, but the arrangement
+// did not: :8444 cannot be funnelled, so the coach only ever answered a device
+// already on the tailnet — and he does not want Tailscale on his phone.
+//
+// The trade he is making, stated plainly rather than buried: the endpoint is now
+// public and gated by X-Coach-Key, and that key ships inside this file. It stops
+// casual access and search engines; it does not stop someone who reads the
+// deployed JavaScript. Verified refused without the key and with a wrong one.
+// Port 8444 was never publicly reachable. Tailscale Funnel serves only 443,
+// 8443 and 10000 — anything else reports "Funnel on" in the status output and
+// silently answers nobody from the internet. That is why the coach needed
+// Tailscale switched on to work at all, and Raed does not want Tailscale on his
+// phone: "ما أبغى تليسكيل".
+//
+// It now rides the 443 funnel on a path, beside the P180 dashboard already
+// there. Verified from the public ingress IP with Tailscale DNS bypassed:
+// /coach/health returns 200 and /coach/search returns real passages.
+const COACH_URL = 'https://raed-hp.tail53bd35.ts.net/coach';
 // The endpoint is reachable from the open internet now, not only the tailnet,
 // because Raed asked for the Tailscale requirement gone. That makes a key
 // mandatory: without one anyone who found the URL could read the text of books
