@@ -340,6 +340,7 @@ export const LOCALE = Object.freeze({
   block_name_peak: pair('peak intensity', 'الذروة'),
   block_name_new: pair('new block', 'مرحلة جديدة'),
   sync_connection_failed: pair('Connection failed — {reason}', 'فشل الاتصال — {reason}'),
+  theme_toggle_label: pair('Appearance: {mode} — tap to change', 'المظهر: {mode} — اضغط للتغيير'),
   sync_connected: pair('Connected', 'الاتصال ناجح'),
   sync_pulled: pair('Pulled from cloud', 'جُلبت من السحابة'),
   welcome: pair('👋 Welcome', '👋 أهلاً'),

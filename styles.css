@@ -154,7 +154,10 @@ input, button, textarea, select { font-family: inherit; }
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast), border-color var(--dur-fast);
 }
-.theme-toggle { padding: 0 13px; height: 38px; font-weight: 600; }
+/* The theme control is now icon-only (Raed asked for the word to go), so it is
+   the same 38x38 square as the gym button beside it. One shape for both header
+   controls instead of a pill and a square sharing a row. */
+.theme-toggle { width: 38px; height: 38px; padding: 0; }
 .header-btn { width: 38px; height: 38px; padding: 0; font-size: 16px; line-height: 1; }
 .header-btn svg, .theme-toggle svg { width: 18px; height: 18px; display: block; flex-shrink: 0; }
 .header-btn:active, .theme-toggle:active { transform: scale(0.93); }
@@ -451,8 +454,8 @@ body.runner-mode .page-runner.active {
 .cue strong { color: var(--text); font-weight: 650; }
 /* warmup → warning-tinted */
 .warmup-block {
-  background: var(--warning-soft); border: 1px solid transparent;
-  border-left: 3px solid var(--warning);
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, transparent);
   color: color-mix(in srgb, var(--warning) 62%, var(--text)); font-size: 13px;
 }
 .warmup-block strong { color: var(--warning); font-weight: 650; }
@@ -506,16 +509,32 @@ body.runner-mode .page-runner.active {
   color: color-mix(in srgb, var(--good) 72%, var(--text));
 }
 .set-grid.done .set-num { color: var(--good); }
+/* The "set done" control. Previously a rounded square containing the text glyph
+   '○' — a ~22px character adrift in a 48px box, which read as an icon rather
+   than a control. The ring is now the button itself, so the entire tap target
+   looks like the target. This is the app's most repeated action: roughly 35
+   taps in a session, one-handed, standing at a machine. */
 .set-check {
   width: var(--tap); height: var(--tap);
-  border: 2px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border: 2.5px solid var(--border-strong);
+  border-radius: 50%;
   background: transparent;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 19px; line-height: 1;
-  color: var(--text-muted);
+  cursor: pointer; font-size: 24px; font-weight: 700; line-height: 1;
+  color: var(--accent-fg);
   transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
 }
+/* A ramp set is a warm-up, not a result. It stays fully legible and tappable —
+   the row is still real work — but it must not compete with the sets that
+   count. The old treatment faded the entire row with an inline opacity, which
+   dimmed the number and the inputs equally and made the ramp look disabled. */
+.set-grid.warm .set-check { border-width: 2px; border-color: var(--border); }
+.set-grid.warm .set-num { font-weight: 600; opacity: 0.75; font-size: 0.92em; }
+/* Not `background: transparent` — tried it, and stripping the fill turned the
+   ramp inputs into outlined boxes that stood out MORE than the filled working
+   rows. The de-emphasis has to come from the number and the ring, not from
+   removing the fill that groups the row together. */
+.set-grid.warm input { opacity: 0.82; }
 .set-check:active { transform: scale(0.9); }
 .set-check.checked {
   background: var(--accent); color: var(--accent-fg);
@@ -553,8 +572,7 @@ body.runner-mode .page-runner.active {
 /* General warm-up is a real, ordered session phase. */
 .warmup-phase {
   background: var(--warning-soft);
-  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
-  border-left: 3px solid var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 52%, var(--border));
 }
 .phase-kicker { color: var(--warning); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
 .warmup-phase h3 { margin: 6px 0; }
@@ -641,14 +659,42 @@ body.runner-mode .page-runner.active {
   background: var(--accent); color: var(--accent-fg);
 }
 
+/* "Discard session" sits immediately under "Finish and save" at the same full
+   width. Both are reachable by the same thumb, mid-session, on a wet phone, and
+   one of them throws the workout away. A confirm() catches the slip, but the
+   layout should not invite it: give the destructive action real separation so
+   it is a deliberate reach rather than the next thing down. */
+.btn.danger.ghost.full { margin-top: 22px; }
+
 .ex-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+/* These are tapped mid-set, one-handed, standing at a machine. The shared
+   .btn.tiny is 32px high, which is fine in a settings panel and too small here;
+   44px is the floor for a thumb and this context deserves the floor, not the
+   shared default. Scoped to the session card so quiet tiny buttons elsewhere
+   keep their density. */
+.ex-actions .btn.tiny { min-height: 44px; padding: 8px 14px; font-size: 12.5px; }
+/* The rest timer is the one control here that runs every single set. It read
+   identically to "+ exercise", which he taps almost never. Frequency should be
+   visible. */
+.ex-actions [data-rest-button] {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  /* NOT var(--accent) on this tint: measured 1.71:1 in ورق dark and ~4.05:1 in
+     both حديد themes — three of six skins below the 4.5 floor, and the contrast
+     linter passed the whole time because it does not know this pairing. The
+     tint carries the emphasis; the ink stays readable. */
+  color: var(--text);
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .ex-actions [data-rest-button]:hover { border-color: var(--accent); }
+}
 .scope-picker { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0; }
 .substitution-status { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin: 10px 0; }
 .substitution-status.clean { border-color: color-mix(in srgb, var(--good) 55%, var(--border)); color: var(--good); }
 .substitution-status.warn {
   background: var(--warning-soft);
-  border-color: color-mix(in srgb, var(--warning) 60%, var(--border));
-  border-left: 3px solid var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 72%, var(--border));
   color: var(--warning);
 }
 .substitution-status.block-with-override { border-color: color-mix(in srgb, var(--danger) 60%, var(--border)); color: var(--danger); }
@@ -925,7 +971,7 @@ body.runner-mode .page-runner.active {
 /* ===== Onboarding / Help ================================= */
 .onboard h2 { font-size: 18px; margin: 18px 0 5px; letter-spacing: -0.01em; }
 .onboard p { color: var(--text-muted); font-size: 14px; }
-.onboard ol, .onboard ul { color: var(--text-muted); font-size: 14px; padding-left: 20px; }
+.onboard ol, .onboard ul { color: var(--text-muted); font-size: 14px; padding-inline-start: 20px; }
 .onboard li { margin: 7px 0; }
 .onboard code { background: var(--bg-elev); padding: 2px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
@@ -1241,9 +1287,19 @@ body.welcome-mode main {
   border-radius: var(--radius); box-shadow: var(--shadow-sm); color: var(--text); font-weight: 750;
 }
 .settings-disclosure > summary::-webkit-details-marker { display: none; }
-.settings-disclosure > summary::before { content: '‹'; margin-inline-end: 10px; color: var(--text-muted); font-size: 20px; }
+/* '‹' (U+2039) is a bidi-MIRRORED character: in this RTL layout it rendered as
+   '›', pointing away from the content it opens, and [open] rotated it to point
+   up. Closed-sideways/open-up is not an accordion in any direction.
+   A down chevron that flips to up is direction-neutral — nothing to mirror, and
+   it reads the same to anyone: "more below" / "collapse". */
+.settings-disclosure > summary::before {
+  content: '⌄'; margin-inline-end: 10px; color: var(--text-muted);
+  font-size: 22px; font-weight: 700; line-height: 0.7;
+  display: inline-block; vertical-align: 0.18em;
+  transition: transform var(--dur) var(--ease-out);
+}
 .settings-disclosure[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.settings-disclosure[open] > summary::before { transform: rotate(-90deg); }
+.settings-disclosure[open] > summary::before { transform: rotate(180deg); }
 .settings-disclosure > .card { margin: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
 
 /* ============================================================
@@ -1328,9 +1384,15 @@ body.welcome-mode main {
 }
 
 /* The two lines that tell Raed what the plan actually wants from him. */
+/* A standing rule, not news. It shows on every exercise of every session, and
+   it was the loudest thing on the card: accent-tinted and bold, out-shouting
+   the calibration note above it, which is the one that only appears when
+   something is actually unusual. Reference information should recede once it
+   has been read the first twenty times. */
 .reps-goal {
   margin-top: 8px; padding: 6px 9px; border-radius: var(--radius-sm);
-  background: var(--accent-soft); color: var(--text); font-weight: 700;
+  background: var(--bg-elev); color: var(--text-muted);
+  font-weight: 600; font-size: 12.5px;
 }
 .superset-note {
   margin-top: 6px; padding: 6px 9px; border-radius: var(--radius-sm);

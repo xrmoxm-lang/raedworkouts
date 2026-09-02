@@ -1363,7 +1363,15 @@ function applyTheme() {
       dark: S + '<path d="M20 13.2A7.5 7.5 0 1 1 10.8 4a6 6 0 0 0 9.2 9.2z"/></svg>',
       light: S + '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>',
     };
-    tt.innerHTML = (icons[mode] || icons.auto) + '<span>' + t(mode) + '</span>';
+    // Raed: "كلمة التلقائي فوق، شيلها". The word is gone; the icon carries the
+    // meaning, and the button now matches the gym button beside it instead of
+    // being the one odd pill in the header. The label moves to aria-label/title
+    // rather than disappearing — the text WAS this button's accessible name, so
+    // dropping it silently would leave a nameless control for VoiceOver.
+    const modeName = t(mode);
+    tt.innerHTML = icons[mode] || icons.auto;
+    tt.setAttribute('aria-label', tf('theme_toggle_label', { mode: modeName }));
+    tt.setAttribute('title', tf('theme_toggle_label', { mode: modeName }));
   }
 }
 function cycleTheme() {
@@ -2732,7 +2740,7 @@ function renderHome() {
     }
     if (a.phase === 'warmup' && a.warmup) {
       root.appendChild(renderWarmupPhase(a));
-      root.appendChild(h('button', { class: 'btn danger ghost full', style: 'margin-top:12px;', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')));
+      root.appendChild(h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')));
       return;
     }
 
@@ -2958,8 +2966,7 @@ function renderExerciseCard(ex_id, exState) {
     const workingSets = exState.sets.filter((item) => !item.is_warmup);
     const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
     const row = h('div', {
-      class: 'set-grid' + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : '') + (set.is_extra ? ' extra' : ''),
-      style: isWarm ? 'opacity:0.7;' : '',
+      class: 'set-grid' + (isWarm ? ' warm' : '') + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : '') + (set.is_extra ? ' extra' : ''),
       'data-session-set-row': String(idx),
       'data-set-kind': isWarm ? 'warmup' : 'working',
     },
@@ -3020,7 +3027,7 @@ function renderExerciseCard(ex_id, exState) {
             if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
           }
         }
-      }, set.skipped ? '↷' : set.completed ? '✓' : '○'),
+      }, set.skipped ? '↷' : set.completed ? '✓' : ''),
     );
     if (isFinalWorkingSet) {
       // Raed: "ليش ما تحطها بشكل أنظف جنب الجلسة الأخيرة؟ ليش حاطها تحت، كأن
