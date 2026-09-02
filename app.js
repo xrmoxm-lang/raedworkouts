@@ -558,6 +558,11 @@ const defaultState = () => ({
   last_sync: null,
   forced_next_session: null,   // session id override when user missed a day
   substitutions: [],           // explicit, scoped D24 §5 substitution records
+  // Per-exercise equipment memory. Raed does leg press on a different machine
+  // depending on which is free, and 60 kg on one is not 60 kg on another — so
+  // the machine has to be part of the record, not a note he keeps in his head.
+  // { exercise_id: { equipment, device, known_devices: [] } }
+  exercise_prefs: {},
 });
 
 const defaultSettings = () => ({
@@ -1459,21 +1464,64 @@ function getNextPlannedSession() {
 
 // ---- Smart suggestions -------------------------------------
 function getLastPerformance(exercise_id) {
-  // Find the most recent session that included this exercise
-  for (let i = state.history.length - 1; i >= 0; i--) {
-    const h = state.history[i];
-    const ex = h.exercises[exercise_id];
-    if (ex?.sets?.some(isCountableWorkingSet)) return { date: h.date, ...ex };
-  }
-  return null;
+  // Delegates rather than duplicating. This used to be its own scan of
+  // state.history, so when the lookup became device-aware the card kept reading
+  // the newest session on ANY machine while the weight suggestion read the
+  // right one — the two rules drifted the moment one of them changed. Same bug
+  // shape as the two copies of the set-validity rule before it.
+  return getLastTwoPerformances(exercise_id)[0] || null;
 }
-function getLastTwoPerformances(exercise_id) {
-  const out = [];
-  for (let i = state.history.length - 1; i >= 0 && out.length < 2; i--) {
-    const ex = state.history[i].exercises[exercise_id];
-    if (ex?.sets?.some(isCountableWorkingSet)) out.push({ date: state.history[i].date, ...ex });
+
+// ---- Per-exercise equipment memory --------------------------------------
+// Raed: "إذا تستعمل machine ولا plates ولا dumbbells... إنت جالس تسوي leg press
+// لكن على different devices each time، فأنت تلقى الـdevice وهو يحفظ device
+// ويلقيك في الـdevice هذا ويبرمج بناءً عليه".
+//
+// The point is not a label. 60 kg on one leg press is not 60 kg on another —
+// different lever arms, different starting resistance — so a weight history
+// that mixes machines is a history of nothing. When a device is chosen, the
+// suggestion and the "last time" line read only the sets logged on THAT device.
+
+const EQUIPMENT_KINDS = ['machine', 'plates', 'dumbbells', 'cable', 'bodyweight'];
+
+function exercisePrefs(exerciseId) {
+  if (!state.exercise_prefs) state.exercise_prefs = {};
+  if (!state.exercise_prefs[exerciseId]) {
+    state.exercise_prefs[exerciseId] = { equipment: '', device: '', known_devices: [] };
   }
-  return out;
+  const prefs = state.exercise_prefs[exerciseId];
+  if (!Array.isArray(prefs.known_devices)) prefs.known_devices = [];
+  return prefs;
+}
+
+function rememberDevice(exerciseId, name) {
+  const clean = String(name || '').trim().slice(0, 40);
+  const prefs = exercisePrefs(exerciseId);
+  prefs.device = clean;
+  if (clean && !prefs.known_devices.includes(clean)) prefs.known_devices.push(clean);
+  saveLocal();
+}
+
+function getLastTwoPerformances(exercise_id) {
+  const device = exercisePrefs(exercise_id).device;
+  const collect = (matchDevice) => {
+    const out = [];
+    for (let i = state.history.length - 1; i >= 0 && out.length < 2; i--) {
+      const ex = state.history[i].exercises[exercise_id];
+      if (!ex?.sets?.some(isCountableWorkingSet)) continue;
+      if (matchDevice && (ex.device || '') !== device) continue;
+      out.push({ date: state.history[i].date, ...ex });
+    }
+    return out;
+  };
+  if (device) {
+    const sameDevice = collect(true);
+    // Only prefer the device-specific history when there IS some. A first
+    // session on a new machine should still see what he did elsewhere rather
+    // than an empty card pretending he has never done the movement.
+    if (sameDevice.length) return sameDevice;
+  }
+  return collect(false);
 }
 function effectiveStartKg(planned) {
   const base = Number(planned.start_kg);
@@ -1860,6 +1908,13 @@ function endSession() {
   // Compute session-level PRs and stats before archiving
   const sessionPRs = computeSessionPRs(a);
   const stats = computeSessionStats(a);
+  // Stamp the machine each exercise was performed on, so the history can be read
+  // back per device. Without this the preference is decorative: it would change
+  // what the card SAYS today and nothing about what it knows tomorrow.
+  for (const [exerciseId, entry] of Object.entries(a.exercises || {})) {
+    const device = exercisePrefs(entry.swapped_to || exerciseId).device;
+    if (device) entry.device = device;
+  }
   const finishedSession = { ...a, ended_at: new Date().toISOString(), prs: sessionPRs, stats };
   state.history.push(finishedSession);
   state.active_session = null;
@@ -2801,7 +2856,14 @@ function renderHome() {
         const dy = e.clientY - swipeFrom.y;
         swipeFrom = null;
         if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
-        if (e.target.closest('input, textarea, button, a')) return;
+        // The guard protects real tap targets from being hijacked by a drag —
+        // but the settings gear sits in the middle of the header, exactly where
+        // a swipe across the card ends. It was a <div> chevron before, so this
+        // never bit; as a <button> it silently swallowed the gesture.
+        // A 60px horizontal drag is unambiguously a swipe, and the click that
+        // follows is already suppressed by swipeJustHappened, so the gear still
+        // opens on a tap.
+        if (e.target.closest('input, textarea, a, button:not(.ex-settings-btn)')) return;
         swipeJustHappened = true;
         const step = dx < 0 ? 1 : -1;
         const nextIdx = Math.min(total - 1, Math.max(0, curIdx + step));
@@ -2870,8 +2932,11 @@ function renderExerciseCard(ex_id, exState) {
   // Head — thumbnail is the body-anatomy illustration (cleaner than action shots)
   const bodyUrl = RW.bodyImg ? RW.bodyImg(ex.primary) : '';
   const head = h('div', { class: 'ex-head', onClick: () => {
+    // Was also rewriting the ▸/▾ glyph on .ex-status. That element is now the
+    // settings button, so the query returned null and every header tap threw —
+    // collapsing stopped working entirely. The card's own class is the state;
+    // nothing needs to mirror it in text.
     card.classList.toggle('expanded');
-    head.querySelector('.ex-status').textContent = card.classList.contains('expanded') ? '▾' : '▸';
   }},
     h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
     h('div', { class: 'ex-info' },
@@ -2890,7 +2955,17 @@ function renderExerciseCard(ex_id, exState) {
         tf('swapped_from', { name: originalExerciseName(ex_id) }),
       ) : null,
     ),
-    h('div', { class: 'ex-status' + (allWorkingDone ? ' done' : '') }, allWorkingDone ? '✓' : '▸'),
+    // Was a ▸/▾ chevron that only mirrored the card's state, while the whole
+    // header did the collapsing. Raed asked for a settings entry in its place;
+    // since the chevron never was the control, replacing it removes nothing —
+    // tapping the header still collapses.
+    h('button', {
+      class: 'ex-settings-btn' + (allWorkingDone ? ' done' : ''),
+      'data-exercise-settings': 'true',
+      'aria-label': t('exercise_settings'),
+      title: t('exercise_settings'),
+      onClick: (event) => { event.stopPropagation(); showExerciseSettings(ex_id, exState); },
+    }, allWorkingDone ? '✓' : '⚙'),
   );
   card.appendChild(head);
 
@@ -3185,6 +3260,103 @@ function appendExerciseToSession(exerciseId) {
   saveLocal();
   render();
   toast(tf('added_to_today', { name: exercise.name }));
+}
+
+
+// The per-exercise settings sheet. Everything specific to ONE movement lives
+// here — what it is performed on, which machine, whether the load is the
+// machine's own, and what to swap it for — instead of being spread across a row
+// of seven small buttons under the sets.
+function showExerciseSettings(ex_id, exState) {
+  const actualId = exState.swapped_to || ex_id;
+  const ex = getAllExercises().find((e) => e.id === actualId);
+  const prefs = exercisePrefs(actualId);
+  const modal = $('#modal');
+  modal.innerHTML = '';
+
+  const reopen = () => { render(); showExerciseSettings(ex_id, exState); };
+
+  modal.appendChild(h('div', { class: 'sheet-head' },
+    h('h3', {}, t('exercise_settings')),
+    h('div', { class: 'tiny muted' }, h('bdi', { class: 'ltr-run' }, ex?.name || actualId)),
+  ));
+
+  // --- equipment kind ----------------------------------------------------
+  modal.appendChild(h('div', { class: 'sheet-section' },
+    h('div', { class: 'sheet-label' }, t('equipment_kind')),
+    // Chips, not a segmented control. Five options do not fit one row at 390px,
+    // and a wrapping .seg left an empty cell on the first line and a stranded
+    // button on the second. Chips wrap by design, and they match the device row
+    // directly below — one vocabulary in one sheet.
+    h('div', { class: 'device-chips', role: 'group', 'aria-label': t('equipment_kind') },
+      EQUIPMENT_KINDS.map((kind) => h('button', {
+        type: 'button',
+        class: 'chip' + (prefs.equipment === kind ? ' active' : ''),
+        'aria-pressed': prefs.equipment === kind ? 'true' : 'false',
+        onClick: () => {
+          prefs.equipment = prefs.equipment === kind ? '' : kind;
+          saveLocal(); reopen();
+        },
+      }, t('equip_' + kind)))
+    ),
+  ));
+
+  // --- which machine -----------------------------------------------------
+  const deviceInput = h('input', {
+    type: 'text', class: 'search-input', maxLength: 40,
+    placeholder: t('device_placeholder'), value: prefs.device || '',
+  });
+  const commitDevice = () => { rememberDevice(actualId, deviceInput.value); reopen(); };
+  modal.appendChild(h('div', { class: 'sheet-section' },
+    h('div', { class: 'sheet-label' }, t('which_device')),
+    h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' }, t('which_device_hint')),
+    prefs.known_devices.length ? h('div', { class: 'device-chips' },
+      prefs.known_devices.map((name) => h('button', {
+        type: 'button',
+        class: 'chip' + (prefs.device === name ? ' active' : ''),
+        onClick: () => { prefs.device = prefs.device === name ? '' : name; saveLocal(); reopen(); },
+      }, h('bdi', { class: 'ltr-run' }, name)))
+    ) : null,
+    h('div', { class: 'card-row', style: 'margin-top:8px;' },
+      deviceInput,
+      h('button', { class: 'btn primary', onClick: commitDevice }, t('save')),
+    ),
+  ));
+
+  // --- machine-weight-only -----------------------------------------------
+  modal.appendChild(h('div', { class: 'sheet-section' },
+    h('div', { class: 'setting-row', style: 'padding:0;' },
+      h('div', { class: 'label' },
+        h('div', { class: 'name' }, t('machine_weight_only')),
+        h('div', { class: 'desc' }, t('machine_weight_hint')),
+      ),
+      h('button', {
+        class: 'btn tiny' + (exState.machine_weight ? ' primary' : ''),
+        'aria-pressed': exState.machine_weight ? 'true' : 'false',
+        onClick: () => {
+          exState.machine_weight = !exState.machine_weight;
+          if (exState.machine_weight) {
+            for (const set of exState.sets) if (!set.is_warmup && !set.completed) set.weight = 0;
+          }
+          saveLocal(); reopen();
+        },
+      }, exState.machine_weight ? t('on') : t('off')),
+    ),
+  ));
+
+  // --- substitution ------------------------------------------------------
+  modal.appendChild(h('div', { class: 'sheet-section' },
+    h('div', { class: 'sheet-label' }, t('swap')),
+    h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' }, t('swap_from_settings_hint')),
+    h('button', { class: 'btn full', onClick: () => showAltModal(ex_id, exState) }, t('open_swap_list')),
+  ));
+
+  modal.appendChild(h('button', {
+    class: 'btn primary full', style: 'margin-top:14px;',
+    onClick: () => $('#modal-overlay').classList.remove('show'),
+  }, t('done')));
+
+  $('#modal-overlay').classList.add('show');
 }
 
 function showAltModal(ex_id, exState) {
