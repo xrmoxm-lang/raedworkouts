@@ -11,6 +11,7 @@
 
 /* ===== Design tokens — حديد is the bare default ================= */
 :root {
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   --bg:#f7f1e8; --bg-card:#fff; --bg-elev:#f4ece0; --border:#e6dccd; --border-strong:#cbbcac;
   --text:#1c1510; --text-muted:#75685a; --accent:#b8451a; --accent-label:#b8451a; --accent-strong:#973815; --accent-fg:#fff; --accent-soft:#eddcd2;
   --warning:#823c07; --warning-soft:#f6e4d4; --danger:#d11442; --danger-soft:#f8d9e0; --good:#147a3a; --good-soft:#d9eadf;
@@ -509,21 +510,26 @@ body.runner-mode .page-runner.active {
   color: color-mix(in srgb, var(--good) 72%, var(--text));
 }
 .set-grid.done .set-num { color: var(--good); }
-/* The "set done" control. Previously a rounded square containing the text glyph
-   '○' — a ~22px character adrift in a 48px box, which read as an icon rather
-   than a control. The ring is now the button itself, so the entire tap target
-   looks like the target. This is the app's most repeated action: roughly 35
-   taps in a session, one-handed, standing at a machine. */
+/* The "set done" control. Raed rejected the circle I shipped ("الدائرة نفسها مو
+   زينة") and said the square before it was excellent — so this is a square
+   again, rebuilt rather than reverted: crisper corner radius, a real filled
+   state, and a press that reads. Tapped ~35 times a session, one-handed,
+   standing at a machine, so the whole 48px box is the target. */
 .set-check {
   width: var(--tap); height: var(--tap);
-  border: 2.5px solid var(--border-strong);
-  border-radius: 50%;
-  background: transparent;
+  border: 2px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--bg-card);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 24px; font-weight: 700; line-height: 1;
-  color: var(--accent-fg);
-  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+  cursor: pointer; font-size: 23px; font-weight: 800; line-height: 1;
+  color: transparent;
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast),
+              border-color var(--dur-fast), color var(--dur-fast);
 }
+@media (hover: hover) {
+  .set-check:hover { border-color: var(--accent); }
+}
+
 /* A ramp set is a warm-up, not a result. It stays fully legible and tappable —
    the row is still real work — but it must not compete with the sets that
    count. The old treatment faded the entire row with an inline opacity, which
@@ -577,7 +583,10 @@ body.runner-mode .page-runner.active {
 .phase-kicker { color: var(--warning); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
 .warmup-phase h3 { margin: 6px 0; }
 .warmup-step { display: grid; gap: 9px; padding: 13px 0; border-top: 1px solid var(--border); }
-.warmup-minute-picker, .warmup-drill-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.warmup-minute-picker { display: flex; flex-wrap: wrap; gap: 7px; }
+/* One drill per line now that each row carries its own clip; a wrapping row
+   would put two drills side by side and break the pairing again. */
+.warmup-drill-list { display: flex; flex-direction: column; gap: 7px; }
 .warmup-drill {
   width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center;
   padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -665,6 +674,55 @@ body.runner-mode .page-runner.active {
    layout should not invite it: give the destructive action real separation so
    it is a deliberate reach rather than the next thing down. */
 .btn.danger.ghost.full { margin-top: 22px; }
+
+/* Segmented control for the light/dark mode in Settings. One shape, three
+   states, current one filled — the standard affordance, so it needs no
+   explaining. */
+/* The effort picker announcing itself on the second-to-last set. A quiet ring,
+   not a colour change — it is a prompt, not an error. */
+.effort-trigger.prompting { border-color: var(--accent); color: var(--accent); }
+.effort-strip.prompting { animation: effortIn var(--dur) var(--ease-out); }
+@keyframes effortIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .effort-strip.prompting { animation: none; }
+}
+
+/* A warm-up drill and its clip on one row: tick on one side, thumbnail on the
+   other, two separate targets so watching never marks the drill done. */
+.warmup-drill-row { display: flex; align-items: stretch; gap: 8px; }
+.warmup-drill-row .warmup-drill {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  text-align: start;
+}
+/* The movement name takes the slack and wraps inside its own cell; the rep
+   count and the tick keep fixed cells. Inline siblings let a long English name
+   push the count onto its own line, which in RTL stranded "10 ·" above the
+   name it belonged to. */
+.warmup-drill .drill-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.warmup-drill .drill-reps { flex: 0 0 auto; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.warmup-drill .drill-tick { flex: 0 0 auto; font-size: 17px; }
+.warmup-drill-clips { display: flex; gap: 6px; flex: 0 0 auto; align-items: stretch; }
+/* Same specificity as `.video-thumb.regular { width: 104px }` further down the
+   file, so that rule was winning on order and the 104px thumb squeezed the
+   movement name onto two lines. The row's own class settles it. */
+.warmup-drill-row .video-thumb.drill-clip {
+  width: 66px; height: auto; align-self: stretch;
+  border-radius: var(--radius-sm);
+}
+.video-thumb.drill-clip::after { font-size: 14px; }
+
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.seg-btn {
+  appearance: none; border: 0; background: var(--bg-card); color: var(--text-muted);
+  font: inherit; font-size: 12.5px; font-weight: 650;
+  padding: 9px 14px; min-height: 40px; cursor: pointer;
+  border-inline-end: 1px solid var(--border);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.seg-btn:last-child { border-inline-end: 0; }
+.seg-btn.active { background: var(--accent); color: var(--accent-fg); }
+@media (hover: hover) { .seg-btn:not(.active):hover { background: var(--bg-elev); color: var(--text); } }
 
 .ex-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 /* These are tapped mid-set, one-handed, standing at a machine. The shared
@@ -1287,15 +1345,24 @@ body.welcome-mode main {
   border-radius: var(--radius); box-shadow: var(--shadow-sm); color: var(--text); font-weight: 750;
 }
 .settings-disclosure > summary::-webkit-details-marker { display: none; }
+.settings-disclosure > summary { display: flex; align-items: center; }
 /* '‹' (U+2039) is a bidi-MIRRORED character: in this RTL layout it rendered as
    '›', pointing away from the content it opens, and [open] rotated it to point
    up. Closed-sideways/open-up is not an accordion in any direction.
    A down chevron that flips to up is direction-neutral — nothing to mirror, and
    it reads the same to anyone: "more below" / "collapse". */
 .settings-disclosure > summary::before {
-  content: '⌄'; margin-inline-end: 10px; color: var(--text-muted);
-  font-size: 22px; font-weight: 700; line-height: 0.7;
-  display: inline-block; vertical-align: 0.18em;
+  /* Raed: "الأرو اللي up وdown ما هو على محاذاة الكلمة بشكل ممتاز". A text glyph
+     carries its own font metrics, so its optical centre never lines up with the
+     label baseline — nudging it is guesswork that breaks at another font size.
+     An SVG chevron has no metrics of its own: it is centred by the flex row that
+     holds it, so it lines up by construction rather than by fiddling. */
+  content: '';
+  width: 18px; height: 18px; flex: 0 0 18px;
+  margin-inline-end: 10px;
+  background: currentColor; opacity: 0.55;
+  -webkit-mask: var(--chev) center / 18px 18px no-repeat;
+  mask: var(--chev) center / 18px 18px no-repeat;
   transition: transform var(--dur) var(--ease-out);
 }
 .settings-disclosure[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -1442,7 +1509,14 @@ body.welcome-mode main {
    opening the coach showed the whole home screen stacked above it. */
 #page-home.active { display: flex; flex-direction: column; }
 #page-home > * { order: 1; }
-body.session-active #page-home > .home-context { order: 2; }
+/* While a set is being logged, the pre-workout context is not "below the fold",
+   it is noise: the week strip, the streak tiles, the music card and a button
+   whose only job is to scroll back up to the session you are already in.
+   Raed: "هذي شيلها، هذي المفروض بس تكون موجودة لو ما بديت التمرين".
+   Ordering it below was the half-measure; it is hidden outright now, and comes
+   back the moment the session ends. Nothing is deleted — only not shown while
+   it cannot be acted on. */
+body.session-active #page-home > .home-context { display: none; }
 
 
 /* ---- Effort, on the final set's own row ----------------------------- */

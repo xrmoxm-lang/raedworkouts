@@ -428,7 +428,10 @@ function buildExerciseVideos(exerciseId, ex, opts = {}) {
 function buildVideoTile(v, opts = {}) {
   const id = v.id || ytIdFromUrl(v.url);
   const isShort = String(v.url || '').includes('/shorts/');
-  const label = v.label || (v.nippard ? 'JN' : 'Custom');
+  // v.label === '' means "this tile needs no chip" — it sits on the thing it
+  // depicts, so labelling it would name something already named. Only an
+  // undefined label falls back to a default.
+  const label = v.label === '' ? '' : (v.label || (v.nippard ? 'JN' : 'Custom'));
   const classes = [
     'video-thumb',
     isShort ? 'shorts' : 'regular',
@@ -442,7 +445,7 @@ function buildVideoTile(v, opts = {}) {
     class: classes,
     title: v.title || label,
   });
-  const chip = h('span', { class: 'video-label-chip' }, label);
+  const chip = label ? h('span', { class: 'video-label-chip' }, label) : null;
   const showPlaceholder = () => {
     const img = link.querySelector('img');
     if (img) img.remove();
@@ -455,7 +458,7 @@ function buildVideoTile(v, opts = {}) {
     }
   };
 
-  link.appendChild(chip);
+  if (chip) link.appendChild(chip);
   if (!id) {
     showPlaceholder();
     return link;
@@ -1354,31 +1357,9 @@ function applyTheme() {
   const metaDark = document.getElementById('theme-color-dark');
   if (metaLight) metaLight.setAttribute('content', skinInfo.sw_light);
   if (metaDark) metaDark.setAttribute('content', skinInfo.theme_dark);
-  // Toggle label — inline SVG icon (consistent line-icon set) + word
-  const tt = $('#theme-toggle');
-  if (tt) {
-    const S = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">';
-    const icons = {
-      auto: S + '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>',
-      dark: S + '<path d="M20 13.2A7.5 7.5 0 1 1 10.8 4a6 6 0 0 0 9.2 9.2z"/></svg>',
-      light: S + '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>',
-    };
-    // Raed: "كلمة التلقائي فوق، شيلها". The word is gone; the icon carries the
-    // meaning, and the button now matches the gym button beside it instead of
-    // being the one odd pill in the header. The label moves to aria-label/title
-    // rather than disappearing — the text WAS this button's accessible name, so
-    // dropping it silently would leave a nameless control for VoiceOver.
-    const modeName = t(mode);
-    tt.innerHTML = icons[mode] || icons.auto;
-    tt.setAttribute('aria-label', tf('theme_toggle_label', { mode: modeName }));
-    tt.setAttribute('title', tf('theme_toggle_label', { mode: modeName }));
-  }
-}
-function cycleTheme() {
-  const order = ['auto', 'light', 'dark'];
-  settings.theme = order[(order.indexOf(settings.theme) + 1) % 3];
-  saveLocal();
-  applyTheme();
+  // The header no longer carries a theme control — Raed asked for it to live in
+  // Settings only ("خله بالإعدادات... في الصفحة العامة، فشيله"). Appearance is a
+  // set-once preference, not something to spend header real estate on.
 }
 
 function closeSkinSuggestion() {
@@ -1720,33 +1701,38 @@ function renderWarmupPhase(activeSession) {
       onClick: () => { warmup.treadmill_minutes = minutes; warmup.treadmill_done = true; saveLocal(); render(); },
     }, h('bdi', { class: 'ltr-run' }, String(minutes)), ' ', t('minutes'))))
   ));
+  // Each drill carries ITS OWN clip, on its own row. They used to be collected
+  // into one "warm-up clips" strip underneath, which is what Raed objected to:
+  // "المفروض تكون لكل تمرين مقطع خاص... حاطني إنت كل المقاطع سوا". The strip
+  // existed because the row is a tick button and a link cannot live inside a
+  // button — tapping to watch would also have marked the drill done. The answer
+  // is not to move the clip away from its drill; it is to give the row two
+  // targets: the tick, and the thumbnail beside it.
   card.appendChild(h('div', { class: 'warmup-step' },
     h('div', {}, h('strong', {}, t('drills')), h('div', { class: 'tiny muted' }, t('ten_reps_each'))),
-    h('div', { class: 'warmup-drill-list' }, warmup.drills.map((drill) => h('button', {
-      class: 'warmup-drill' + (drill.completed ? ' done' : ''),
-      disabled: !treadmillDone,
-      onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
-    }, h('span', {}, isolate(drill.movement), ' · ', h('bdi', { class: 'ltr-run' }, String(drill.reps))), h('span', {}, drill.completed ? '✓' : '○')))),
+    h('div', { class: 'warmup-drill-list' }, warmup.drills.map((drill) => {
+      const tick = h('button', {
+        class: 'warmup-drill' + (drill.completed ? ' done' : ''),
+        disabled: !treadmillDone,
+        onClick: () => { drill.completed = !drill.completed; saveLocal(); render(); },
+      },
+        h('span', { class: 'drill-name' }, isolate(drill.movement)),
+        h('span', { class: 'drill-reps' }, h('bdi', { class: 'ltr-run' }, String(drill.reps))),
+        h('span', { class: 'drill-tick' }, drill.completed ? '✓' : '○'));
+      const clips = (drill.videos || []);
+      if (!clips.length) return h('div', { class: 'warmup-drill-row' }, tick);
+      return h('div', { class: 'warmup-drill-row' }, tick,
+        h('div', { class: 'warmup-drill-clips' }, clips.map((url, i) => buildVideoTile({
+          key: drill.id + '_' + i,
+          id: ytIdFromUrl(url),
+          url,
+          // No label chip: the clip now sits ON the movement it belongs to, so
+          // a number identifying it would be naming something already named.
+          label: '',
+          title: drill.movement,
+        }, { className: 'drill-clip' }))));
+    })),
   ));
-  // The clips Raed supplied for the drills. Separate from the tick buttons on
-  // purpose: tapping a drill marks it DONE, so putting a link inside it would
-  // mean opening a video and completing the drill in the same tap.
-  const drillClips = warmup.drills.filter((drill) => (drill.videos || []).length);
-  if (drillClips.length) {
-    card.appendChild(h('div', { class: 'warmup-step' },
-      h('div', {}, h('strong', {}, t('drill_clips')), h('div', { class: 'tiny muted' }, t('drill_clips_hint'))),
-      h('div', { class: 'video-row' }, drillClips.flatMap((drill, index) => (drill.videos || []).map((url, i) => buildVideoTile({
-        key: drill.id + '_' + i,
-        id: ytIdFromUrl(url),
-        url,
-        // Numbered, not initials. "CE" and "CI" were invented Latin that meant
-        // nothing to Raed, and the Arabic gate rightly refused them. The tile's
-        // title carries the movement name for anyone who needs it.
-        label: String(index + 1),
-        title: drill.movement,
-      })))),
-    ));
-  }
   const complete = generalWarmupComplete(warmup);
   card.appendChild(h('button', {
     class: 'btn primary full', disabled: !complete,
@@ -2178,8 +2164,11 @@ function render() {
   // Drives the home ordering: while LIFTING the exercise leads and the week
   // strip, tiles and music card drop below it. Warm-up keeps the normal order,
   // because there is no set to log yet.
-  document.body.classList.toggle('session-active',
-    Boolean(state.active_session) && state.active_session.phase !== 'warmup');
+  // Any live session, warm-up included. The warm-up used to keep the normal
+  // home order on the reasoning that "there is no set to log yet" — but Raed is
+  // doing arm swings at that point, not reading his streak, and he asked for
+  // the pre-workout block to go the moment the workout starts.
+  document.body.classList.toggle('session-active', Boolean(state.active_session));
   const route = window.location.hash.replace('#', '') || 'home';
   // Phase 6 intentionally returns the workout to the v15 card-in-app
   // treatment. It is a normal page, not the full-viewport Phase 4 takeover.
@@ -3034,12 +3023,20 @@ function renderExerciseCard(ex_id, exState) {
       // مسبب زحمة؟" — it was a full-width block under the sets. Now it is one
       // compact face ON the final row; tapping it reveals the three, and
       // choosing collapses them again. This is v15's own interaction.
-      const strip = h('div', { class: 'effort-strip', hidden: !!set.effort ? undefined : true });
+      // Raed: it should appear the moment the SECOND-TO-LAST set is ticked,
+      // because by then he already knows the last one is coming and the picker
+      // is what the last one needs. Waiting until he taps the final check makes
+      // him tap twice and reads as the app blocking him.
+      const priorSet = workingSets[workingSets.length - 2];
+      const promptNow = Boolean(priorSet?.completed) && !set.effort;
+      const openNow = Boolean(set.effort) || promptNow;
+      const strip = h('div', { class: 'effort-strip' + (promptNow ? ' prompting' : ''),
+                               hidden: openNow ? undefined : true });
       const trigger = h('button', {
-        type: 'button', class: 'effort-trigger' + (set.effort ? ' chosen' : ''),
+        type: 'button', class: 'effort-trigger' + (set.effort ? ' chosen' : '') + (promptNow ? ' prompting' : ''),
         'data-effort-trigger': 'true',
         'aria-label': t('final_set_effort'),
-        'aria-expanded': 'false',
+        'aria-expanded': openNow ? 'true' : 'false',
         onClick: () => {
           const open = strip.hasAttribute('hidden');
           strip.toggleAttribute('hidden', !open);
@@ -3992,7 +3989,7 @@ function renderSettings() {
       )
     ),
   );
-  adv.appendChild(skinRow);
+  // skinRow is placed in the Appearance card below, not in Advanced.
 
   adv.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
@@ -4097,7 +4094,30 @@ function renderSettings() {
     }}, 'Clear PRs'),
   ));
 
-  const preferencesContent = h('div', { class: 'settings-disclosure-content' }, card, adv);
+  // Appearance lives here now, above the collapsed advanced block, because the
+  // two controls Raed actually uses — the skin and the light/dark mode — were
+  // split between a header button and a buried Advanced panel.
+  const appearanceCard = h('div', { class: 'card' });
+  appearanceCard.appendChild(h('h3', {}, t('appearance')));
+  appearanceCard.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' },
+      h('div', { class: 'name' }, t('theme_mode')),
+      h('div', { class: 'desc' }, t('theme_mode_desc')),
+    ),
+    h('div', { class: 'seg', role: 'group', 'aria-label': t('theme_mode') },
+      ['auto', 'light', 'dark'].map((mode) =>
+        h('button', {
+          type: 'button',
+          class: 'seg-btn' + (settings.theme === mode ? ' active' : ''),
+          'aria-pressed': settings.theme === mode ? 'true' : 'false',
+          onClick: () => { settings.theme = mode; saveLocal(); applyTheme(); renderSettings(); },
+        }, t(mode))
+      )
+    ),
+  ));
+  appearanceCard.appendChild(skinRow);
+
+  const preferencesContent = h('div', { class: 'settings-disclosure-content' }, card, appearanceCard, adv);
 
   // Language toggle — bottom of settings
   const langCard = h('div', { class: 'card' },
@@ -4275,7 +4295,6 @@ function init() {
   $$('.tab').forEach(t => {
     t.addEventListener('click', () => router(t.dataset.route));
   });
-  $('#theme-toggle').addEventListener('click', cycleTheme);
   const gymBtn = $('#gym-launch');
   if (gymBtn) gymBtn.addEventListener('click', launchGymApp);
   $('#modal-overlay').addEventListener('click', (e) => {

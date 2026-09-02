@@ -433,10 +433,13 @@ test('during a session the first set row is reachable without scrolling', async 
   // a scroll. That is the core interaction of the app.
   expect(firstRow).toBeLessThan(844);
 
-  // The pre-workout context is not deleted, only moved under the exercise.
-  const context = await top('[data-home-context]');
-  const exercise = await top('#page-home .ex.expanded');
-  expect(context).toBeGreaterThan(exercise);
+  // The pre-workout context is not deleted — it is not SHOWN while a session is
+  // running. Raed: "هذي شيلها، هذي المفروض بس تكون موجودة لو ما بديت التمرين".
+  // This assertion used to pin the old mechanism (context ordered below the
+  // exercise) rather than the outcome, so hiding it outright failed a test that
+  // its own stated purpose was satisfied by.
+  await expect(page.locator('[data-home-context]')).toBeHidden();
+  // Still in the DOM, so it returns intact the moment the session ends.
   await expect(page.locator('[data-week-card]')).toHaveCount(1);
   await expect(page.locator('[data-home-stat-tiles]')).toHaveCount(1);
 });
@@ -550,6 +553,16 @@ test('"machine weight only" removes the need to type a number at all', async ({ 
   // the set is. The card carried its own stricter copy of the validity rule
   // (weight > 0), so a machine-weight set could be created and then never
   // completed — the feature was half-built and this test blessed it.
+  // The app requires the exercise's ramp sets before any working set can be
+  // ticked — correct behaviour, and this test never satisfied it. It passed
+  // only on the days the seeded session happened to open with an exercise that
+  // prescribes no ramp, and failed on the days it did not. Same code, different
+  // weekday: that is a flaky test, and it was flaky before this change too.
+  const ramps = page.locator('[data-set-kind="warmup"]');
+  for (let i = 0; i < await ramps.count(); i += 1) {
+    await ramps.nth(i).locator('.set-check').click();
+    await page.waitForTimeout(200);
+  }
   const row = page.locator('[data-set-kind="working"]').first();
   await row.locator('input').nth(1).fill('10');
   await page.waitForTimeout(300);
