@@ -355,21 +355,121 @@ function getJNUrl(exerciseId) {
 function jnHasCustomOverride(exerciseId) {
   return Boolean(state.custom_jn_urls?.[exerciseId]);
 }
+// Adding a clip, hardened.
+//
+// Raed is building the library himself, from his phone, one clip at a time:
+// "أنا وأنا أمشي بظيف، أضيف أضيف مقاطع لين أبني مكتبة كويسة". So the whole path
+// has to survive being used on a phone, repeatedly, with a paste.
+//
+// What it replaces was a native prompt() that:
+//   * an installed PWA can suppress outright, which is exactly where he uses it;
+//   * is painful to paste into on iOS;
+//   * stored the raw string, so youtu.be/ID and youtube.com/watch?v=ID became
+//     two different clips of the same video;
+//   * said "added" whether or not the change ever reached the server.
+//
+// His synced state carried ZERO custom videos, which is what sent me looking.
 function addCustomVideo(exerciseId) {
-  const url = (prompt(t('video_prompt')) || '').trim();
-  if (!url) return;
-  // A blank beats a wrong link (D8), and a mistyped one is a wrong link. Only
-  // YouTube is accepted because that is what every existing tile expects.
-  if (!/^https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)/.test(url)) {
-    alert(t('video_bad_url'));
-    return;
-  }
-  state.custom_videos[exerciseId] = state.custom_videos[exerciseId] || [];
-  state.custom_videos[exerciseId].push(url);
-  saveLocal();
-  render();
-  toast(t('video_added'));
+  const ex = getAllExercises().find((item) => item.id === exerciseId);
+  const modal = $('#modal');
+  modal.innerHTML = '';
+
+  const existing = () => (state.custom_videos[exerciseId] || []);
+  const input = h('input', {
+    type: 'url', inputmode: 'url', autocapitalize: 'off', autocorrect: 'off',
+    spellcheck: 'false', class: 'search-input', 'data-video-url': 'true',
+    placeholder: 'https://youtube.com/…',
+  });
+  const preview = h('div', { class: 'vid-preview', 'data-video-preview': 'true' });
+  const status = h('div', { class: 'tiny muted', 'data-video-status': 'true' });
+  const listWrap = h('div', { class: 'vid-existing' });
+
+  const renderList = () => {
+    listWrap.innerHTML = '';
+    const clips = existing();
+    if (!clips.length) {
+      listWrap.appendChild(h('div', { class: 'tiny muted' }, t('video_none_yet')));
+      return;
+    }
+    listWrap.appendChild(h('div', { class: 'xs-label' }, tf('video_count', { n: clips.length })));
+    clips.forEach((url, index) => {
+      listWrap.appendChild(h('div', { class: 'vid-row' },
+        h('img', { class: 'vid-row-thumb', src: `https://i.ytimg.com/vi/${ytIdFromUrl(url)}/mqdefault.jpg`, alt: '' }),
+        h('a', { class: 'vid-row-link', href: url, target: '_blank', rel: 'noopener' },
+          h('bdi', { class: 'ltr-run' }, ytIdFromUrl(url) || url)),
+        h('button', {
+          class: 'btn tiny danger ghost', 'data-video-remove': String(index),
+          onClick: () => {
+            clips.splice(index, 1);
+            if (!clips.length) delete state.custom_videos[exerciseId];
+            saveLocal(); renderList(); render();
+          },
+        }, t('remove')),
+      ));
+    });
+  };
+
+  // Live preview: the thumbnail is proof the link resolves to a real video
+  // before he commits it, which is the cheapest possible check against a
+  // mistyped id becoming a permanent dead tile.
+  const refreshPreview = () => {
+    const id = ytIdFromUrl(input.value.trim());
+    preview.innerHTML = '';
+    if (!id) return;
+    preview.appendChild(h('img', { src: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, alt: '' }));
+    preview.appendChild(h('span', { class: 'tiny muted' }, h('bdi', { class: 'ltr-run' }, id)));
+  };
+  input.addEventListener('input', refreshPreview);
+  input.addEventListener('paste', () => setTimeout(refreshPreview, 0));
+
+  const commit = async () => {
+    const raw = input.value.trim();
+    const id = ytIdFromUrl(raw);
+    // A blank beats a wrong link (D8), and a mistyped one is a wrong link.
+    if (!id) { status.textContent = t('video_bad_url'); status.className = 'tiny danger-text'; return; }
+
+    // Compare by video id, not by string: youtu.be/ID and watch?v=ID are the
+    // same clip and used to be stored as two.
+    const clips = state.custom_videos[exerciseId] = existing();
+    if (clips.some((existingUrl) => ytIdFromUrl(existingUrl) === id)) {
+      status.textContent = t('video_duplicate'); status.className = 'tiny muted'; return;
+    }
+    clips.push(raw);
+    saveLocal();
+    render();
+    renderList();
+    input.value = '';
+    preview.innerHTML = '';
+
+    // Say "saved on your phone" first, because that part is certain, then tell
+    // the truth about the server rather than implying it landed there.
+    status.textContent = t('video_saved_local');
+    status.className = 'tiny muted';
+    try {
+      const ok = await flushSync();
+      status.textContent = ok ? t('video_saved_synced') : t('video_saved_pending');
+    } catch (_) {
+      status.textContent = t('video_saved_pending');
+    }
+  };
+
+  modal.appendChild(h('div', { class: 'xs-head' },
+    h('h3', {}, t('video_add_title')),
+    h('div', { class: 'xs-sub' }, h('bdi', { class: 'ltr-run' }, ex?.name || exerciseId)),
+  ));
+  modal.appendChild(h('section', { class: 'xs-section' },
+    h('div', { class: 'xs-add-device' }, input, h('button', { class: 'btn primary', 'data-video-commit': 'true', onClick: commit }, t('add'))),
+    preview,
+    status,
+  ));
+  modal.appendChild(h('section', { class: 'xs-section' }, listWrap));
+  modal.appendChild(h('button', { class: 'btn full xs-done', onClick: () => $('#modal-overlay').classList.remove('show') }, t('done')));
+
+  renderList();
+  $('#modal-overlay').classList.add('show');
+  setTimeout(() => input.focus(), 60);
 }
+
 
 function setJNUrl(exerciseId, url) {
   state.custom_jn_urls = state.custom_jn_urls || {};

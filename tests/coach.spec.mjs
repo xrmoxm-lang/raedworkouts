@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
-const COACH = 'https://raed-hp.tail53bd35.ts.net:8444/search';
+// The coach moved off :8444 — Tailscale Funnel serves only 443, 8443 and 10000,
+// so :8444 answered nobody from the internet and the coach needed Tailscale
+// switched on. It rides the 443 funnel on /coach now.
+const COACH = 'https://raed-hp.tail53bd35.ts.net/coach/search';
 
 async function openCoach(page) {
   await page.goto(appUrl, { waitUntil: 'networkidle' });
