@@ -1084,8 +1084,31 @@ function syncFailureReason(err) {
   if (navigator.onLine === false) return t('sync_pending_offline');
   if (status === 401 || status === 403) return t('sync_rejected');
   if (status >= 500) return t('sync_server_error');
-  if (/failed to fetch|networkerror|load failed|timeout|abort/i.test(message)) return t('sync_unreachable');
+  if (/failed to fetch|networkerror|load failed|timeout|abort/i.test(message)) {
+    // Chrome 147 blocks a public page from reaching the "local address space"
+    // behind a permission. On a machine running Tailscale, MagicDNS resolves the
+    // sync host to its 100.x CGNAT address, so Chrome classifies it as local and
+    // refuses — while Safari, which does not implement Local Network Access,
+    // works on the same machine against the same server. Diagnosed 2026-09-02:
+    // every request failed with net::ERR_FAILED and "Permission was denied for
+    // this request to access the `local` address space".
+    //
+    // Naming it matters: "cannot reach your server" sends him to check the
+    // server, which is healthy. The problem is one browser's permission.
+    if (isChromiumLike()) return t('sync_blocked_by_browser');
+    return t('sync_unreachable');
+  }
   return t('sync_failed_generic');
+}
+
+// Chromium-family detection, deliberately narrow: Chrome on iOS is WebKit
+// underneath and is NOT affected, so a plain /Chrome/ test would misdiagnose it.
+function isChromiumLike() {
+  const ua = navigator.userAgent || '';
+  // Chrome on iOS is WebKit underneath and is NOT affected, so a bare /Chrome/
+  // test would misdiagnose the browser he most likely trains with.
+  if (/iPhone|iPad|iPod/.test(ua)) return false;
+  return /Chrome|Chromium|Edg\//.test(ua);
 }
 
 function setSyncStatus(kind, text) {
@@ -3177,25 +3200,11 @@ function renderExerciseCard(ex_id, exState) {
     }, t('runner_skip_exercise')),
     h('button', { class: 'btn tiny ghost', 'data-video-add': 'true', onClick: () => addCustomVideo(ex_id) }, t('video_add_short')),
     h('button', { class: 'btn tiny ghost', 'data-add-exercise': 'true', onClick: () => showAddExerciseModal() }, t('add_exercise_button')),
-    // Raed: "كيف أحط رقم الجهاز فقط؟ ما أقدر، ما له رقم." Typing 0 was never the
-    // answer — plenty of machines carry no number at all, and someone new to
-    // the gym (his father, his brothers) has nothing to type. This says "the
-    // machine's own weight" once, for the exercise, and the rows stop asking.
-    h('button', {
-      class: 'btn tiny ghost' + (exState.machine_weight ? ' primary' : ''),
-      'data-machine-weight': 'true',
-      'aria-pressed': exState.machine_weight ? 'true' : 'false',
-      onClick: () => {
-        exState.machine_weight = !exState.machine_weight;
-        if (exState.machine_weight) {
-          // Zero ADDED load. The set still counts, and progression moves on
-          // reps instead of kilos — which is the only honest lever here.
-          for (const set of exState.sets) if (!set.is_warmup && !set.completed) set.weight = 0;
-        }
-        saveLocal();
-        render();
-      },
-    }, t('machine_weight_only')),
+    // "وزن الجهاز فقط" now lives in the per-exercise settings sheet, with the
+    // rest of what belongs to this one movement. It is a once-per-exercise
+    // decision, not a per-set action, so it was the odd one out in a row of
+    // things he taps between sets. Not removed — relocated, one tap away on the
+    // gear, next to the machine it describes.
   );
   body.appendChild(actions);
 
@@ -3366,6 +3375,7 @@ function showExerciseSettings(ex_id, exState) {
       ),
       h('button', {
         class: 'btn tiny' + (exState.machine_weight ? ' primary' : ''),
+        'data-machine-weight': 'true',
         'aria-pressed': exState.machine_weight ? 'true' : 'false',
         onClick: () => {
           exState.machine_weight = !exState.machine_weight;

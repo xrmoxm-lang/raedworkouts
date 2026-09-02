@@ -526,10 +526,18 @@ test('a finished session shows the time it took, not the exercise card again', a
 test('"machine weight only" removes the need to type a number at all', async ({ page }) => {
   await intoSession(page);
   const weight = page.locator('[data-set-kind="working"] [data-runner-weight-input]').first();
-  await expect(page.locator('[data-machine-weight]')).toHaveCount(1);
 
+  // "Machine weight only" moved into the per-exercise settings sheet: it is a
+  // once-per-exercise decision about the equipment, not a per-set action, so it
+  // sits with the machine it describes rather than in the row he taps between
+  // sets. Same behaviour, one tap further in.
+  await page.locator('#page-home .ex.expanded [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  await expect(page.locator('[data-machine-weight]')).toHaveCount(1);
   await page.locator('[data-machine-weight]').click();
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(500);
+  await page.locator('#modal .btn.primary.full').last().click();  // close the sheet
+  await page.waitForTimeout(500);
 
   // Raed: "ما أقدر، ما له رقم" — plenty of machines carry no number, and someone
   // new to the gym has nothing to type. The box says what it is instead.

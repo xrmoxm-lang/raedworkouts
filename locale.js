@@ -367,6 +367,7 @@ export const LOCALE = Object.freeze({
   exercise_log: pair('What you have lifted here', 'اللي رفعته هنا'),
   exercise_log_empty: pair('Nothing logged for this movement yet.', 'ما فيه سجل لهذه الحركة بعد.'),
   n_sets: pair('{n} sets', '{n} مجموعات'),
+  sync_blocked_by_browser: pair('Chrome blocked this — it needs permission for local network access. Safari works, or allow it in Chrome.', 'كروم حجب الاتصال — يحتاج إذن الوصول للشبكة المحلية. سفاري يشتغل، أو اسمح له في كروم.'),
   appearance: pair('Appearance', 'المظهر'),
   theme_mode: pair('Light / dark', 'الوضع'),
   theme_mode_desc: pair('Follows the phone, or force one.', 'يتبع الجوال، أو ثبّت واحداً.'),
