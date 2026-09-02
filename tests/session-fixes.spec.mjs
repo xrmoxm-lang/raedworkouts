@@ -354,6 +354,19 @@ test('the home banner never prints the session name twice', async ({ page }) => 
   });
   await page.waitForTimeout(800);
   const banner = page.locator('[data-home-overview]').first();
+
+  // While a session runs the banner is one centred line with no subtitle at
+  // all, so there is nothing that can duplicate the title — Raed asked for that
+  // shape to stop it pushing the set grid down the screen. The duplication this
+  // test guards can only occur on the PRE-session banner, which still has the
+  // heading/subtitle pair.
+  if (await banner.locator('h2').count() === 0) {
+    await expect(banner).toHaveClass(/running-line/);
+    const line = (await banner.textContent()).trim();
+    expect(line.length, 'the one-line header still says something').toBeGreaterThan(0);
+    return;
+  }
+
   const title = (await banner.locator('h2').textContent()).trim();
   const sub = await banner.locator('p').count() ? (await banner.locator('p').first().textContent()).trim() : '';
   // The subtitle used to fall back to the FULL name when a session had no

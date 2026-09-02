@@ -45,13 +45,17 @@ test('deleting a session removes exactly that session', async ({ page }) => {
   const cards = page.locator('#page-history .history-card');
   await expect(cards).toHaveCount(4);
 
-  page.once('dialog', (d) => d.accept());
+  // The guard is an in-app dialog now, not confirm(): an installed PWA may
+  // suppress the native one, and a delete that skips its own guard is the worst
+  // thing to leave to the shell's discretion.
   // Delete the NEWEST — rendered first, but LAST in state.history. Deleting by
   // the reversed loop index would remove OLDEST instead, and with an odd count
   // and a middle target the two are indistinguishable.
   await cards.nth(0).locator('.date').click();
   await page.waitForTimeout(300);
   await cards.nth(0).locator('[data-delete-session]').click();
+  await page.waitForTimeout(400);
+  await page.locator('#modal [data-confirm-yes]').click();
   await page.waitForTimeout(700);
 
   const left = await page.evaluate((u) => {
@@ -60,4 +64,32 @@ test('deleting a session removes exactly that session', async ({ page }) => {
   }, user);
   expect(left, 'the newest session must be the one removed').toEqual(['OLDEST', 'SECOND', 'THIRD']);
   await expect(cards).toHaveCount(3);
+});
+
+test('cancelling the delete leaves the session alone', async ({ page }) => {
+  await page.addInitScript(({ u, hist }) => {
+    localStorage.clear();
+    localStorage.setItem('raedworkouts.active_user', u);
+    localStorage.setItem(`raedworkouts.${u}.settings.v1`, JSON.stringify({ user_id: u, theme: 'light', skin: 'waraq', lang: 'ar', locale_version: 1 }));
+    localStorage.setItem(`raedworkouts.${u}.state.v1`, JSON.stringify({
+      schema_version: 2, programme_reference_migration_version: 1,
+      profile: { display_name: 'Raed', experience: 'returning', created_at: '2026-08-01T00:00:00.000Z' },
+      active_session: null, history: hist, bodyweight_log: [],
+      custom_videos: {}, custom_jn_urls: {}, video_hidden: {}, custom_exercises: [],
+      programme_overrides: null, prs: {}, msg_index: 0, substitutions: [],
+    }));
+  }, { u: user, hist: [session('2026-08-20T09:00:00.000Z', 'ONLY')] });
+
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(900);
+  await page.locator('nav.tab-bar button[data-route="history"]').click();
+  await page.waitForTimeout(700);
+  const cards = page.locator('#page-history .history-card');
+  await cards.nth(0).locator('.date').click();
+  await page.waitForTimeout(300);
+  await cards.nth(0).locator('[data-delete-session]').click();
+  await page.waitForTimeout(400);
+  await page.locator('#modal [data-confirm-no]').click();
+  await page.waitForTimeout(500);
+  await expect(cards).toHaveCount(1);
 });

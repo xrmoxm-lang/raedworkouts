@@ -719,6 +719,8 @@ let suppressNextPush = false;
 // Its declaration was lost in the phase-6 rewrite while eight references to it
 // survived, so the session view threw ReferenceError on render.
 let focusExerciseIdx = null;
+// Holds the session just finished so the undo toast can put it back.
+let lastFinishedSession = null;
 // Lets Raed go back into the cards after the done panel appears, without
 // undoing the completion. Reset whenever a session starts, so a new workout
 // never opens straight into the review state.
@@ -2032,18 +2034,70 @@ function startSession(session) {
   }
 }
 
+// An in-app confirm.
+//
+// Native confirm()/prompt() are not dependable in an installed PWA — that is
+// exactly why adding a clip never worked for Raed, and why he reports deleting
+// a session "goes straight through". A destructive action must not depend on a
+// dialog the shell is allowed to suppress.
+//
+// Returns a promise so callers read like the confirm() they replace.
+function confirmAction({ title, body, confirmLabel, danger = true }) {
+  return new Promise((resolve) => {
+    const modal = $('#modal');
+    modal.innerHTML = '';
+    const close = (answer) => { $('#modal-overlay').classList.remove('show'); resolve(answer); };
+    modal.appendChild(h('div', { class: 'xs-head' }, h('h3', {}, title)));
+    if (body) modal.appendChild(h('p', { class: 'confirm-body' }, body));
+    modal.appendChild(h('div', { class: 'confirm-actions' },
+      h('button', {
+        class: 'btn full' + (danger ? ' danger' : ' primary'),
+        'data-confirm-yes': 'true', onClick: () => close(true),
+      }, confirmLabel),
+      h('button', { class: 'btn ghost full', 'data-confirm-no': 'true', onClick: () => close(false) }, t('cancel')),
+    ));
+    $('#modal-overlay').classList.add('show');
+  });
+}
+
+// Re-open a finished session. Raed pressed "finish" by accident and had no way
+// back: "ضغطت انتهى وخلاص ويعتبرني انتهيت من التمرين". A workout that took an
+// hour must not be one mis-tap from unreachable.
+function reopenSession(sess) {
+  const position = state.history.indexOf(sess);
+  if (position < 0) return false;
+  if (state.active_session) return false;
+  const restored = JSON.parse(JSON.stringify(sess));
+  delete restored.ended_at;
+  delete restored.stats;
+  delete restored.prs;
+  state.history.splice(position, 1);
+  state.active_session = restored;
+  focusExerciseIdx = 0;
+  sessionDoneDismissed = false;
+  saveLocal();
+  return true;
+}
+
 function endSession() {
   if (!state.active_session) return;
   const a = state.active_session;
   // Compute completed flag
   const anyResolved = Object.values(a.exercises).some(isRunnerExerciseResolved);
   if (!anyResolved) {
-    if (!confirm('No sets logged. Discard this session?')) return;
-    state.active_session = null;
-    state.forced_next_session = null;
-    focusExerciseIdx = null;
-    saveLocal();
-    router('home');
+    // Same reasoning as the delete guard: never leave a discard to a dialog the
+    // shell can suppress. Async, so endSession returns and the caller re-enters.
+    confirmAction({
+      title: t('discard_session'), body: t('discard_empty_session'),
+      confirmLabel: t('discard_session'),
+    }).then((yes) => {
+      if (!yes) return;
+      state.active_session = null;
+      state.forced_next_session = null;
+      focusExerciseIdx = null;
+      saveLocal();
+      router('home');
+    });
     return;
   }
   // Compute session-level PRs and stats before archiving
@@ -2058,6 +2112,9 @@ function endSession() {
   }
   const finishedSession = { ...a, ended_at: new Date().toISOString(), prs: sessionPRs, stats };
   state.history.push(finishedSession);
+  // An undo window. The toast already supports one action, and this is the
+  // action it exists for: an hour of work is one mis-tap from gone otherwise.
+  lastFinishedSession = finishedSession;
   state.active_session = null;
   state.forced_next_session = null;  // clear override after session ends
   focusExerciseIdx = null;
@@ -2065,6 +2122,15 @@ function endSession() {
   saveLocal();
   // Show end-of-session screen instead of jumping to history
   showSessionEnd(finishedSession);
+  // The undo. Offered for long enough to notice the mistake, and it puts the
+  // session back exactly as it was rather than starting a new one.
+  toast(t('session_finished'), 9000, t('undo'), () => {
+    if (reopenSession(lastFinishedSession)) {
+      lastFinishedSession = null;
+      render();
+      toast(t('session_reopened'));
+    }
+  });
 }
 
 function computeSessionPRs(session) {
@@ -2857,10 +2923,14 @@ function renderHome() {
   if (state.active_session) {
     const a = state.active_session;
     const parts = a.session_name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner active', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-kicker' }, tf('runner_active_started', { time: fmtTime(a.started_at) })),
-      h('h2', {}, parts[0]),
-      h('p', {}, parts[1] || ''),
+    // One centred line while a session runs. It was three stacked blocks —
+    // kicker, heading, subtitle — for information he glances at, and every
+    // pixel it took pushed the set rows further down the screen he is actually
+    // working on. Raed asked for it on one line, centred.
+    root.appendChild(h('div', { class: 'today-banner active running-line', 'data-home-overview': 'true' },
+      h('span', { class: 'rl-name' }, parts[0]),
+      h('span', { class: 'rl-dot' }, '·'),
+      h('span', { class: 'rl-since' }, tf('runner_active_started', { time: fmtTime(a.started_at) })),
     ));
   } else if (planned) {
     const parts = planned.name.split(' — ');
@@ -3031,15 +3101,28 @@ function renderHome() {
         return;
       }
 
-      // Progress strip
-    root.appendChild(h('div', { style: 'display:flex; gap:4px; margin-bottom:12px;', 'data-v15-session-progress': 'true' },
-        exEntries.map(([id, ex], i) => {
-          const allDone = isRunnerExerciseResolved(ex);
-          return h('div', {
-            style: `flex:1; height:6px; border-radius:999px; cursor:pointer; background:${allDone ? 'var(--good)' : (i === curIdx ? 'var(--accent)' : 'var(--border)')}`,
-            onClick: () => { focusExerciseIdx = i; render(); }
-          });
-        })
+      // Progress. Raed called the old one bad and he was right: seven identical
+      // 6px bars, where the only cue was which one carried the accent. It
+      // answered neither question you have mid-set — where am I, and how much is
+      // left — without counting bars.
+      //
+      // Now the count is a number instead of something to count, the current
+      // segment is visibly the current one, and each segment is a real tap
+      // target instead of a 6px sliver. Still one row: vertical space here is
+      // exactly what pushes the set grid off the screen.
+      const doneCount = exEntries.filter(([, ex]) => isRunnerExerciseResolved(ex)).length;
+      root.appendChild(h('div', { class: 'sess-progress', 'data-v15-session-progress': 'true' },
+        h('div', { class: 'sp-track' },
+          exEntries.map(([id, ex], i) => h('button', {
+            type: 'button',
+            class: 'sp-seg' + (isRunnerExerciseResolved(ex) ? ' done' : '') + (i === curIdx ? ' current' : ''),
+            'aria-label': `${i + 1} / ${total}`,
+            'aria-current': i === curIdx ? 'true' : undefined,
+            onClick: () => { focusExerciseIdx = i; render(); },
+          }))
+        ),
+        h('div', { class: 'sp-count' },
+          h('bdi', { class: 'ltr-run' }, `${doneCount}/${exEntries.length}`)),
       ));
 
       // Render only the current exercise, expanded
@@ -3088,15 +3171,49 @@ function renderHome() {
 
       // Prev / Next nav
       root.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
-        h('button', { class: 'btn', style: 'flex:1;', onClick: () => { focusExerciseIdx = Math.max(0, curIdx - 1); render(); } }, t('previous')),
+        // On the FIRST exercise, "previous" means the warm-up — there is nothing
+        // else behind it, and it used to be a button that did nothing. Raed:
+        // "أبغى لما أضغط السابق يرجع للإحماء".
+        h('button', {
+          class: 'btn', style: 'flex:1;', 'data-runner-prev': 'true',
+          onClick: () => {
+            if (curIdx === 0) {
+              const warm = state.active_session?.warmup;
+              if (warm) {
+                // Re-open the warm-up phase without erasing what he logged:
+                // completed_at is what marks it finished.
+                warm.completed_at = null;
+                warm.skipped = false;
+                state.active_session.phase = 'warmup';
+                saveLocal(); render();
+                return;
+              }
+            }
+            focusExerciseIdx = Math.max(0, curIdx - 1);
+            render();
+          },
+        }, curIdx === 0 ? t('back_to_warmup') : t('previous')),
         curIdx < total - 1
           ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { focusExerciseIdx = curIdx + 1; render(); } }, t('next_exercise_arrow'))
           : h('button', { class: 'btn primary', style: 'flex:2;', onClick: endSession }, t('end_session')),
       ));
     }
 
+    // "Finish & save" belongs on the LAST exercise only. Raed: he wants it in
+    // one place, and the point is less scrolling — a full-width primary button
+    // repeated under every exercise is the thing he keeps scrolling past.
+    // "Discard exercise" stays available everywhere, because skipping one
+    // movement is a per-exercise decision.
+    const onLastExercise = (() => {
+      const entries = Object.entries(state.active_session?.exercises || {});
+      if (!entries.length) return true;
+      const idx = Math.min(Math.max(focusExerciseIdx ?? 0, 0), entries.length - 1);
+      return idx >= entries.length - 1;
+    })();
     root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
-      h('button', { class: 'btn primary full', onClick: endSession }, t('finish_and_save_session')),
+      onLastExercise
+        ? h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session'))
+        : null,
       h('div', { class: 'spacer-12' }),
       h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')),
     ));
@@ -3129,6 +3246,26 @@ function renderHome() {
       ));
     });
   }
+}
+
+// A quiet "?" that explains one term in place. Raed asked for something the
+// size of a copyright mark that opens a plain sentence — "شيء مرة بسيط يطلع" —
+// after the coach gave him a poor answer for "superset". This is not the coach:
+// it is a fixed definition sitting next to the word it defines, so the answer
+// is instant and cannot be wrong.
+function explainMark(termKey) {
+  const bubble = h('span', { class: 'explain-bubble', hidden: true }, t(termKey + '_explain'));
+  const mark = h('button', {
+    type: 'button', class: 'explain-mark', 'data-explain': termKey,
+    'aria-label': t('what_is_this'),
+    onClick: (event) => {
+      event.stopPropagation();
+      const open = bubble.hasAttribute('hidden');
+      bubble.toggleAttribute('hidden', !open);
+      mark.setAttribute('aria-expanded', open ? 'true' : 'false');
+    },
+  }, '؟');
+  return h('span', { class: 'explain-wrap' }, mark, bubble);
 }
 
 function renderExerciseCard(ex_id, exState) {
@@ -3232,13 +3369,16 @@ function renderExerciseCard(ex_id, exState) {
   const partner = supersetPartner(activeSessionPlan, planned);
   if (partner) {
     body.appendChild(h('div', { class: 'superset-note tiny', 'data-superset': 'true' },
+      explainMark('superset'),
       tf('superset_with', { name: getAllExercises().find((item) => item.id === partner.exercise_id)?.name || partner.exercise_id })));
   }
 
   // Sets table
   body.appendChild(h('div', { class: 'spacer-12' }));
   body.appendChild(h('div', { class: 'set-grid-headers' },
-    h('span', {}, '#'),
+    // The first column held the set number until Raed asked for it to go. It
+    // now carries only a mark on ramp rows, so "#" labels an empty column.
+    h('span', {}, ''),
     h('span', {}, 'Weight (kg)'),
     h('span', {}, 'Reps'),
     h('span', {}, ''),
@@ -3253,7 +3393,12 @@ function renderExerciseCard(ex_id, exState) {
       'data-session-set-row': String(idx),
       'data-set-kind': isWarm ? 'warmup' : 'working',
     },
-      h('div', { class: 'set-num' }, setNum + (isWarm ? '' : '')),
+      // Raed: "نشيل الأرقام، ويكون بس اللي موجود اللي بالخلفية". The row number
+      // was never information he needed — he knows which set he is on because
+      // it is the next empty row, and the rep target is already on the card.
+      // Ramp rows keep a mark, because "this one is a warm-up" IS information
+      // and it is the only thing distinguishing them from working sets.
+      h('div', { class: 'set-num' + (isWarm ? ' warm-mark' : '') }, isWarm ? t('ramp_short') : ''),
       h('input', {
         type: 'number', step: '0.5', inputmode: 'decimal',
         // lang/dir force Latin digits and a number pad. Without them an Arabic
@@ -3551,30 +3696,6 @@ function showExerciseSettings(ex_id, exState) {
     ),
   ));
 
-  // ---- 2. السجل — evidence ----------------------------------------------
-  const rows = exerciseHistoryRows(actualId, 3);
-  modal.appendChild(h('section', { class: 'xs-section' },
-    h('div', { class: 'xs-label' }, t('exercise_log')),
-    rows.length
-      ? h('table', { class: 'xs-log', 'data-exercise-log': 'true' },
-          h('thead', {}, h('tr', {},
-            h('th', {}, t('log_col_date')),
-            h('th', {}, t('log_col_best')),
-            h('th', {}, t('log_col_sets')),
-            h('th', {}, t('log_col_device')),
-          )),
-          h('tbody', {}, rows.map((row) => h('tr', {},
-            h('td', { class: 'xs-log-date' }, fmtDateShort(row.date)),
-            h('td', { class: 'xs-log-load' },
-              h('bdi', { class: 'ltr-run' }, `${fmtLoadKg(row.topWeight)} × ${row.topReps}`)),
-            h('td', { class: 'xs-log-sets' }, h('bdi', { class: 'ltr-run' }, String(row.sets))),
-            h('td', { class: 'xs-log-device' },
-              row.device ? h('bdi', { class: 'ltr-run' }, row.device) : '—'),
-          ))),
-        )
-      : h('div', { class: 'xs-empty' }, t('exercise_log_empty')),
-  ));
-
   // ---- 3. إجراءات — verbs ------------------------------------------------
   const rest = prescribedRestSeconds(planned);
   modal.appendChild(h('section', { class: 'xs-section' },
@@ -3619,6 +3740,33 @@ function showExerciseSettings(ex_id, exState) {
       class: 'btn danger ghost full xs-skip', 'data-runner-skip-exercise': 'true',
       onClick: () => closeThen(() => skipRunnerExercise(ex_id)),
     }, t('runner_skip_exercise')),
+  ));
+
+  // ---- السجل — evidence, last ---
+  // Raed: "ياليت يكون السجل يكون آخر شيء تحت... لأنه هو تاريخ وسرد". He is
+  // right: it is the only READ-ONLY block in the sheet, so it belongs after the
+  // things he came to change rather than between them.-------------------------------------------
+  const rows = exerciseHistoryRows(actualId, 3);
+  modal.appendChild(h('section', { class: 'xs-section' },
+    h('div', { class: 'xs-label' }, t('exercise_log')),
+    rows.length
+      ? h('table', { class: 'xs-log', 'data-exercise-log': 'true' },
+          h('thead', {}, h('tr', {},
+            h('th', {}, t('log_col_date')),
+            h('th', {}, t('log_col_best')),
+            h('th', {}, t('log_col_sets')),
+            h('th', {}, t('log_col_device')),
+          )),
+          h('tbody', {}, rows.map((row) => h('tr', {},
+            h('td', { class: 'xs-log-date' }, fmtDateShort(row.date)),
+            h('td', { class: 'xs-log-load' },
+              h('bdi', { class: 'ltr-run' }, `${fmtLoadKg(row.topWeight)} × ${row.topReps}`)),
+            h('td', { class: 'xs-log-sets' }, h('bdi', { class: 'ltr-run' }, String(row.sets))),
+            h('td', { class: 'xs-log-device' },
+              row.device ? h('bdi', { class: 'ltr-run' }, row.device) : '—'),
+          ))),
+        )
+      : h('div', { class: 'xs-empty' }, t('exercise_log_empty')),
   ));
 
   modal.appendChild(h('button', { class: 'btn full xs-done', onClick: close }, t('done')));
@@ -4062,14 +4210,40 @@ function renderHistory() {
     // `sess` is the same object as the one in state.history — the reverse() above
     // copies the array, not its entries — so indexOf finds the real position.
     // Deleting by the loop's index would delete from the wrong end of the list.
+    // Re-open. Raed: "المفروض السجل أضغط التعديل يفتح لي الجلسة من جديد" — a
+    // session finished by mistake has to be recoverable after the undo toast is
+    // gone, which is when he usually notices.
+    expanded.appendChild(h('button', {
+      class: 'btn full', 'data-reopen-session': 'true', style: 'margin-top:14px;',
+      onClick: async (event) => {
+        event.stopPropagation();
+        if (state.active_session) { toast(t('reopen_blocked')); return; }
+        const yes = await confirmAction({
+          title: t('reopen_session'),
+          body: tf('reopen_session_body', { date: fmtDate(sess.date) }),
+          confirmLabel: t('reopen_session'), danger: false,
+        });
+        if (!yes) return;
+        if (reopenSession(sess)) { router('home'); render(); toast(t('session_reopened')); }
+      },
+    }, t('reopen_session')));
+
     expanded.appendChild(h('button', {
       class: 'btn danger ghost full', 'data-delete-session': 'true',
-      style: 'margin-top:14px;',
-      onClick: (event) => {
+      style: 'margin-top:10px;',
+      onClick: async (event) => {
         event.stopPropagation();
         const position = state.history.indexOf(sess);
         if (position < 0) return;
-        if (!confirm(tf('delete_session_confirm', { date: fmtDate(sess.date) }))) return;
+        // An in-app dialog, not confirm(): an installed PWA may suppress the
+        // native one, and a delete that skips its own guard is the worst
+        // possible thing to leave to the shell's discretion.
+        const yes = await confirmAction({
+          title: t('delete_session'),
+          body: tf('delete_session_confirm', { date: fmtDate(sess.date) }),
+          confirmLabel: t('delete_session'),
+        });
+        if (!yes) return;
         state.history.splice(position, 1);
         saveLocal();
         renderHistory();

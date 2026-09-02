@@ -768,6 +768,66 @@ body.runner-mode .page-runner.active {
 .vid-row-link { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .danger-text { color: var(--danger); }
 
+/* Session progress. One row, because vertical space here is what pushes the set
+   grid off the screen — but each segment is a real tap target now (24px of
+   padded height around a 7px bar) instead of a 6px sliver, and the count is a
+   number rather than something to count. */
+.sess-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sp-track { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.sp-seg {
+  appearance: none; border: 0; padding: 8px 0; background: none;
+  flex: 1 1 auto; min-width: 0; cursor: pointer; position: relative;
+}
+.sp-seg::after {
+  content: ''; display: block; height: 7px; border-radius: 999px;
+  background: var(--border);
+  transition: background var(--dur-fast), height var(--dur-fast) var(--ease-out);
+}
+.sp-seg.done::after { background: var(--good); }
+.sp-seg.current::after { background: var(--accent); height: 11px; }
+.sp-seg.current { flex-grow: 1.6; }
+.sp-count {
+  flex: 0 0 auto; font-size: 12px; font-weight: 750;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+
+/* The running-session header, one centred line. */
+.today-banner.running-line {
+  display: flex; align-items: baseline; justify-content: center;
+  flex-wrap: wrap; gap: 8px; text-align: center;
+}
+.today-banner.running-line .rl-name { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.today-banner.running-line .rl-dot { opacity: 0.4; }
+.today-banner.running-line .rl-since { font-size: 12.5px; color: var(--text-muted); }
+
+/* Ramp rows keep a small mark where the number used to be: "this is a warm-up"
+   is the only thing that distinguishes them from a working set. */
+.set-num.warm-mark { font-size: 10px; font-weight: 800; letter-spacing: .04em; opacity: .6; }
+
+/* The inline "?" — the size of a copyright mark, opening one plain sentence. */
+.explain-wrap { position: relative; display: inline-flex; align-items: center; }
+.explain-mark {
+  appearance: none; border: 1px solid var(--border-strong); background: var(--bg-card);
+  color: var(--text-muted); width: 18px; height: 18px; border-radius: 50%;
+  font-size: 11px; font-weight: 800; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-inline-end: 6px; flex: 0 0 auto; padding: 0;
+}
+@media (hover: hover) { .explain-mark:hover { border-color: var(--accent); color: var(--accent); } }
+.explain-bubble {
+  display: block; margin-top: 6px; padding: 9px 11px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.5;
+  color: var(--text);
+}
+.explain-bubble[hidden] { display: none; }
+
+/* In-app confirm. Native confirm() is not dependable in an installed PWA, and a
+   destructive action must not depend on a dialog the shell may suppress. */
+.confirm-body { font-size: 13.5px; line-height: 1.55; color: var(--text-muted); margin: 6px 0 4px; }
+.confirm-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.confirm-actions .btn { min-height: 48px; }
+
 .xs-head { margin: 0 0 4px; }
 .xs-head h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
 .xs-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
