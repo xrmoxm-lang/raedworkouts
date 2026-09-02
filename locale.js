@@ -399,6 +399,8 @@ export const LOCALE = Object.freeze({
   reopen_session: pair('Reopen this session', 'أعِد فتح هذه الجلسة'),
   reopen_session_body: pair('It goes back to being the session in progress, exactly as you left it on {date}.', 'ترجع جلسةً جارية، بالضبط كما تركتها في {date}.'),
   reopen_blocked: pair('Finish the session in progress first.', 'أنهِ الجلسة الجارية أولاً.'),
+  related_clip_note: pair('No clip for this one yet. The same movement, on other equipment:', 'ما فيه مقطع لهذا بعد. نفس الحركة، على جهاز آخر:'),
+  related_clip_from: pair('From {name} — same movement, different equipment', 'من {name} — نفس الحركة، جهاز مختلف'),
   appearance: pair('Appearance', 'المظهر'),
   theme_mode: pair('Light / dark', 'الوضع'),
   theme_mode_desc: pair('Follows the phone, or force one.', 'يتبع الجوال، أو ثبّت واحداً.'),

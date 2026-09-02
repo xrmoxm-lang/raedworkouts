@@ -3268,6 +3268,65 @@ function explainMark(termKey) {
   return h('span', { class: 'explain-wrap' }, mark, bubble);
 }
 
+// ---- Clip classification -------------------------------------------------
+// Raed: "بعض مقاطع الفيديو تكون special لتمرين... بالمشين، بالدمبل، بالكابل...
+// نحتاج نلاقي طريقة نصنف كل واحدة منها".
+//
+// Two exercises may share a clip only when they are the SAME movement on
+// different equipment. That is a narrow claim and it has to stay narrow:
+// stripping words too eagerly put a standing shoulder press in the same family
+// as a decline chest press, and a clip of one is a WRONG clip for the other —
+// which is the case D8 exists to prevent.
+//
+// So equipment words are stripped and nothing else. Angle (incline/decline/
+// flat), posture, grip and side are movement-defining and stay in the key, and
+// the primary muscle is part of the key as well. Six families survive that,
+// which is the point: a small honest set beats a large wrong one.
+const EQUIPMENT_PATTERNS = [
+  [/hammer strength/i, 'machine'],
+  [/\bsmith\b/i, 'machine'],
+  [/\bmachine\b|\bpec deck\b|\bleg press\b|\bhack squat\b/i, 'machine'],
+  [/\bcable\b|\bpulldown\b|\bpushdown\b|\bpressdown\b|\brope\b/i, 'cable'],
+  [/\bez[- ]?bar\b|\bbarbell\b/i, 'barbell'],
+  [/\bdb\b|\bdumbbell\b|\bgoblet\b/i, 'dumbbell'],
+  [/\bassisted\b|\bpull-?up\b|\bdip\b|\bhanging\b|\bcrunch\b|\bpush-?up\b/i, 'bodyweight'],
+];
+const EQUIPMENT_WORDS = /\b(machine|cable|db|dumbbell|barbell|smith|ez[- ]?bar|hammer strength|assisted|plate-?weighted|bayesian|roman chair)\b/gi;
+
+function exerciseEquipment(name) {
+  for (const [pattern, kind] of EQUIPMENT_PATTERNS) if (pattern.test(name || '')) return kind;
+  return '';
+}
+
+function movementFamily(exercise) {
+  const bare = String(exercise?.name || '')
+    .replace(EQUIPMENT_WORDS, ' ')
+    .replace(/[^A-Za-z ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return (exercise?.primary || []).slice().sort().join('+') + '|' + bare;
+}
+
+// Clips from the same movement on OTHER equipment. Returned separately from the
+// exercise's own clips and never mixed in with them: the label is the whole
+// point, because the movement is the same and the setup is not.
+function relatedClips(exercise) {
+  if (!exercise) return [];
+  const family = movementFamily(exercise);
+  const out = [];
+  for (const other of getAllExercises()) {
+    if (other.id === exercise.id) continue;
+    if (movementFamily(other) !== family) continue;
+    const own = buildExerciseVideos(other.id, other);
+    for (const clip of own) {
+      out.push({ ...clip, key: 'rel_' + other.id + '_' + clip.key, fromName: other.name,
+                 fromEquipment: exerciseEquipment(other.name) });
+    }
+  }
+  return out;
+}
+
 function renderExerciseCard(ex_id, exState) {
   const planned = exState.planned;
   const actualId = exState.swapped_to || ex_id;
@@ -3316,8 +3375,20 @@ function renderExerciseCard(ex_id, exState) {
       'aria-label': t('exercise_settings'),
       title: t('exercise_settings'),
       onClick: (event) => { event.stopPropagation(); showExerciseSettings(ex_id, exState); },
-    }, allWorkingDone ? '✓' : '⚙'),
+    }),
   );
+  // The icon is drawn the way every other icon in this app is drawn: an inline
+  // SVG on the shared line set, 1.8 stroke, round caps. It was a text glyph,
+  // which renders heavy and differently on each platform and looked wrong beside
+  // the clean stroke icons in the header and tab bar — Raed spotted it at once.
+  // This is the same sliders mark the Settings tab uses, so the per-exercise
+  // button speaks the app's own vocabulary for settings.
+  const gearBtn = head.querySelector('[data-exercise-settings]');
+  if (gearBtn) {
+    gearBtn.innerHTML = allWorkingDone
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6.5"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg>';
+  }
   card.appendChild(head);
 
   // Body
@@ -3339,6 +3410,26 @@ function renderExerciseCard(ex_id, exState) {
     );
     body.appendChild(videoRow);
     // Note: video selection + JN URL editing live in Library, not here.
+  } else {
+    // Half the catalogue he can reach by swapping has no clip of its own — 39
+    // of 78, measured. Where the SAME movement exists on other equipment, its
+    // clip is offered here, labelled as exactly that and never mixed in with
+    // the exercise's own tiles. The label is the whole point: the movement is
+    // the same and the setup is not, and a clip presented as this exercise's
+    // own would be the wrong-clip case D8 forbids.
+    const related = relatedClips(ex);
+    if (related.length) {
+      body.appendChild(h('div', { class: 'related-clips', 'data-related-clips': 'true' },
+        h('div', { class: 'related-clips-note tiny' }, t('related_clip_note')),
+        h('div', { class: 'video-row' }, related.slice(0, 3).map((v) => {
+          const tile = buildVideoTile({ ...v, label: '' }, { className: 'related' });
+          tile.setAttribute('title', tf('related_clip_from', { name: v.fromName }));
+          return h('div', { class: 'related-clip-wrap' },
+            tile,
+            h('span', { class: 'related-clip-from' }, h('bdi', { class: 'ltr-run' }, v.fromName)));
+        })),
+      ));
+    }
   }
 
   // The one number that actually moves the weight. The engine raises load only
