@@ -2833,11 +2833,16 @@ function renderHome() {
       const ex = getAllExercises().find(e => e.id === p.exercise_id);
       const sug = suggestNextWeight(p.exercise_id, p);
       const bodyUrl = (ex && RW.bodyImg) ? RW.bodyImg(ex.primary) : '';
-      root.appendChild(h('div', { class: 'ex' },
+      root.appendChild(h('div', { class: 'ex plan-row' },
         h('div', { class: 'ex-head' },
           h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
           h('div', { class: 'ex-info' },
-            h('h4', {}, `${i+1}. ${ex?.name || p.exercise_id}`),
+            // The number belongs to the English exercise name, so the two are
+            // one isolated LTR run rather than a bare template string — and the
+            // row reads left-to-right like the name it carries. Raed: "ترتيب
+            // التمارين واحد اثنين... المفروض يصير على left side، لأن التمرين
+            // بالإنجليزي".
+            h('h4', {}, h('bdi', { class: 'ltr-run' }, `${i+1}. ${ex?.name || p.exercise_id}`)),
             h('div', { class: 'meta' },
               h('span', { class: 'muscle-tag' }, muscleLabel(ex?.primary?.[0])),
               ` ${p.sets} × ${p.reps} · `,
@@ -3611,6 +3616,28 @@ function renderHistory() {
         }),
       ),
     ));
+    // Delete a logged session. Raed: "حط في إمكانية تعديل السجل... بس حذف
+    // الجلسة اللي تفرق". It lives INSIDE the expanded panel, not on the collapsed
+    // card, so removing a session is two deliberate taps and never a mis-tap
+    // while scrolling the list.
+    //
+    // `sess` is the same object as the one in state.history — the reverse() above
+    // copies the array, not its entries — so indexOf finds the real position.
+    // Deleting by the loop's index would delete from the wrong end of the list.
+    expanded.appendChild(h('button', {
+      class: 'btn danger ghost full', 'data-delete-session': 'true',
+      style: 'margin-top:14px;',
+      onClick: (event) => {
+        event.stopPropagation();
+        const position = state.history.indexOf(sess);
+        if (position < 0) return;
+        if (!confirm(tf('delete_session_confirm', { date: fmtDate(sess.date) }))) return;
+        state.history.splice(position, 1);
+        saveLocal();
+        renderHistory();
+        toast(t('session_deleted'));
+      },
+    }, t('delete_session')));
     card.appendChild(expanded);
     root.appendChild(card);
   });
@@ -3845,11 +3872,21 @@ function renderSettings() {
     )
   ));
 
-  // Rest timer
+  // Rest timer.
+  //
+  // Raed asked why the timer says 2:30 while this box says 120. Because the
+  // programme prescribes rest PER EXERCISE (rest_min: 2.5 on Machine Chest
+  // Press), and prescribedRestSeconds() rightly prefers it. This value is only
+  // reached for a row that has no prescribed rest.
+  //
+  // The old label said "Default seconds between sets", which reads like the
+  // control for every set. A setting that looks like it governs something and
+  // is quietly overridden is worse than no setting: he changed it, watched
+  // nothing happen, and had to ask.
   card.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
-      h('div', { class: 'name' }, 'Rest timer'),
-      h('div', { class: 'desc' }, 'Default seconds between sets.'),
+      h('div', { class: 'name' }, t('rest_fallback')),
+      h('div', { class: 'desc' }, t('rest_fallback_desc')),
     ),
     h('input', {
       type: 'number', value: settings.rest_seconds, min: 30, max: 600, step: 15,

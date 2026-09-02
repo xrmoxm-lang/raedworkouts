@@ -712,6 +712,18 @@ body.runner-mode .page-runner.active {
 }
 .video-thumb.drill-clip::after { font-size: 14px; }
 
+/* The session-plan rows carry English exercise names, so they read
+   left-to-right: thumbnail first, then "1. Chest Press Machine". Scoped to
+   .plan-row so the live session card keeps the RTL orientation of the screen
+   Raed actually logs sets on. The Arabic muscle tag inside stays isolated and
+   renders correctly either way. */
+.plan-row .ex-head { direction: ltr; }
+.plan-row .ex-info { text-align: left; }
+/* .meta is a flex row, so text-align does nothing to it — the children are laid
+   out by the flex axis. It needs justify-content, and direction:rtl so the
+   Arabic muscle tag still reads correctly inside an LTR row. */
+.plan-row .ex-info .meta { direction: rtl; justify-content: flex-end; }
+
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .seg-btn {
   appearance: none; border: 0; background: var(--bg-card); color: var(--text-muted);
