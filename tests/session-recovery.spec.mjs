@@ -59,6 +59,32 @@ const readState = (page) => page.evaluate(() => {
   return { active: !!s.active_session, history: (s.history || []).length };
 });
 
+test('finishing with exercises still open asks first, and declining keeps the session', async ({ page }) => {
+  // The guard used to fire only when NOTHING was logged, so the realistic
+  // accident — one exercise done, six untouched, a stray tap on finish — went
+  // straight into history as a completed session and fed the volume ledger a
+  // number he never lifted. The test above tolerated the dialog with an
+  // `if (count)`, so it passed either way and certified nothing.
+  await intoSession(page);
+  await completeFirstExercise(page);
+  const before = await readState(page);
+
+  await goToLastExercise(page);
+  await page.locator('[data-finish-session]').click();
+
+  const guard = page.locator('#modal [data-confirm-yes]');
+  await expect(guard, 'the session must not close silently').toHaveCount(1);
+  await expect(page.locator('#modal')).toContainText('ما خلصت');
+
+  // Declining leaves everything exactly as it was.
+  await page.locator('#modal [data-confirm-no]').click();
+  await page.waitForTimeout(600);
+  const after = await readState(page);
+  expect(after.active, 'the session is still running').toBe(true);
+  expect(after.history, 'and nothing was archived').toBe(before.history);
+  console.log('FINISH_WITH_OPEN_EXERCISES_GUARDED');
+});
+
 test('finishing by accident can be undone from the toast', async ({ page }) => {
   await intoSession(page);
   await completeFirstExercise(page);

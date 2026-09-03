@@ -553,12 +553,35 @@ body.runner-mode .page-runner.active {
    removing the fill that groups the row together. */
 .set-grid.warm input { opacity: 0.82; }
 .set-check:active { transform: scale(0.9); }
+/* A circle inside the square — Raed asked for this shape back by name:
+   "المربع الصح، كان فيه مربع جواه دائرة، رجّعه". It reads better than either
+   half alone: the square is the 48px target his thumb aims at while standing at
+   a machine, and the ring inside is the state, small enough that filling it is
+   unmistakable at a glance down a column of eight rows. The empty square he has
+   now gives the eye nothing to check against until it is filled. */
+.set-check::before {
+  content: ''; display: block;
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  transition: background var(--dur-fast), border-color var(--dur-fast),
+              transform var(--dur-fast) var(--ease-out);
+}
+.set-grid.warm .set-check::before { border-color: var(--border); }
+@media (hover: hover) {
+  .set-check:hover::before { border-color: var(--accent); }
+}
 .set-check.checked {
   background: var(--accent); color: var(--accent-fg);
   border-color: var(--accent);
   box-shadow: var(--shadow-accent);
   animation: checkPop var(--dur) var(--ease-out);
 }
+/* Done and skipped already draw their own glyph — ✓ and ↷ — so the ring stands
+   down rather than sitting behind them. The ring IS the resting state, which is
+   the one he looks at eight times an exercise deciding what is left. */
+.set-check.checked::before,
+.set-check.skipped::before { display: none; }
 
 /* A set row fits a narrow phone without horizontal scrolling. A history-based
    load is a placeholder, not a fabricated prefilled prescription. */
@@ -749,6 +772,10 @@ body.runner-mode .page-runner.active {
   transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast), color var(--dur-fast);
 }
 .ex-settings-btn:active { transform: scale(0.93); }
+/* The button holds an emoji again, so it needs a size and a line box rather
+   than an SVG sizing rule. Emoji ignore `color`, which is why .done below sets
+   the border alone — its glyph carries its own colour. */
+.ex-settings-btn { font-size: 18px; }
 .ex-settings-btn svg { width: 18px; height: 18px; display: block; }
 .ex-settings-btn.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
 @media (hover: hover) { .ex-settings-btn:hover { border-color: var(--accent); color: var(--accent); } }
@@ -1609,11 +1636,24 @@ body.welcome-mode main {
 .section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--text-muted); }
 
 /* Today header — command-center presence */
-.today-banner { padding: 20px 18px 18px; }
+/* Centred, because it is a masthead and not a paragraph.
+   Raed asked for this by name: "علوي الخميس... ليش ما تحطه بالنص يعني يصير
+   شكله أفضل". Ranged right it read as the first line of the page's body text,
+   and the day, the name and the length sat in three different optical columns.
+   Centred they stack into one mark, which is what the card is for — and it also
+   stops the session name and the day-plus-duration line disagreeing about where
+   the eye starts, an RTL page's easiest way to look untidy. */
+.today-banner { padding: 22px 18px 20px; text-align: center; }
 .today-banner::before { height: 4px; }
 .today-banner .tb-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
-.today-banner h2 { font-size: 27px; font-weight: 830; letter-spacing: -0.04em; line-height: 1.05; }
-.today-banner p { font-size: 15px; }
+.today-banner h2 {
+  font-size: 30px; font-weight: 830; letter-spacing: -0.04em; line-height: 1.02;
+  margin: 6px 0 0;
+}
+.today-banner p { font-size: 15px; margin: 4px 0 0; }
+/* The one quiet line under the name: how many exercises, roughly how long. It
+   is reference, not a headline, so it recedes and takes the space instead. */
+.today-banner .tb-meta { margin-top: 9px; font-size: 12.5px; }
 .today-banner.active { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 30%, var(--bg-card)), var(--bg-card) 55%); }
 
 /* Progress meter — thicker, with a big confident % */
@@ -1624,6 +1664,14 @@ body.welcome-mode main {
 /* Stat tiles — bigger, heavier numerals, smaller quieter caps (weight contrast) */
 .stat-tile { padding: 16px 8px 13px; }
 .stat-tile .stat-num { font-size: 31px; font-weight: 830; letter-spacing: -0.045em; }
+/* Tonnage grows forever. 31px held five digits with nothing to spare in a tile
+   ~104px wide inside its padding; six pushed past the edge. Each step is set so
+   the widest string at that digit count still clears the padding, checked at
+   390px — the narrowest phone this ships to. Below 5 digits nothing changes,
+   so the common case keeps the size he already approved. */
+.stat-tile .stat-num.s5 { font-size: 27px; letter-spacing: -0.05em; }
+.stat-tile .stat-num.s6 { font-size: 23px; letter-spacing: -0.05em; }
+.stat-tile .stat-num.s7 { font-size: 19px; letter-spacing: -0.045em; }
 .stat-tile .stat-cap { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
 .stat-tile .stat-sub { font-size: 10.5px; }
 

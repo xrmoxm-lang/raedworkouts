@@ -317,6 +317,83 @@ test('a long passage is clipped until he asks for it, and the remainder count ag
   console.log('COACH_PASSAGE_CLIPPED_AND_COUNT_AGREES');
 });
 
+test('an answer that names no passage is not shown as an answer', async ({ page }) => {
+  // The model returns `answered` and `used` independently, so {answered:true,
+  // used:[]} is reachable — a confident sentence with no evidence, which is the
+  // exact shape this whole feature exists to prevent. The claim must not be
+  // printed at all: reprinting it under a "not in your books" heading would put
+  // the unsupported sentence on screen while looking careful.
+  await page.route(COACH, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      status: 'ok',
+      answer: { status: 'ok', answered: true, text: 'خذ ٥ غرام كرياتين يومياً.', used: [] },
+      results: [{ text: 'unrelated passage about quinoa', work: 'Body Recomp', page: 140, score: 0.5 }],
+    }),
+  }));
+  await openCoach(page);
+  await ask(page);
+
+  await expect(page.locator('[data-coach-answer]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-unanswered]')).toHaveCount(1);
+  await expect(page.locator('#page-coach')).not.toContainText('٥ غرام كرياتين');
+  await expect(page.locator('[data-coach-cited]')).toHaveCount(0);
+  console.log('COACH_UNSOURCED_IS_NOT_AN_ANSWER');
+});
+
+test('a slow earlier question cannot overwrite the answer to a newer one', async ({ page }) => {
+  // Two questions in a row on a bad connection. If the first resolves last it
+  // used to replace the second's answer — with citation markers pointing into
+  // the wrong passage list, because the open/English toggles are keyed by index
+  // into whichever list is on screen.
+  let call = 0;
+  await page.route(COACH, async (route) => {
+    call += 1;
+    const first = call === 1;
+    if (first) await new Promise((r) => setTimeout(r, 2500));
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        answer: answer(first ? 'جواب السؤال الأول' : 'جواب السؤال الثاني', [0]),
+        results: [{ text: first ? 'first' : 'second', work: first ? 'Book One' : 'Book Two', page: 1, score: 0.8 }],
+      }),
+    });
+  });
+  await openCoach(page);
+  await page.fill('[data-coach-input]', 'السؤال الأول');
+  await page.click('[data-coach-submit]');
+  await page.waitForTimeout(300);
+  await page.fill('[data-coach-input]', 'السؤال الثاني');
+  await page.click('[data-coach-submit]');
+
+  await expect(page.locator('[data-coach-answer]')).toContainText('جواب السؤال الثاني');
+  // Wait past the slow first response and confirm it never lands.
+  await page.waitForTimeout(3000);
+  await expect(page.locator('[data-coach-answer]')).toContainText('جواب السؤال الثاني');
+  await expect(page.locator('#page-coach')).not.toContainText('جواب السؤال الأول');
+  console.log('COACH_STALE_ANSWER_DISCARDED');
+});
+
+test('an HTML error page reads as an error, not as an unreachable server', async ({ page }) => {
+  // Tailscale Serve rewrites some failures into its own HTML page. res.json()
+  // used to run before anything checked res.status, so the parse threw and the
+  // catch reported "the library is not answering" — sending Raed to look for a
+  // network fault when the server was up and refusing.
+  await page.route(COACH, (route) => route.fulfill({
+    status: 502, contentType: 'text/html', body: '<html><body>Bad Gateway</body></html>',
+  }));
+  await openCoach(page);
+  await ask(page);
+
+  await expect(page.locator('[data-coach-error]')).toHaveCount(1);
+  await expect(page.locator('#page-coach')).toContainText('502');
+  await expect(page.locator('#page-coach')).not.toContainText('لا يستجيب');
+  console.log('COACH_HTTP_ERROR_NAMED');
+});
+
 test('a citation marker points at a real passage, and one that does not is dropped', async ({ page }) => {
   // The marker is the whole verification path: [2] in the answer and 2 on the
   // card are the same passage, so Raed can check any claim against the book it

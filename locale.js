@@ -154,6 +154,12 @@ export const LOCALE = Object.freeze({
   // Not an error. The search ran, the passages came back, and the answer is
   // that they do not cover this.
   coach_unanswered: pair('Not in your books', 'ليس في كتبك'),
+  // Finishing with exercises still open. Arabic takes three forms for the
+  // count, and this one is read at the moment he might be about to lose a
+  // session, so it says the number plainly.
+  finish_with_open: pair('{n} exercises are still unfinished. Finish the session anyway?', 'باقي {n} تمارين ما خلصت. أنهي الجلسة على أي حال؟'),
+  finish_anyway: pair('Finish anyway', 'أنهِ على أي حال'),
+  coach_unsourced_hint: pair('An answer came back without naming a passage it came from, so it is not shown. The passages found are below.', 'رجع جواب بدون ما يحدّد المقطع اللي جاء منه، فما عُرض. المقاطع اللي وُجدت بالأسفل.'),
   coach_unanswered_hint: pair('The search found passages, but none of them answer this. They are below if you want to look.', 'البحث وجد مقاطع، لكن لا شيء فيها يجيب على هذا. هي بالأسفل لو حاب تشوفها.'),
   coach_answer_off: pair('The written answer is switched off on the server. The passages are below.', 'الإجابة المكتوبة مطفأة في الخادم. المقاطع بالأسفل.'),
   coach_answer_failed: pair('The passages came back, but the written answer did not. They are below.', 'وصلت المقاطع، ولم تصل الإجابة المكتوبة. المقاطع بالأسفل.'),
@@ -172,6 +178,10 @@ export const LOCALE = Object.freeze({
   coach_error: pair('The library server returned an error.', 'أعاد خادم المكتبة خطأ.'),
   // Tailscale is no longer required, so the offline copy must not tell him to
   // connect to it — that would send him chasing a fix for the wrong problem.
+  // Two different failures had one hint. A 502 from the gateway is not the same
+  // as "cannot reach the server", and telling him it is not answering when it
+  // answered with an error sends him to check a network that is fine.
+  coach_error_hint: pair('The server answered, but with an error. It is running — something between here and it is not.', 'الخادم ردّ، لكن بخطأ. هو شغّال — والمشكلة في شي بينك وبينه.'),
   coach_offline_hint: pair('The library server is not answering. Try again in a moment.', 'خادم المكتبة لا يستجيب. أعد المحاولة بعد قليل.'),
   coach_unauthorized: pair('The library refused the request.', 'رفضت المكتبة الطلب.'),
   coach_unauthorized_hint: pair('The access key is wrong or expired. Tell Claude and it will be reissued.', 'مفتاح الدخول خاطئ أو منتهٍ. أخبر كلود ليصدره من جديد.'),

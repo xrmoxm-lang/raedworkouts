@@ -1810,7 +1810,14 @@ function suggestNextWeight(exercise_id, planned) {
   if (allHitTarget && finalEffort === 'easy' && bump > 0) {
     return { weight: lastTopSet.weight + bump, note: tf('why_easy_bump', { reps: topReps, kg: bump }) };
   }
-  return { weight: lastTopSet.weight, note: tf('why_match_or_beat', { kg: lastTopSet.weight, reps: lastTopSet.reps }) };
+  // Tagged, because the card suppresses this one note and matching on the
+  // rendered Arabic string would break the moment the wording changes. It is
+  // the only branch that restates «آخر مرة» instead of explaining a decision.
+  return {
+    weight: lastTopSet.weight,
+    note: tf('why_match_or_beat', { kg: lastTopSet.weight, reps: lastTopSet.reps }),
+    note_kind: 'match_or_beat',
+  };
 }
 
 // ---- Streak / volume calc ----------------------------------
@@ -1879,11 +1886,13 @@ function scopedReplacementFor(session, exerciseId) {
 }
 function renderWarmupPhase(activeSession) {
   const warmup = activeSession.warmup;
-  const card = h('div', { class: 'card warmup-phase' },
-    h('div', { class: 'phase-kicker' }, t('warmup_phase')),
-    h('h3', {}, t('warmup_cap')),
-    h('p', { class: 'tiny muted' }, t('warmup_explainer')),
-  );
+  // Three lines of preamble used to sit above the first thing he does: an
+  // eyebrow («المرحلة الأولى · الإحماء»), a heading repeating it with a time
+  // cap, and a sentence describing the two steps that are listed immediately
+  // below in full. Raed: "أول شيل هذا على طول... ما لها سنة". He is right —
+  // the screen only ever has two steps, both numbered and named, and nothing
+  // above them said anything the steps did not.
+  const card = h('div', { class: 'card warmup-phase' });
   const treadmillDone = warmup.treadmill_done;
   card.appendChild(h('div', { class: 'warmup-step' },
     h('div', {}, h('strong', {}, t('treadmill_walk')), h('div', { class: 'tiny muted' }, t('choose_treadmill'))),
@@ -2079,11 +2088,16 @@ function reopenSession(sess) {
   return true;
 }
 
+// Set only while re-entering endSession() from its own confirmation, so the
+// guard below asks once instead of looping on itself.
+let endSessionConfirmed = false;
 function endSession() {
   if (!state.active_session) return;
   const a = state.active_session;
   // Compute completed flag
-  const anyResolved = Object.values(a.exercises).some(isRunnerExerciseResolved);
+  const entries = Object.values(a.exercises);
+  const anyResolved = entries.some(isRunnerExerciseResolved);
+  const unresolved = entries.filter((item) => !isRunnerExerciseResolved(item)).length;
   if (!anyResolved) {
     // Same reasoning as the delete guard: never leave a discard to a dialog the
     // shell can suppress. Async, so endSession returns and the caller re-enters.
@@ -2097,6 +2111,27 @@ function endSession() {
       focusExerciseIdx = null;
       saveLocal();
       router('home');
+    });
+    return;
+  }
+  // Finishing with exercises still open used to archive silently. The guard
+  // above only fires when NOTHING is resolved, so the realistic case — one
+  // exercise done, six untouched, a mistaken tap on "finish" — went straight
+  // into history as a completed session. My own checklist claimed this was
+  // handled; it was not, and only the empty case ever was.
+  //
+  // Reopening from history exists, so this is recoverable, but it silently
+  // records a session he did not do and feeds the volume ledger a wrong number.
+  if (unresolved > 0 && !endSessionConfirmed) {
+    confirmAction({
+      title: t('end_session'),
+      body: tf('finish_with_open', { n: unresolved }),
+      confirmLabel: t('finish_anyway'),
+    }).then((yes) => {
+      if (!yes) return;
+      endSessionConfirmed = true;
+      endSession();
+      endSessionConfirmed = false;
     });
     return;
   }
@@ -2185,7 +2220,11 @@ function renderSessionEnd() {
 
   const wrap = h('div', { class: 'session-end' },
     h('div', { class: 'hero' }, '💪'),
-    h('h2', {}, 'Session done.'),
+    // 'Session done.' — with the full stop — was in no locale entry, so this
+    // one heading rendered English on the screen shown after every workout.
+    // session_done_title is keyed to 'Workout finished'; the two strings were
+    // never the same, which is why the Arabic gate did not catch it.
+    h('h2', {}, t('session_done_title')),
     h('div', { class: 'subtitle' }, fmtDate(s.started_at) + ' · ' + s.session_name),
 
     h('div', { class: 'stats-grid' },
@@ -2663,11 +2702,19 @@ function previewedSession() {
 }
 
 
-// The coach searches the 33 Nippard works Raed owns and shows what they actually
-// say, each passage with its book and page. It NEVER writes an answer of its own.
-// A generated training cue that sounds confident and is wrong is the one failure
-// this feature cannot have, so there is no generation path to get wrong: the
-// service has none, and neither does this.
+// The coach searches the 33 Nippard works Raed owns and answers out of them,
+// showing the passages it used with book and page.
+//
+// It used to only quote, and this comment used to say "it NEVER writes an answer
+// of its own" — true until 2026-09-03, and dangerous to leave standing once it
+// stopped being true, because it would send the next reader looking for an
+// architecture that is no longer here.
+//
+// What did NOT change is the rule underneath it. A generated training cue that
+// sounds confident and is wrong is the one failure this app cannot absorb, so:
+// no passages means the model is never called, and an answer that names no
+// passage is not shown. Only who assembles the sentence changed.
+
 // HTTPS, not the raw Tailscale IP. The app is served over HTTPS, and a browser
 // refuses to fetch http:// from an https:// page — the request never leaves, and
 // it looks like a network fault rather than the policy block it is.
@@ -2706,6 +2753,8 @@ let coachState = { status: 'idle', question: '', results: [], answer: null, erro
 // something else next time.
 let coachEnglish = new Set();
 let coachOpen = new Set();
+// Monotonic, so a slow earlier request cannot overwrite a newer answer.
+let coachRequestId = 0;
 
 // Raed's library deliberately keeps both editions of two Nippard programmes,
 // because their bytes differ and no supersession was ever proven. Retrieval does
@@ -2719,7 +2768,13 @@ function dedupePassages(results) {
   const passages = [];
   const moved = new Map();
   results.forEach((passage, index) => {
-    const key = String(passage.text || '').replace(/\s+/g, ' ').trim().slice(0, 160).toLowerCase();
+    // The WHOLE passage, not its opening. 160 characters was enough to collapse
+    // two genuinely different 900-character chunks that happen to start the
+    // same way — consecutive pages of one book routinely do — and because the
+    // answer cites passages by index, collapsing them also redirects a citation
+    // onto the survivor. Wrong evidence under a right answer is worse than a
+    // duplicate.
+    const key = String(passage.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
     if (seen.has(key)) {
       // A citation of the copy still points at the one that was kept.
       moved.set(index, seen.get(key));
@@ -2761,6 +2816,12 @@ async function askCoach(question, context = null) {
   // not cover it". As its own field the name steers retrieval and is offered to
   // the answer as context, so a general question stays general and a vague one
   // ("كم تكرار أسوي؟") finally has something to resolve against.
+  // Every request gets a number, and only the newest one is allowed to write
+  // to coachState. Two questions in a row on a slow connection could otherwise
+  // finish out of order and leave the FIRST answer sitting under the SECOND
+  // question — with citation markers pointing into the wrong passage list,
+  // because coachOpen and coachEnglish are keyed by index into it.
+  const ticket = ++coachRequestId;
   coachState = { status: 'loading', question, results: [], answer: null, error: '' };
   coachEnglish = new Set();
   coachOpen = new Set();
@@ -2790,7 +2851,23 @@ async function askCoach(question, context = null) {
       }),
       signal: AbortSignal.timeout(30000),
     });
-    const data = await res.json();
+    if (ticket !== coachRequestId) return;
+    // Status first, body second. res.json() used to run before anything looked
+    // at res.status, so an HTML error page from a proxy — a 502, a 504, or a
+    // 401 that Tailscale Serve rewrites into its own page — threw on the parse
+    // and landed in the catch, which reports "the library is unreachable". It
+    // was reachable; it was refusing or the gateway was broken, and Raed would
+    // have gone looking for a network fault that did not exist.
+    let data;
+    try {
+      data = await res.json();
+    } catch (_) {
+      coachState = res.status === 401
+        ? { status: 'unauthorized', question, results: [], answer: null, error: '' }
+        : { status: 'error', question, results: [], answer: null, error: `HTTP ${res.status}` };
+      renderCoach();
+      return;
+    }
     if (data.status === 'no_match') {
       // A 200 carrying "nothing matched". Its own state — not an error, and not
       // an empty result list dressed up as an answer.
@@ -2821,6 +2898,7 @@ async function askCoach(question, context = null) {
       coachState = { status: 'error', question, results: [], answer: null, error: data.error || data.status || 'unknown' };
     }
   } catch (err) {
+    if (ticket !== coachRequestId) return;
     // Unreachable is reported as unreachable. The library is on Raed's own
     // server, so the honest cause is almost always "phone is off Tailscale" —
     // saying that beats a spinner that never resolves.
@@ -2910,8 +2988,12 @@ function renderCoach() {
   if (coachState.status === 'idle') {
     root.appendChild(h('div', { class: 'card compact' },
       h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_try')),
+      // The chips go through the same path as the typed question, context and
+      // all. They used to call askCoach() bare, so tapping a chip mid-session
+      // silently ignored the switch he had just left on.
       h('div', { class: 'coach-chips' }, COACH_EXAMPLES.map((example) => h('button', {
-        class: 'btn tiny', onClick: () => { input.value = t(example); askCoach(t(example)); },
+        class: 'btn tiny',
+        onClick: () => { input.value = t(example); submit(); },
       }, t(example)))),
     ));
     return;
@@ -2941,7 +3023,7 @@ function renderCoach() {
   if (coachState.status === 'offline' || coachState.status === 'error') {
     root.appendChild(h('div', { class: 'card compact warn', 'data-coach-error': 'true' },
       h('strong', {}, t(coachState.status === 'offline' ? 'coach_offline' : 'coach_error')),
-      h('p', { class: 'tiny muted' }, t('coach_offline_hint')),
+      h('p', { class: 'tiny muted' }, t(coachState.status === 'offline' ? 'coach_offline_hint' : 'coach_error_hint')),
       h('p', { class: 'tiny muted' }, h('bdi', { class: 'ltr-run' }, coachState.error)),
     ));
     return;
@@ -3046,14 +3128,30 @@ function coachAnswerText(text, passageCount) {
 function renderCoachAnswer(root) {
   const answer = coachState.answer;
   const results = coachState.results;
-  const used = answer && Array.isArray(answer.used) ? answer.used : [];
-  const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text;
-  const isRefusal = answer && answer.status === 'ok' && !answer.answered;
+
+  // `answered` alone is not enough. The model returns the flag and the source
+  // list independently, so {answered: true, used: []} is reachable — a confident
+  // sentence with nothing under it, which is exactly the shape this feature was
+  // built to make impossible. An answer that names no passage is treated as no
+  // answer, and the passages are shown so he can judge for himself.
+  const cited = answer && Array.isArray(answer.used) ? answer.used : [];
+  const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length > 0;
+  const unsourced = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length === 0;
+  const isRefusal = (answer && answer.status === 'ok' && !answer.answered) || unsourced;
 
   if (isAnswer) {
     root.appendChild(h('article', { class: 'card coach-answer', 'data-coach-answer': 'true' },
       h('div', { class: 'coach-answer-label' }, t('coach_answer_label')),
       coachAnswerText(answer.text, results.length),
+    ));
+  } else if (unsourced) {
+    // The model claimed an answer and named no passage for it. Its sentence is
+    // NOT printed: an unsupported claim is the one thing this screen must never
+    // put in front of him, and reprinting it under a "not in your books"
+    // heading would do exactly that while looking careful.
+    root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
+      h('strong', {}, t('coach_unanswered')),
+      h('p', { class: 'tiny muted' }, t('coach_unsourced_hint')),
     ));
   } else if (isRefusal) {
     // Not an error state. The search worked; the books do not cover it.
@@ -3070,7 +3168,6 @@ function renderCoachAnswer(root) {
       t('coach_answer_failed')));
   }
 
-  const cited = used.length ? used : [];
   const rest = results.map((_, i) => i).filter((i) => !cited.includes(i));
 
   if (cited.length) {
@@ -3172,21 +3269,41 @@ function renderHome() {
 
   context.appendChild(buildWeekStrip());
 
+  // A stat tile's number, sized so it can never leave the tile.
+  //
+  // The tonnage tile is the problem: it read 13,360 at 31px in a box ~104px
+  // wide inside, which was already touching both edges, and it only goes up —
+  // six figures within a year, seven eventually. A number that outgrows its box
+  // is not a rounding question, it is the box lying about what it holds.
+  //
+  // Digits, not characters: the separators are narrow and the caption is what
+  // sets the tile's width, so counting 0-9 is what predicts the overflow.
+  const statNum = (text) => {
+    const digits = (String(text).match(/\d/g) || []).length;
+    const size = digits >= 7 ? ' s7' : digits >= 6 ? ' s6' : digits >= 5 ? ' s5' : '';
+    return h('div', { class: 'stat-num' + size, 'data-digits': String(digits) }, String(text));
+  };
+
   context.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
-      h('div', { class: 'stat-num' }, String(streak)),
+      statNum(String(streak)),
       h('div', { class: 'stat-cap' }, t('home_streak')),
       h('div', { class: 'stat-sub' }, t('sessions_4wk')),
     ),
     h('div', { class: 'stat-tile' },
-      h('div', { class: 'stat-num' }, String(vol.totalSets)),
+      statNum(String(vol.totalSets)),
       h('div', { class: 'stat-cap' }, t('this_week_plain')),
       h('div', { class: 'stat-sub' }, t('working_sets')),
     ),
+    // Tonnage is the one tile whose number keeps growing. It reads 13,360 today
+    // and will read six figures inside a year, in a tile one third of a phone
+    // screen wide — so the size has to come from the number, not from a
+    // constant. statNum() steps it down by digit count; nothing else on this
+    // row needs it, but they all get it so the three tiles stay one family.
     h('div', { class: 'stat-tile' },
-      h('div', { class: 'stat-num' }, fmtKgTotal(vol.totalKg)),
+      statNum(fmtKgTotal(vol.totalKg)),
       h('div', { class: 'stat-cap' }, t('home_tonnage')),
-      h('div', { class: 'stat-sub' }, 'kg this week'),
+      h('div', { class: 'stat-sub' }, t('kg_this_week')),
     ),
   ));
 
@@ -3422,7 +3539,10 @@ function renderHome() {
   } else {
     // Show today's planned exercises preview
     const sess = planned || next.session;
-    root.appendChild(h('div', { class: 'spacer-24' }));
+    // No spacer here. .section-label already carries margin: 22px 2px 10px, so
+    // the 24px block on top of it made a 46px hole between the Spotify card and
+    // «خطة التمرين» — two rules doing one job, which is what Raed spotted and
+    // asked what the point of it was. There isn't one.
     root.appendChild(h('h3', { class: 'section-label' }, planned ? 'Session plan' : 'Next session preview'));
     sess.exercises.forEach((p, i) => {
       const ex = getAllExercises().find(e => e.id === p.exercise_id);
@@ -3579,29 +3699,37 @@ function renderExerciseCard(ex_id, exState) {
       onClick: (event) => { event.stopPropagation(); showExerciseSettings(ex_id, exState); },
     }),
   );
-  // The icon is drawn the way every other icon in this app is drawn: an inline
-  // SVG on the shared line set, 1.8 stroke, round caps. It was a text glyph,
-  // which renders heavy and differently on each platform and looked wrong beside
-  // the clean stroke icons in the header and tab bar — Raed spotted it at once.
-  // This is the same sliders mark the Settings tab uses, so the per-exercise
-  // button speaks the app's own vocabulary for settings.
+  // The emoji, back, at Raed's request: "رجّع الإيموجي الثابت حق إعدادات
+  // التمرين". It went through three forms and this is the third time he has
+  // ruled on it, so the reasoning is worth writing down rather than re-deriving:
+  //
+  //   ⚙   bare U+2699    — a TEXT glyph. Thin, and drawn by whatever font the
+  //                        platform picks, so it looked different on his phone
+  //                        than anywhere I checked it. He called it "the worst".
+  //   sliders SVG        — matched the app's line set, but he wants the emoji.
+  //   ⚙️  U+2699 U+FE0F  — the emoji presentation: same colour glyph on every
+  //                        device, which is the "ثابت" in what he asked for.
+  //
+  // The variation selector is the whole difference and it is invisible in the
+  // source, so: it is deliberate, do not "clean it up".
   const gearBtn = head.querySelector('[data-exercise-settings]');
-  if (gearBtn) {
-    gearBtn.innerHTML = allWorkingDone
-      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6.5"/></svg>'
-      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg>';
-  }
+  if (gearBtn) gearBtn.textContent = allWorkingDone ? '✅' : '⚙️';
   card.appendChild(head);
 
   // Body
   const body = h('div', { class: 'ex-body' });
+  // «آخر مرة» is built here, where `last` is in scope, and appended AFTER the
+  // sets. Raed: "خله بس تحت يعني موجود تحت بدل ما يكون فوق". It is reference,
+  // not instruction — he needs it while deciding what to type, not before he
+  // has seen the row he is typing into.
+  let lastTimeRow = null;
   if (last) {
     const ws = (last.sets || []).filter(s => !s.is_warmup && s.completed);
     if (ws.length) {
-      body.appendChild(h('div', { class: 'last-time' },
+      lastTimeRow = h('div', { class: 'last-time' },
         h('strong', {}, 'Last time'), ` (${fmtDate(last.date)}): `,
         ws.map(s => `${s.weight}×${s.reps}`).join(', ')
-      ));
+      );
     }
   }
   // Videos — Library controls which are visible via state.video_hidden
@@ -3642,18 +3770,35 @@ function renderExerciseCard(ex_id, exState) {
   // calculation and dropped the render, so the number looked arbitrary — the
   // exact thing Raed complained about not understanding. Shown compactly, above
   // the rep goal, and NOT as a form cue (those he removed on purpose).
+  //
+  // One of the nine notes is dropped: why_match_or_beat, «المرة الماضية: 10 كغ
+  // × 6. اعدلها أو تجاوزها». Raed asked for it gone — "وش أعدلها أو أتجاوزها ما
+  // أدري صراحة" — and he is right about that one specifically: «آخر مرة» below
+  // already prints every set of last session, so the note repeated a subset of
+  // it and added an instruction that names no number to aim at. It is also the
+  // FALLBACK branch, so it was the note he saw most often, which is why the
+  // whole feature read as noise.
+  //
+  // The other eight stay. They each explain a DECISION — hold this load, bump
+  // it, add a rep instead because this is an accessory, today is a calibration
+  // — which is exactly the "رقم بدون سبب" he asked to fix. Removing those to
+  // satisfy a complaint about the one that explains nothing would delete the
+  // answer along with the noise.
+  const noteIsRestatement = sug.note_kind === 'match_or_beat';
   if (exState.machine_weight) {
     // Replaces the load reasoning rather than sitting beside it: with no added
     // weight there is no load to explain, and reps are the only lever left.
     body.appendChild(h('div', { class: 'why-weight tiny', 'data-why-weight': 'true' }, t('machine_weight_note')));
-  } else if (sug.note) {
+  } else if (sug.note && !noteIsRestatement) {
     body.appendChild(h('div', { class: 'why-weight tiny', 'data-why-weight': 'true' }, sug.note));
   }
 
   const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
-  if (repTop) {
-    body.appendChild(h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, tf('reps_goal', { n: repTop })));
-  }
+  // Built here, appended after the sets: it is the target he checks each row
+  // against, so it belongs beside the rows, not stacked on top of them.
+  const repsGoalRow = repTop
+    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, tf('reps_goal', { n: repTop }))
+    : null;
 
   // A1/A2 run back to back. superset_group has been in data.js since the
   // programme was transcribed and was read by nothing, so the app rested 2:00
@@ -3779,6 +3924,13 @@ function renderExerciseCard(ex_id, exState) {
     row.appendChild(h('span', { class: 'effort-slot' }));
     body.appendChild(row);
   });
+
+  // Under the rows, in the order he reads them: the target for the rows above,
+  // then what he did last time. Both used to sit ABOVE the grid, pushing the
+  // first input he touches further down a screen he already said had too much
+  // scrolling.
+  if (repsGoalRow) body.appendChild(repsGoalRow);
+  if (lastTimeRow) body.appendChild(lastTimeRow);
 
   // Action row: alternatives + add set + warmup helper
   if (planned.warmup) {
