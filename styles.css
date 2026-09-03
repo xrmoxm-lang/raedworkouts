@@ -941,11 +941,35 @@ body.runner-mode .page-runner.active {
 .xs-log-device { color: var(--text-muted); text-align: end; overflow-wrap: anywhere; }
 .xs-empty { font-size: 12.5px; color: var(--text-muted); }
 
-.xs-primary { margin-bottom: 10px; }
+/* One grid, one box, six actions. The sheet used to stack three different
+   shapes — a full-width primary slab, a 2x2 of outlines, and a bare red text
+   link — so the eye had to re-learn what a control looked like twice on the way
+   down. Everything is the same box now; only the fill carries the meaning. */
 .xs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.xs-action { min-height: 48px; font-size: 12.5px; font-weight: 650; }
-.xs-action.is-static { display: flex; align-items: center; justify-content: center; opacity: 0.7; cursor: default; }
-.xs-skip { margin-top: 14px; }
+.xs-action {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; min-height: 46px; padding: 8px 10px;
+  font-size: 12.5px; font-weight: 650; line-height: 1.2; text-align: center;
+}
+/* Spans both columns: the two actions that are not peers of the other four —
+   the one he reaches for most, and the one that ends the exercise. */
+.xs-action.xs-wide { grid-column: 1 / -1; }
+/* The rest value, under its verb. Inline it made the button look like a readout
+   that happened to be tappable. */
+.xs-action-sub {
+  font-size: 11px; font-weight: 700; opacity: 0.72;
+  font-variant-numeric: tabular-nums; direction: ltr;
+}
+.xs-action.is-static { opacity: 0.7; cursor: default; }
+/* Tinted, not shouted. Skipping is something he sometimes wants; a red text
+   link made it the loudest thing in the sheet while also being the least
+   button-shaped. */
+.xs-skip {
+  margin-top: 4px;
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+  color: var(--danger);
+}
+.xs-skip:active { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .xs-done { margin-top: 18px; min-height: 48px; }
 
 
@@ -1636,24 +1660,15 @@ body.welcome-mode main {
 .section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--text-muted); }
 
 /* Today header — command-center presence */
-/* Centred, because it is a masthead and not a paragraph.
-   Raed asked for this by name: "علوي الخميس... ليش ما تحطه بالنص يعني يصير
-   شكله أفضل". Ranged right it read as the first line of the page's body text,
-   and the day, the name and the length sat in three different optical columns.
-   Centred they stack into one mark, which is what the card is for — and it also
-   stops the session name and the day-plus-duration line disagreeing about where
-   the eye starts, an RTL page's easiest way to look untidy. */
-.today-banner { padding: 22px 18px 20px; text-align: center; }
+/* Ranged to the start, as it was. I centred this after "حطها بالنص" and he
+   looked at it and said put it back: "ما عجبني، رجّعها نفس مكان". His screen,
+   his call — and the reason is visible once you see it, since every other card
+   on the page starts at the same edge and the centred one broke that line. */
+.today-banner { padding: 20px 18px 18px; }
 .today-banner::before { height: 4px; }
 .today-banner .tb-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
-.today-banner h2 {
-  font-size: 30px; font-weight: 830; letter-spacing: -0.04em; line-height: 1.02;
-  margin: 6px 0 0;
-}
-.today-banner p { font-size: 15px; margin: 4px 0 0; }
-/* The one quiet line under the name: how many exercises, roughly how long. It
-   is reference, not a headline, so it recedes and takes the space instead. */
-.today-banner .tb-meta { margin-top: 9px; font-size: 12.5px; }
+.today-banner h2 { font-size: 27px; font-weight: 830; letter-spacing: -0.04em; line-height: 1.05; }
+.today-banner p { font-size: 15px; }
 .today-banner.active { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 30%, var(--bg-card)), var(--bg-card) 55%); }
 
 /* Progress meter — thicker, with a big confident % */

@@ -59,6 +59,34 @@ const readState = (page) => page.evaluate(() => {
   return { active: !!s.active_session, history: (s.history || []).length };
 });
 
+test('the delete-session button says it deletes, and asks in-app', async ({ page }) => {
+  // It was labelled «تجاهل التمرين» — "skip the exercise" — sat under the
+  // exercise card beside a real skip action, ran behind a native confirm()
+  // whose body was that same misleading label, and had no undo. The most
+  // destructive control in the app read like the least.
+  await intoSession(page);
+  await completeFirstExercise(page);
+  const before = await readState(page);
+
+  const discard = page.locator('[data-discard-session]').first();
+  await expect(discard).toHaveCount(1);
+  await expect(discard, 'the label must name the consequence').toContainText('احذف');
+  await expect(discard, 'and must not read as skipping one exercise').not.toContainText('تجاهل التمرين');
+
+  await discard.click();
+  await page.waitForTimeout(500);
+  // In-app dialog, not the native one an installed PWA can suppress.
+  await expect(page.locator('#modal [data-confirm-yes]')).toHaveCount(1);
+  await expect(page.locator('#modal')).toContainText('ما فيه تراجع');
+
+  await page.locator('#modal [data-confirm-no]').click();
+  await page.waitForTimeout(500);
+  const after = await readState(page);
+  expect(after.active, 'declining keeps the session').toBe(true);
+  expect(after.history).toBe(before.history);
+  console.log('DISCARD_SESSION_NAMED_AND_GUARDED');
+});
+
 test('finishing with exercises still open asks first, and declining keeps the session', async ({ page }) => {
   // The guard used to fire only when NOTHING was logged, so the realistic
   // accident — one exercise done, six untouched, a stray tap on finish — went

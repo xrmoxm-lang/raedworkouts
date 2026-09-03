@@ -2091,6 +2091,32 @@ function reopenSession(sess) {
 // Set only while re-entering endSession() from its own confirmation, so the
 // guard below asks once instead of looping on itself.
 let endSessionConfirmed = false;
+// Deletes the whole session. It used to be inline in two places, labelled
+// «تجاهل التمرين» — "skip the exercise" — behind a native confirm() whose body
+// was that same misleading label, with no undo afterwards. Raed asked what it
+// did. He could not tell, which is the whole problem: the most destructive
+// control in the app read like the least.
+//
+// confirmAction, not confirm(): an installed PWA can suppress the native one,
+// and this is the last thing that should silently do nothing — or silently
+// proceed.
+function discardSession() {
+  if (!state.active_session) return;
+  confirmAction({
+    title: t('discard_session'),
+    body: t('discard_session_body'),
+    confirmLabel: t('discard_session_confirm'),
+    danger: true,
+  }).then((yes) => {
+    if (!yes) return;
+    state.active_session = null;
+    state.forced_next_session = null;
+    focusExerciseIdx = null;
+    saveLocal();
+    render();
+  });
+}
+
 function endSession() {
   if (!state.active_session) return;
   const a = state.active_session;
@@ -3387,7 +3413,7 @@ function renderHome() {
     }
     if (a.phase === 'warmup' && a.warmup) {
       root.appendChild(renderWarmupPhase(a));
-      root.appendChild(h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')));
+      root.appendChild(h('button', { class: 'btn danger ghost full', 'data-discard-session': 'true', onClick: () => discardSession() }, t('discard_session')));
       return;
     }
 
@@ -3534,7 +3560,7 @@ function renderHome() {
         ? h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session'))
         : null,
       h('div', { class: 'spacer-12' }),
-      h('button', { class: 'btn danger ghost full', onClick: () => { if (confirm(t('discard_session'))) { state.active_session = null; focusExerciseIdx = null; saveLocal(); render(); } } }, t('discard_session')),
+      h('button', { class: 'btn danger ghost full', 'data-discard-session': 'true', onClick: () => discardSession() }, t('discard_session')),
     ));
   } else {
     // Show today's planned exercises preview
@@ -4145,13 +4171,23 @@ function showExerciseSettings(ex_id, exState) {
   const rest = prescribedRestSeconds(planned);
   modal.appendChild(h('section', { class: 'xs-section' },
     h('div', { class: 'xs-label' }, t('actions_section')),
-    // One button, straight to the list. He asked for exactly this: "لا أبغاك
-    // ترتبها تكون زر واحد استبدال وعلى طول" — no paragraph explaining it.
-    h('button', {
-      class: 'btn primary full xs-primary', 'data-open-swap': 'true',
-      onClick: () => closeThen(() => showAltModal(ex_id, exState)),
-    }, t('swap')),
+    // ONE grid, one button shape, six actions.
+    //
+    // It was three shapes stacked: a full-width primary slab for استبدال, a 2x2
+    // of outline buttons under it, and تخطي التمرين as a bare red text link — a
+    // fifth visual language for the one action that ends the exercise. Raed:
+    // "أعتقد نقدر نرتبها ونخليها بشكل أرتب وأنسق وأصغر... متناسقة".
+    //
+    // Now every action is the same box at the same height, and only the FILL
+    // says what kind it is: استبدال is filled because he uses it most and asked
+    // for it to lead, تخطي is tinted because it ends the exercise, the rest are
+    // outlines. Two of them span the full width, so the grid still reads as a
+    // hierarchy rather than a wall of six identical tiles.
     h('div', { class: 'xs-grid' },
+      h('button', {
+        class: 'btn primary xs-action xs-wide', 'data-open-swap': 'true',
+        onClick: () => closeThen(() => showAltModal(ex_id, exState)),
+      }, t('swap')),
       h('button', {
         class: 'btn xs-action', 'data-add-set': 'true',
         onClick: () => {
@@ -4165,7 +4201,11 @@ function showExerciseSettings(ex_id, exState) {
         ? h('button', {
             class: 'btn xs-action', 'data-rest-button': 'true',
             onClick: () => closeThen(() => startRest(rest)),
-          }, tf('rest_seconds', { seconds: `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}` }))
+          },
+          // The label and its value on two lines, so the button reads as a verb
+          // with a setting rather than a control that displays state.
+          h('span', {}, t('rest_plain')),
+          h('span', { class: 'xs-action-sub' }, `${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')}`))
         // A prescribed zero is an instruction to go straight into the paired
         // movement, not a short rest. Offering a 0:00 timer would be absurd.
         : h('span', { class: 'btn xs-action is-static', 'data-no-rest': 'true' }, t('no_rest_superset')),
@@ -4177,14 +4217,14 @@ function showExerciseSettings(ex_id, exState) {
         class: 'btn xs-action', 'data-add-exercise': 'true',
         onClick: () => closeThen(() => showAddExerciseModal()),
       }, t('add_exercise_button')),
+      // Ends this movement for the session. Same box as the rest, tinted — it
+      // is an action he sometimes wants, not a warning he must be walled off
+      // from, and a bare red link was the odd one out in every direction.
+      h('button', {
+        class: 'btn xs-action xs-wide xs-skip', 'data-runner-skip-exercise': 'true',
+        onClick: () => closeThen(() => skipRunnerExercise(ex_id)),
+      }, t('runner_skip_exercise')),
     ),
-    // Skipping ends this movement for the session. It is the one destructive
-    // thing in the sheet, so it sits apart from the grid rather than beside
-    // "+ set" at the same weight.
-    h('button', {
-      class: 'btn danger ghost full xs-skip', 'data-runner-skip-exercise': 'true',
-      onClick: () => closeThen(() => skipRunnerExercise(ex_id)),
-    }, t('runner_skip_exercise')),
   ));
 
   // ---- السجل — evidence, last ---

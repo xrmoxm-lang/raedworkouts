@@ -249,6 +249,9 @@ export const LOCALE = Object.freeze({
   session_mood_upper_b: pair('Incline first while fresh. More pulling than pressing today.', 'المائل أولًا وأنت مرتاح. السحب اليوم أكثر من الدفع.'),
   session_mood_lower_b: pair('Squat and hips lead today. The rest completes, not exhausts.', 'السكوات والحوض هما اليوم. البقية إتمام لا إنهاك.'),
   unknown_exercise: pair('Unknown exercise: {id}', 'تمرين غير معروف: {id}'),
+  // Just the verb. The duration goes on its own line inside the button, so the
+  // label no longer has to carry a number and a clock glyph through RTL.
+  rest_plain: pair('Rest', 'راحة'),
   rest_seconds: pair('⏱ Rest {seconds}', '⏱ راحة {seconds}'),
   history_total: pair('{sets} sets · {kg} kg total', '{sets} مجموعات · {kg} kg إجمالًا'),
   restore_failed: pair('Restore failed: {message}', 'تعذّرت الاستعادة: {message}'),
@@ -554,7 +557,14 @@ export const LOCALE = Object.freeze({
   view_history: pair('View history', 'اعرض السجل'),
   session_started: pair("Session started — let's go.", 'بدأت الجلسة.'),
   session_saved: pair('Session saved.', 'تم حفظ التمرين.'),
-  discard_session: pair('Discard session', 'تجاهل التمرين'),
+  // «تجاهل التمرين» reads as "skip the exercise". This button DELETES THE WHOLE
+  // SESSION — every set logged today — and it sat directly under the exercise
+  // card, next to a real skip-exercise action, with no undo. Raed asked what it
+  // was for; he could not tell from the label, and neither could I until I
+  // traced it. The label now says what happens.
+  discard_session: pair('Delete this session', 'احذف هذه الجلسة'),
+  discard_session_body: pair('Everything you logged today is deleted. This cannot be undone.', 'كل اللي سجّلته اليوم يُحذف. ما فيه تراجع.'),
+  discard_session_confirm: pair('Delete it', 'احذفها'),
   discard_active_session: pair('You have an active session in progress. Discard it and start a new one?', 'لديك تمرين نشط. هل تتجاهله وتبدأ تمريناً جديداً؟'),
   discard_empty_session: pair('No sets logged. Discard this session?', 'لم تُسجَّل أي مجموعة. هل تتجاهل هذا التمرين؟'),
   discard_current_session: pair('Discard this session?', 'هل تتجاهل هذا التمرين؟'),
