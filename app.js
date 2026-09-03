@@ -2699,21 +2699,37 @@ const COACH_URL = 'https://raed-hp.tail53bd35.ts.net/coach';
 // and can be rotated in one place on the server.
 const COACH_KEY = 'oQq1nmXFMvfZ1M6A2gyiGWQeLB9h6xCW1e5DQW5ARWk';
 const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
-let coachState = { status: 'idle', question: '', results: [], error: '' };
+let coachState = { status: 'idle', question: '', results: [], answer: null, error: '' };
+// Which passages he has flipped to English, and which he has opened in full,
+// keyed by index within the current answer. Both reset on every new question —
+// a toggle belongs to the passage on screen, not to an index that will mean
+// something else next time.
+let coachEnglish = new Set();
+let coachOpen = new Set();
 
 // Raed's library deliberately keeps both editions of two Nippard programmes,
 // because their bytes differ and no supersession was ever proven. Retrieval does
 // not know that: "how many sets per week" came back with page 92 of file A AND
 // page 92 of file B, identical text, one above the other. Keep the first (they
 // arrive sorted by score) and drop later passages whose text repeats it.
+// Returns the surviving passages AND a map from each server-side index to its
+// new one, because the written answer cites passages by the server's numbering.
 function dedupePassages(results) {
-  const seen = new Set();
-  return results.filter((passage) => {
+  const seen = new Map();
+  const passages = [];
+  const moved = new Map();
+  results.forEach((passage, index) => {
     const key = String(passage.text || '').replace(/\s+/g, ' ').trim().slice(0, 160).toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+    if (seen.has(key)) {
+      // A citation of the copy still points at the one that was kept.
+      moved.set(index, seen.get(key));
+      return;
+    }
+    seen.set(key, passages.length);
+    moved.set(index, passages.length);
+    passages.push(passage);
   });
+  return { passages, moved };
 }
 
 // Arabic counts do not work like English ones. "2 مقاطع" is wrong: two takes the
@@ -2726,37 +2742,83 @@ function coachFoundLabel(count) {
   return tf('coach_found', { n: count });
 }
 
+// Same three cases for the collapsed remainder.
+function coachMoreLabel(count) {
+  if (activeLanguage() !== 'ar') return tf('coach_sources_more', { n: count });
+  if (count === 1) return t('coach_sources_more_one_ar');
+  if (count === 2) return t('coach_sources_more_two_ar');
+  return tf('coach_sources_more', { n: count });
+}
+
 async function askCoach(question, context = null) {
-  // Only the NAME is sent, appended to the question. Sets, loads and history
-  // stay on the device — he asked for a coach that knows which exercise he is
-  // on, not one that reads his session.
-  const sent = context ? `${question} ${context.name}` : question;
-  coachState = { status: 'loading', question, results: [], error: '' };
+  // Only the NAME is sent, and it travels in its own field. Sets, loads and
+  // history stay on the device — he asked for a coach that knows which exercise
+  // he is on, not one that reads his session.
+  //
+  // It used to be appended to the question, and that silently narrowed every
+  // question asked mid-session: "متى أسوي ديلود؟" became "when do I deload for
+  // the Chest Press Machine", and the honest answer to that is "your books do
+  // not cover it". As its own field the name steers retrieval and is offered to
+  // the answer as context, so a general question stays general and a vague one
+  // ("كم تكرار أسوي؟") finally has something to resolve against.
+  coachState = { status: 'loading', question, results: [], answer: null, error: '' };
+  coachEnglish = new Set();
+  coachOpen = new Set();
   renderCoach();
   try {
-    const res = await fetch(COACH_URL + '/search', {
+    // /answer, not /search: the server runs the identical retrieval and then
+    // writes the answer from what it found. The OpenAI key never leaves the
+    // server, and when retrieval finds nothing the model is never called.
+    const res = await fetch(COACH_URL + '/answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Coach-Key': COACH_KEY },
-      // 0.5, not the service's 0.45 default. Measured on the re-embedded index:
-      // every genuine Arabic answer scored 0.573 or better, while «وصفة كبسة لحم»
-      // — a question the library cannot answer — scraped through at 0.486 onto a
-      // meal-macros page. Cross-lingual scores sit lower than English ones, so
-      // the floor has to clear that band without cutting into real answers.
-      body: JSON.stringify({ question: sent, top_k: 5, min_score: 0.5 }),
+      // 0.35, down from 0.5. The floor used to be the answerability guard, and
+      // measuring it on 26 questions showed it cannot be: real questions his
+      // books answer score 0.396 (هل الإحماء ضروري؟), 0.412 (وش هو RIR؟) and
+      // 0.476 (هل الكرياتين مفيد؟), all BELOW «وصفة كبسة لحم» at 0.514. A floor
+      // that stops the kabsa question silences RIR and creatine with it.
+      //
+      // So the floor is now only a cheap early exit for the absurd — عاصمة
+      // اليابان lands at 0.179, علاج حب الشباب at 0.273, and neither costs an
+      // API call — and the model, holding the passages, decides whether they
+      // answer the question. It returns that as a flag, not as prose.
+      body: JSON.stringify({
+        question,
+        ...(context ? { context: context.name } : {}),
+        top_k: 5,
+        min_score: 0.35,
+      }),
       signal: AbortSignal.timeout(30000),
     });
     const data = await res.json();
     if (data.status === 'no_match') {
       // A 200 carrying "nothing matched". Its own state — not an error, and not
       // an empty result list dressed up as an answer.
-      coachState = { status: 'no_match', question, results: [], error: '' };
+      coachState = { status: 'no_match', question, results: [], answer: null, error: '' };
     } else if (data.status === 'ok' && Array.isArray(data.results) && data.results.length) {
-      coachState = { status: 'ok', question, results: dedupePassages(data.results), error: '' };
+      // Deduping removes passages, and the answer's `used` indices point at the
+      // list the SERVER sent. Remap them, or a citation would silently move to
+      // whichever passage happened to slide into that slot.
+      const { passages, moved } = dedupePassages(data.results);
+      const answer = data.answer && typeof data.answer === 'object' ? { ...data.answer } : null;
+      if (answer && Array.isArray(answer.used)) {
+        answer.used = answer.used.map((i) => moved.get(i)).filter((i) => i !== undefined);
+      }
+      // The answer cites "[3]" using the server's numbering, which dedupe just
+      // changed. Renumber the markers with the same map, or a citation would
+      // point at whichever passage slid into that slot.
+      if (answer && typeof answer.text === 'string') {
+        answer.text = answer.text.replace(/\[(\d{1,2})\]/g, (whole, digits) => {
+          const to = moved.get(Number(digits) - 1);
+          return to === undefined ? '' : `[${to + 1}]`;
+        });
+      }
+      coachState = { status: 'ok', question, results: passages, answer, error: '' };
     } else if (res.status === 401 || data.status === 'unauthorized') {
       // Distinct from "the server is down": the library answered, and refused.
-      coachState = { status: 'unauthorized', question, results: [], error: '' };
+      coachState = { status: 'unauthorized', question, results: [], answer: null, error: '' };
     } else {
-      coachState = { status: 'error', question, results: [], error: data.error || data.status || 'unknown' };
+      coachState = { status: 'error', question, results: [], answer: null, error: data.error || data.status || 'unknown' };
     }
   } catch (err) {
     // Unreachable is reported as unreachable. The library is on Raed's own
@@ -2885,19 +2947,159 @@ function renderCoach() {
     return;
   }
 
-  root.appendChild(h('div', { class: 'tiny muted', style: 'margin:2px 0 6px;', 'data-coach-count': 'true' },
-    coachFoundLabel(coachState.results.length)));
-  coachState.results.forEach((passage) => {
-    root.appendChild(h('article', { class: 'card compact coach-passage', 'data-coach-passage': 'true' },
-      h('div', { class: 'coach-source' },
-        // Book titles are English and stay English (T1). h() isolates Latin runs
-        // on its own, so no manual <bdi> here — that is what produced nested bdi.
-        h('strong', {}, passage.work),
-        h('span', { class: 'tiny muted' }, ' · ', tf('coach_page', { n: passage.page })),
-      ),
-      h('p', { class: 'coach-text' }, passage.text),
+  renderCoachAnswer(root);
+}
+
+// One passage card. Shows the Arabic translation when the library has one and
+// keeps the English original one tap away, because the Arabic is machine
+// translation of a book he paid for and he should be able to check it.
+function coachPassageCard(passage, index, cited) {
+  const arabic = passage.text_ar;
+  const showEnglish = coachEnglish.has(index) || !arabic;
+  const open = coachOpen.has(index);
+  const card = h('article', {
+    class: 'card compact coach-passage' + (cited ? ' cited' : ''),
+    'data-coach-passage': 'true',
+    ...(cited ? { 'data-coach-cited': 'true' } : {}),
+  },
+    h('div', { class: 'coach-source' },
+      // The number the answer cites. Same numbering, so "[3]" up there and "3"
+      // down here are the same passage — that is the whole verification path.
+      h('span', { class: 'coach-cite num' }, String(index + 1)),
+      // Book titles are English and stay English (T1). h() isolates Latin runs
+      // on its own, so no manual <bdi> here — that is what produced nested bdi.
+      h('strong', {}, passage.work),
+      h('span', { class: 'tiny muted' }, ' · ', tf('coach_page', { n: passage.page })),
+      arabic && !showEnglish
+        ? h('span', { class: 'coach-tag' }, t('coach_translated'))
+        : null,
+    ),
+    h('p', {
+      class: 'coach-text' + (showEnglish ? ' ltr-run' : '') + (open ? '' : ' clipped'),
+      ...(showEnglish ? { dir: 'ltr' } : {}),
+    }, showEnglish ? passage.text : arabic),
+  );
+  // Two small actions on one row. Both are about reading the evidence, so they
+  // belong together rather than stacked.
+  const actions = h('div', { class: 'coach-actions' });
+  actions.appendChild(h('button', {
+    class: 'btn tiny ghost coach-more-text',
+    'data-coach-expand': String(index),
+    onClick: () => {
+      if (coachOpen.has(index)) coachOpen.delete(index);
+      else coachOpen.add(index);
+      renderCoach();
+    },
+  }, t(open ? 'coach_read_less' : 'coach_read_full')));
+  if (arabic) {
+    actions.appendChild(h('button', {
+      class: 'btn tiny ghost coach-lang',
+      'data-coach-lang': String(index),
+      onClick: () => {
+        if (coachEnglish.has(index)) coachEnglish.delete(index);
+        else coachEnglish.add(index);
+        renderCoach();
+      },
+    }, t(showEnglish ? 'coach_show_arabic' : 'coach_show_english')));
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+// The answer's citations, as markers rather than titles.
+//
+// The model used to cite inline as "(The Ultimate Guide to Body Recomposition،
+// صفحة ١٠٤)". In an RTL paragraph a title that long wraps, so "(The" ended one
+// line and the rest opened the next, and Raed had to reassemble an English name
+// across a direction change to see which book a number came from. It now cites
+// "[3]", which is two characters, survives RTL untouched, and points at the
+// passage card below that already carries the book and the page.
+//
+// Any marker outside the range of passages actually sent is dropped rather than
+// rendered: a citation that points nowhere is worse than no citation.
+function coachAnswerText(text, passageCount) {
+  const node = h('p', { class: 'coach-answer-text' });
+  const pattern = /\[(\d{1,2})\]/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) node.appendChild(localizedTextNode(text.slice(cursor, match.index)));
+    const index = Number(match[1]);
+    if (index >= 1 && index <= passageCount) {
+      node.appendChild(h('span', {
+        class: 'coach-cite', 'data-coach-cite': String(index),
+      }, String(index)));
+    }
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) node.appendChild(localizedTextNode(text.slice(cursor)));
+  return node;
+}
+
+// The answer, then the passages it was built from, then the rest.
+//
+// The order is the point. Raed asked for an answer in Arabic instead of five
+// English paragraphs, but the passages stay on screen underneath it so the
+// answer is always checkable against the book it came from. The ones the model
+// actually cited come first and are marked; the others are collapsed, because
+// showing five sources for a two-source answer implies five were used.
+function renderCoachAnswer(root) {
+  const answer = coachState.answer;
+  const results = coachState.results;
+  const used = answer && Array.isArray(answer.used) ? answer.used : [];
+  const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text;
+  const isRefusal = answer && answer.status === 'ok' && !answer.answered;
+
+  if (isAnswer) {
+    root.appendChild(h('article', { class: 'card coach-answer', 'data-coach-answer': 'true' },
+      h('div', { class: 'coach-answer-label' }, t('coach_answer_label')),
+      coachAnswerText(answer.text, results.length),
     ));
-  });
+  } else if (isRefusal) {
+    // Not an error state. The search worked; the books do not cover it.
+    root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
+      h('strong', {}, t('coach_unanswered')),
+      h('p', { class: 'coach-answer-text' }, answer.text),
+      h('p', { class: 'tiny muted' }, t('coach_unanswered_hint')),
+    ));
+  } else if (answer && answer.status === 'unconfigured') {
+    root.appendChild(h('div', { class: 'card compact tiny muted', 'data-coach-answer-off': 'true' },
+      t('coach_answer_off')));
+  } else if (!answer || answer.status === 'failed') {
+    root.appendChild(h('div', { class: 'card compact tiny muted', 'data-coach-answer-off': 'true' },
+      t('coach_answer_failed')));
+  }
+
+  const cited = used.length ? used : [];
+  const rest = results.map((_, i) => i).filter((i) => !cited.includes(i));
+
+  if (cited.length) {
+    root.appendChild(h('div', { class: 'tiny muted coach-section', 'data-coach-count': 'true' },
+      t('coach_sources_used')));
+    cited.forEach((i) => root.appendChild(coachPassageCard(results[i], i, true)));
+  }
+
+  if (rest.length) {
+    // Collapsed whenever the passages are not the answer — either because the
+    // answer named the ones it used, or because there IS no answer and these are
+    // the near-misses. Asking about kabsa and getting two full screens of vegan
+    // protein is noise, and printing it at full length reads as if the app
+    // thought it was relevant.
+    const collapse = cited.length > 0 || isRefusal;
+    if (collapse) {
+      const more = h('details', { class: 'coach-more', 'data-coach-more': 'true' },
+        h('summary', {}, coachMoreLabel(rest.length)));
+      rest.forEach((i) => more.appendChild(coachPassageCard(results[i], i, false)));
+      root.appendChild(more);
+    } else {
+      // No answer was written at all — the passages are the whole product, so
+      // they stay open, exactly as the coach behaved before this layer existed.
+      root.appendChild(h('div', { class: 'tiny muted coach-section', 'data-coach-count': 'true' },
+        coachFoundLabel(results.length)));
+      rest.forEach((i) => root.appendChild(coachPassageCard(results[i], i, false)));
+    }
+  }
+
   root.appendChild(h('p', { class: 'tiny muted', style: 'text-align:center;margin-top:4px;' }, t('coach_footer')));
 }
 

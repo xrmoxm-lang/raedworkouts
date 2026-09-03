@@ -1652,13 +1652,102 @@ body.welcome-mode main {
 .coach-source { display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
 /* A quoted passage, so it reads as someone else's words rather than the app's. */
 .coach-passage { border-inline-start: 3px solid var(--accent-soft); }
+/* The passages the answer was actually built from, against the ones that merely
+   turned up. Weight, not colour: the cited ones are what he checks the answer
+   against, the rest are collapsed behind a disclosure anyway. */
+.coach-passage.cited { border-inline-start-color: var(--accent); }
 .coach-text {
-  margin: 0; font-size: 13px; line-height: 1.65; color: var(--text);
-  /* Passages are English prose pulled from PDFs; keep them LTR inside an RTL page. */
-  direction: ltr; text-align: start; unicode-bidi: isolate;
+  margin: 0; font-size: 13px; line-height: 1.7; color: var(--text);
+  /* Passages arrive Arabic (translated) or English (original). The direction is
+     set per passage in the markup — forcing ltr here made every Arabic passage
+     render with its full stop on the wrong side. */
+  text-align: start; unicode-bidi: isolate;
   /* PDF extraction leaves long unbroken runs; never let one widen the page. */
   overflow-wrap: anywhere;
 }
+/* English original: LTR inside the RTL page, with a slightly tighter measure so
+   it reads as a quotation rather than as the app talking. */
+.coach-text.ltr-run { direction: ltr; font-size: 12.5px; }
+/* A passage is a 900-character window cut out of a book, and some of them are
+   transcribed programme tables — a solid block of "3-5 min DB Bench Press~ 3-4
+   1 3-5". Shown in full they bury the answer above them, which is the opposite
+   of the "less scrolling" he asked for. Five lines is enough to recognise the
+   passage and find the sentence; the rest is one tap away. The fade says there
+   is more without needing a word for it. */
+.coach-text.clipped {
+  max-height: 8.5em; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+}
+.coach-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.coach-tag {
+  margin-inline-start: auto; font-size: 10.5px; font-weight: 700;
+  color: var(--text-muted); letter-spacing: .01em;
+}
+.coach-lang, .coach-more-text {
+  padding: 3px 9px; font-size: 11px;
+  color: var(--text-muted); background: none; border: 1px solid var(--border);
+}
+.coach-lang:hover, .coach-more-text:hover { color: var(--text); border-color: var(--accent-soft); }
+
+/* ---- The written answer --------------------------------------------- */
+/* This is the one thing on the page Raed reads first, so it gets the app's
+   primary surface, the space, and the type size — and everything under it
+   recedes to evidence. On --bg-elev it sat only two shades off the page and
+   read as another muted note rather than as the answer. */
+.coach-answer {
+  margin: 4px 0 14px; padding: 18px 18px 20px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+}
+/* --accent-label, never --accent. In ورق dark the accent is #743d4a and lands
+   at 1.7:1 on an elevated surface; the label variant is lightened for exactly
+   this and measures 4.64:1. The linter tracks which selectors use it. */
+.coach-answer-label {
+  font-size: 11px; font-weight: 800; color: var(--accent-label);
+  margin-bottom: 6px;
+}
+.coach-answer-text {
+  margin: 0; font-size: 15px; line-height: 1.9; color: var(--text);
+  text-align: start; text-wrap: pretty;
+}
+/* "Not in your books" is an answer, not a warning, so it does not get the
+   warning colour — only a quieter label. */
+.coach-answer.unanswered .coach-answer-text { font-size: 14px; }
+.coach-answer.unanswered strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.coach-section { margin: 10px 0 6px; font-weight: 700; }
+.coach-more { margin-top: 8px; }
+.coach-more > summary {
+  cursor: pointer; font-size: 12px; color: var(--text-muted);
+  padding: 6px 2px; list-style: none;
+  display: flex; align-items: center; gap: 7px;
+}
+.coach-more > summary::-webkit-details-marker { display: none; }
+/* Drawn, not typed. The ▾ glyph is bidi-neutral, so in an RTL line it landed
+   next to the count's closing bracket and read as another digit. A rotated
+   border has no direction to resolve. */
+.coach-more > summary::after {
+  content: ''; width: 0; height: 0;
+  border-inline: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform .18s ease-out;
+}
+.coach-more[open] > summary::after { transform: rotate(180deg); }
+.coach-more > summary:hover { color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .coach-more > summary::after { transition: none; }
+}
+
+/* The citation marker, in the answer and on the passage it points at. */
+.coach-cite {
+  display: inline-block; min-width: 17px; padding: 0 4px;
+  margin-inline: 3px; border-radius: var(--radius-xs);
+  background: var(--accent-soft); color: var(--text);
+  font-size: 11px; font-weight: 800; line-height: 17px; text-align: center;
+  /* A bare digit next to Arabic would join the surrounding number run. */
+  unicode-bidi: isolate;
+}
+.coach-cite.num { margin-inline-start: 0; margin-inline-end: 6px; }
 
 /* The two lines that tell Raed what the plan actually wants from him. */
 /* A standing rule, not news. It shows on every exercise of every session, and

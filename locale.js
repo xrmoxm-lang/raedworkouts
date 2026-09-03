@@ -118,22 +118,54 @@ export const LOCALE = Object.freeze({
   video_edit_jn_custom: pair('✏️ JN URL (custom)', '✏️ رابط JN (مخصّص)'),
   video_clear_custom: pair('Clear custom', 'امسح المخصّصة'),
   video_clear_confirm: pair('Remove all custom videos for this exercise?', 'أأحذف كل الفيديوهات المخصّصة لهذا التمرين؟'),
-  // The coach quotes Raed's own 33 Nippard works and never writes prose of its
-  // own, so the copy must promise searching — not answering.
-  coach_intro: pair('Search the books you own. You get the passages themselves, with the book and page.', 'ابحث في كتبك التي تملكها. تصلك المقاطع نفسها، ومعها اسم الكتاب والصفحة.'),
+  // The coach now writes an answer, but only out of passages it found in Raed's
+  // own 33 Nippard works, and it says so when they do not cover the question.
+  // The copy promises exactly that and no more: an answer FROM the books, with
+  // the passages it used shown underneath.
+  coach_intro: pair('Ask your own library. The answer is built from your books, and the passages it used are shown underneath.', 'اسأل مكتبتك. الجواب مبنيّ على كتبك، والمقاطع التي استُعملت تظهر تحته.'),
   coach_placeholder: pair('Ask about training or nutrition…', 'اسأل عن التمرين أو التغذية…'),
-  coach_ask: pair('Search', 'ابحث'),
+  coach_ask: pair('Ask', 'اسأل'),
   coach_try: pair('Try one of these:', 'جرّب واحدًا من هذه:'),
   coach_eg_volume: pair('How many sets per muscle per week?', 'كم مجموعة لكل عضلة في الأسبوع؟'),
   coach_eg_failure: pair('Should I train to failure?', 'هل أتمرّن حتى الفشل؟'),
   coach_eg_protein: pair('How much protein to keep muscle?', 'كم بروتينًا للحفاظ على العضلة؟'),
-  coach_searching: pair('Searching your library…', 'جارٍ البحث في مكتبتك…'),
+  coach_searching: pair('Reading your library…', 'جارٍ القراءة في مكتبتك…'),
+  // The written answer and its evidence. "استُعملت" is deliberate: these are the
+  // passages the answer was built from, not everything the search returned.
+  coach_answer_label: pair('From your books', 'من كتبك'),
+  coach_sources_used: pair('The passages it used', 'المقاطع التي استُعملت'),
+  // No brackets around the count. "({n})" put a Latin digit between two
+  // direction-neutral parentheses inside an RTL line, and the pair rendered
+  // apart from the number. Arabic also takes three forms for the count, so this
+  // is three strings, the same as the passage count above.
+  coach_sources_more: pair('{n} other passages found', '{n} مقاطع أخرى وُجدت'),
+  coach_sources_more_one_ar: pair('1 other passage found', 'مقطع آخر وُجد'),
+  coach_sources_more_two_ar: pair('2 other passages found', 'مقطعان آخران وُجدا'),
+  // A passage is a 900-character window out of a book, and some of them are
+  // transcribed programme tables. Shown in full they bury the answer, which is
+  // the opposite of what he asked for.
+  coach_read_full: pair('Read the whole passage', 'اقرأ المقطع كاملاً'),
+  coach_read_less: pair('Shorten it', 'اختصره'),
+  coach_show_english: pair('Show the original English', 'اعرض النص الإنجليزي الأصلي'),
+  coach_show_arabic: pair('Show the Arabic', 'اعرض الترجمة العربية'),
+  // Named as a machine translation, because it is one, and a translated number
+  // he acts on should carry that label.
+  coach_translated: pair('translated', 'ترجمة آلية'),
+  // Not an error. The search ran, the passages came back, and the answer is
+  // that they do not cover this.
+  coach_unanswered: pair('Not in your books', 'ليس في كتبك'),
+  coach_unanswered_hint: pair('The search found passages, but none of them answer this. They are below if you want to look.', 'البحث وجد مقاطع، لكن لا شيء فيها يجيب على هذا. هي بالأسفل لو حاب تشوفها.'),
+  coach_answer_off: pair('The written answer is switched off on the server. The passages are below.', 'الإجابة المكتوبة مطفأة في الخادم. المقاطع بالأسفل.'),
+  coach_answer_failed: pair('The passages came back, but the written answer did not. They are below.', 'وصلت المقاطع، ولم تصل الإجابة المكتوبة. المقاطع بالأسفل.'),
   // 3–10 only; 1 and 2 take the singular and the dual below. top_k caps at 10.
   coach_found: pair('{n} passages from your books', '{n} مقاطع من كتبك'),
   coach_found_one_ar: pair('1 passage from your books', 'مقطع واحد من كتبك'),
   coach_found_two_ar: pair('2 passages from your books', 'مقطعان من كتبك'),
   coach_page: pair('page {n}', 'صفحة {n}'),
-  coach_footer: pair('Quoted from your books. Nothing here is written by the app.', 'منقول من كتبك. لا شيء هنا من تأليف التطبيق.'),
+  // The promise changed, so the footer has to change with it. The answer IS
+  // written now; what has not changed is that nothing enters it from outside
+  // the books, and the passages are there to be checked.
+  coach_footer: pair('Written from the passages below, and from nothing else.', 'مكتوبة من المقاطع بالأسفل، ولا شيء غيرها.'),
   coach_no_match: pair('Your books have nothing on this.', 'لا يوجد في كتبك ما يجيب عن هذا.'),
   coach_no_match_hint: pair('That is an answer, not a failure. Try different wording.', 'هذه إجابة لا عطل. جرّب صياغة أخرى.'),
   coach_offline: pair('Could not reach your library.', 'تعذّر الوصول إلى مكتبتك.'),

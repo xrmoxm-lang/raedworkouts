@@ -27,12 +27,19 @@ test('the coach is told which exercise he is on, and the switch turns it off', a
     const real = window.fetch;
     window.fetch = function (url, opts) {
       try {
-        if (String(url).includes('8444/search') && opts?.body) {
+        // Matched on the path, not the host or port. This spy was pinned to
+        // "8444/search" and kept passing after the coach moved to /coach on 443
+        // and then to /answer — it was spying on a URL nothing called any more.
+        if (/\/coach\/(?:search|answer)$/.test(String(url)) && opts?.body) {
           window.__coachCalls.push(JSON.parse(opts.body));
         }
       } catch (_) { /* a body we cannot parse is not this spy's problem */ }
       return Promise.resolve(new Response(
-        JSON.stringify({ status: 'ok', results: [{ text: 'x', work: 'W', page: 1, score: 0.9 }] }),
+        JSON.stringify({
+          status: 'ok',
+          answer: { status: 'ok', answered: true, text: 'جواب', used: [0] },
+          results: [{ text: 'x', work: 'W', page: 1, score: 0.9 }],
+        }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }));
     };
   });
@@ -51,7 +58,12 @@ test('the coach is told which exercise he is on, and the switch turns it off', a
   await expect.poll(() => page.evaluate(() => window.__coachCalls.length), { timeout: 8000 }).toBe(1);
 
   const first = await page.evaluate(() => window.__coachCalls[0]);
-  expect(first.question, 'the exercise name rides along with the question').toContain(exerciseName);
+  // The name travels in its own field. Appended to the question it narrowed
+  // every question asked mid-session — "متى أسوي ديلود؟" became "when do I
+  // deload for the Chest Press Machine", which his books genuinely do not cover,
+  // so a perfectly answerable question came back refused.
+  expect(first.context, 'the exercise name is sent as context').toBe(exerciseName);
+  expect(first.question, 'the question itself is untouched').toBe('كم راحة');
   // Nothing about his sets, loads or history may cross over — he turned down a
   // coach that reads the session.
   expect(JSON.stringify(first)).not.toMatch(/weight|reps|completed|history/i);
@@ -65,6 +77,7 @@ test('the coach is told which exercise he is on, and the switch turns it off', a
 
   const second = await page.evaluate(() => window.__coachCalls[1]);
   expect(second.question, 'with the switch off the question goes alone').toBe('كم راحة');
+  expect(second.context, 'and no context field is sent at all').toBeUndefined();
 });
 
 test('no context band when no session is running', async ({ page }) => {
