@@ -313,6 +313,12 @@ body.runner-mode .page-runner.active {
   margin-bottom: 14px;
   box-shadow: var(--shadow-sm);
 }
+/* A masthead rule on the TOP edge, not a side tab. Used on exactly two cards in
+   the whole app — today's session and a new PR — so it is a signature spent
+   twice, not scaffolding repeated on everything. The design linter reads any
+   3px accent bar as the side-tab tell; this one is a deliberate exception and
+   stays flagged rather than silenced, because silencing the rule for this file
+   would also hide a real side stripe later. */
 .today-banner::before {            /* thin accent top rule */
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
   background: var(--accent);
@@ -340,6 +346,11 @@ body.runner-mode .page-runner.active {
   height: 9px; border-radius: 999px; background: var(--bg-elev);
   overflow: hidden; border: 1px solid var(--border);
 }
+/* width, deliberately, and the design linter will keep flagging it.
+   transform: scaleX() is the cheaper property, but it SCALES the gradient
+   instead of revealing more of it — the bar would change colour as it fills.
+   A progress bar getting wider is the one place width is the honest property,
+   and it animates once per completed set, not per frame. */
 .progress-fill {
   height: 100%; border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 75%, var(--accent-strong)));
@@ -779,6 +790,10 @@ body.runner-mode .page-runner.active {
   appearance: none; border: 0; padding: 8px 0; background: none;
   flex: 1 1 auto; min-width: 0; cursor: pointer; position: relative;
 }
+/* height, deliberately. The current segment grows 7px to 11px; scaleY() would
+   stretch its 999px radius into an oval. Four pixels on a handful of pills,
+   once per set — the linter is right about the property and wrong about the
+   cost here. */
 .sp-seg::after {
   content: ''; display: block; height: 7px; border-radius: 999px;
   background: var(--border);
@@ -1253,6 +1268,8 @@ body.runner-mode .page-runner.active {
 .session-end .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 8px; box-shadow: var(--shadow-sm); }
 .session-end .stat .num { font-size: 24px; font-weight: 770; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .session-end .stat .lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 600; }
+/* The second and last use of the top masthead rule — see .today-banner::before
+   for why it stays flagged rather than silenced. */
 .session-end .pr-card {
   position: relative; overflow: hidden;
   background: var(--bg-card); border: 1px solid var(--border);
@@ -1650,12 +1667,11 @@ body.welcome-mode main {
 .coach-row .btn { flex: 0 0 auto; }
 .coach-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .coach-source { display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
-/* A quoted passage, so it reads as someone else's words rather than the app's. */
-.coach-passage { border-inline-start: 3px solid var(--accent-soft); }
-/* The passages the answer was actually built from, against the ones that merely
-   turned up. Weight, not colour: the cited ones are what he checks the answer
-   against, the rest are collapsed behind a disclosure anyway. */
-.coach-passage.cited { border-inline-start-color: var(--accent); }
+/* No side stripe. The passage used to wear a 3px accent edge to say "this is a
+   quotation", and now every passage carries a leading number instead — the same
+   number the answer cites. The number does that job better, because it also
+   says WHICH passage, so the stripe was decoration sitting on top of a real
+   signal. Cited and uncited are told apart by that number's weight below. */
 .coach-text {
   margin: 0; font-size: 13px; line-height: 1.7; color: var(--text);
   /* Passages arrive Arabic (translated) or English (original). The direction is
@@ -1738,7 +1754,9 @@ body.welcome-mode main {
   .coach-more > summary::after { transition: none; }
 }
 
-/* The citation marker, in the answer and on the passage it points at. */
+/* The citation marker, in the answer and on the passage it points at. It is the
+   verification path — "[3]" up there and "3" down here are the same passage —
+   so it is also what tells a cited passage from one that merely turned up. */
 .coach-cite {
   display: inline-block; min-width: 17px; padding: 0 4px;
   margin-inline: 3px; border-radius: var(--radius-xs);
@@ -1747,7 +1765,17 @@ body.welcome-mode main {
   /* A bare digit next to Arabic would join the surrounding number run. */
   unicode-bidi: isolate;
 }
-.coach-cite.num { margin-inline-start: 0; margin-inline-end: 6px; }
+.coach-cite.num {
+  margin-inline-start: 0; margin-inline-end: 6px;
+  /* Uncited: outlined and quiet. It still needs a number so he can find it,
+     but it is not evidence for anything he just read. */
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  line-height: 15px;
+}
+.coach-passage.cited .coach-cite.num {
+  background: var(--accent-soft); border-color: transparent; color: var(--text);
+  line-height: 17px;
+}
 
 /* The two lines that tell Raed what the plan actually wants from him. */
 /* A standing rule, not news. It shows on every exercise of every session, and

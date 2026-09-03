@@ -200,7 +200,10 @@ function declarationsFor(selector) {
 function rulesUsingCustomProperty(customProperty) {
   const matcher = new RegExp(`([^{}]+)\\{[^{}]*var\\(\\s*${escapeRegExp(customProperty)}\\s*\\)[^{}]*\\}`, 'g');
   return [...css.matchAll(matcher)]
-    .map((match) => match[1].trim().replace(/\s+/g, ' '))
+    // A comment directly above a rule is swept up with its selector, so a
+    // documented rule reported as its own paragraph of prose. Strip comments
+    // before trimming, not after.
+    .map((match) => match[1].replace(/\/\*[\s\S]*?\*\//g, ' ').trim().replace(/\s+/g, ' '))
     .filter(Boolean);
 }
 
@@ -342,12 +345,21 @@ for (const [skin, label] of skins) {
   }
 }
 
+// --accent-label is the lightened accent that clears 4.5:1 on a card. The point
+// of this gate is that it must have a REAL consumer, or the whole D29 ramp above
+// is arithmetic nobody sees and the next label written with plain --accent (1.7:1
+// in ورق dark) sails through.
+//
+// It used to name .runner-current-set-label specifically. That selector belongs
+// to the Phase 4 full-viewport runner, which Phase 6 retired — app.js only ever
+// REMOVES `runner-mode`, never adds it — so the gate had been certifying a rule
+// that no longer renders. Requiring a named dead selector is worse than
+// requiring a live one: it passes for the wrong reason and blocks nothing.
 const accentLabelRules = rulesUsingCustomProperty('--accent-label');
-const runnerAccentLabelRule = accentLabelRules.find((rule) => rule.includes('.runner-current-set-label'));
-if (!runnerAccentLabelRule) {
-  fail('--accent-label must be consumed by .runner-current-set-label');
+if (!accentLabelRules.length) {
+  fail('--accent-label is defined in every skin and consumed by no rule; either use it for label text or drop it');
 } else {
-  console.log(`accent-label used by ${runnerAccentLabelRule}`);
+  console.log(`accent-label used by ${accentLabelRules.join(', ')}`);
 }
 
 if (/--text-dim|--accent[-]glow/.test(css)) fail('retired token remains in styles.css');
