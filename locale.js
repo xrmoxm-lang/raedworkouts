@@ -583,7 +583,11 @@ export const LOCALE = Object.freeze({
   // card, next to a real skip-exercise action, with no undo. Raed asked what it
   // was for; he could not tell from the label, and neither could I until I
   // traced it. The label now says what happens.
-  discard_session: pair('Delete this session', 'احذف هذه الجلسة'),
+  // His words, and they are the right ones: «تجاهل الجلسة» names the SESSION.
+  // The label that had to go was «تجاهل التمرين» — "skip the exercise" — on a
+  // button that deleted the whole workout. The dialog carries the weight of
+  // what it does; the label only has to be honest about what it acts on.
+  discard_session: pair('Discard this session', 'تجاهل الجلسة'),
   discard_session_body: pair('Everything you logged today is deleted. This cannot be undone.', 'كل اللي سجّلته اليوم يُحذف. ما فيه تراجع.'),
   discard_session_confirm: pair('Delete it', 'احذفها'),
   discard_active_session: pair('You have an active session in progress. Discard it and start a new one?', 'لديك تمرين نشط. هل تتجاهله وتبدأ تمريناً جديداً؟'),

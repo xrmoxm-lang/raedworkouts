@@ -3714,23 +3714,26 @@ function renderHome() {
       const idx = Math.min(Math.max(focusExerciseIdx ?? 0, 0), entries.length - 1);
       return idx >= entries.length - 1;
     })();
-    // On the LAST exercise only, and small.
+    // Small, and available throughout the session again.
     //
-    // Deleting the session was a full-width danger button in its own card under
-    // every one of the seven exercises — seven chances to lose the workout, and
-    // a whole card spent on the thing he least wants to press. Raed: "المربع
-    // حقها مرة كبير... يصير بس موجود في آخر جلسة". It now sits beside "finish
-    // and save" on the last exercise, at text size: same place he goes to end
-    // the session deliberately, and nowhere else.
-    if (onLastExercise) {
-      root.appendChild(h('div', { class: 'card session-close', style: 'margin-top:16px;' },
-        h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session')),
-        h('button', {
-          class: 'btn tiny ghost session-discard', 'data-discard-session': 'true',
-          onClick: () => discardSession(),
-        }, t('discard_session')),
-      ));
-    }
+    // He asked for the box to stop being huge, so I made it small AND moved it
+    // to the last exercise only. The size was the ask; the move was mine, and it
+    // was wrong — he went looking for it mid-session and it was not there:
+    // "رجّع زر تجاهل الجلسة". Abandoning a session is something you decide in
+    // the middle of one, not after scrolling to the end of it.
+    //
+    // What stays from that pass is everything that made it safe: it names the
+    // session rather than reading as "skip this exercise", and it confirms
+    // in-app with the consequence spelled out.
+    root.appendChild(h('div', { class: 'card session-close', style: 'margin-top:16px;' },
+      onLastExercise
+        ? h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session'))
+        : null,
+      h('button', {
+        class: 'btn tiny ghost session-discard', 'data-discard-session': 'true',
+        onClick: () => discardSession(),
+      }, t('discard_session')),
+    ));
   } else {
     // Show today's planned exercises preview
     const sess = planned || next.session;
