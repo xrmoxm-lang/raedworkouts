@@ -3125,13 +3125,49 @@ function coachPassageCard(passage, index, cited) {
 // The web answer arrives as markdown, and printing it raw put
 // `([nice.org.uk](https://www.nice.org.uk/guidance/NG226/...?utm_source=openai))`
 // in the middle of an Arabic sentence — a URL long enough to push the whole page
-// sideways — and literal ** around every emphasised phrase.
+// sideways — while headings, list markers, and emphasis all read as punctuation.
 //
 // The inline links are dropped rather than rendered: every one of them is
 // already in `citations`, listed under the answer as a tappable host name, so
 // keeping them inline would be the same source twice, once unreadably.
+function webAnswerInline(text) {
+  const nodes = [];
+  const pattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) nodes.push(localizedTextNode(text.slice(cursor, match.index)));
+    if (match[1] != null) nodes.push(h('code', {}, match[1]));
+    else if (match[2] != null) nodes.push(h('strong', {}, match[2]));
+    else nodes.push(h('em', {}, match[3]));
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) nodes.push(localizedTextNode(text.slice(cursor)));
+  return nodes;
+}
+
+function webAnswerSentences(text) {
+  const sentences = [];
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (!'.!?؟'.includes(text[i])) continue;
+    let end = i + 1;
+    while (end < text.length && /[\])}"'»]/.test(text[end])) end += 1;
+    if (end >= text.length || !/[ \t]/.test(text[end])) continue;
+    let next = end;
+    while (next < text.length && /[ \t]/.test(text[next])) next += 1;
+    if (next >= text.length) continue;
+    sentences.push(text.slice(start, end).trim());
+    start = next;
+    i = next - 1;
+  }
+  sentences.push(text.slice(start).trim());
+  return sentences.filter(Boolean);
+}
+
 function webAnswerText(text) {
   const cleaned = String(text || '')
+    .replace(/\r\n?/g, '\n')
     // [label](url) and bare (url) — the citation list has these.
     .replace(/\(?\[([^\]]*)\]\((https?:[^)]*)\)\)?/g, '')
     .replace(/\(https?:\/\/[^\s)]+\)/g, '')
@@ -3142,21 +3178,50 @@ function webAnswerText(text) {
     .replace(/\({2,}/g, '(')
     .replace(/\){2,}/g, ')')
     .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\s+([،.!؟])/g, '$1')
+    .replace(/[ \t]+([،.!؟])/g, '$1')
     .trim();
-  const node = h('p', { class: 'coach-answer-text' });
-  // **bold** becomes an actual bold run. The model uses it for the numbers,
-  // which is exactly what should stand out in an answer he is about to act on.
-  const pattern = /\*\*([^*]+)\*\*/g;
-  let cursor = 0;
-  let match;
-  while ((match = pattern.exec(cleaned)) !== null) {
-    if (match.index > cursor) node.appendChild(localizedTextNode(cleaned.slice(cursor, match.index)));
-    node.appendChild(h('strong', {}, match[1]));
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < cleaned.length) node.appendChild(localizedTextNode(cleaned.slice(cursor)));
-  return node;
+  const root = h('div', { class: 'coach-answer-text' });
+  let list = null;
+  let listType = '';
+
+  cleaned.split('\n').forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) { list = null; listType = ''; return; }
+
+    const heading = line.match(/^#{1,6}\s+(.+?)\s*#*$/);
+    if (heading) {
+      list = null;
+      listType = '';
+      // A four-sentence answer does not need a document outline, but the line
+      // still has to keep the emphasis the model intended instead of showing ##.
+      const label = heading[1].replace(/^\*\*(.+)\*\*$/, '$1');
+      root.appendChild(h('p', { class: 'web-answer-heading' },
+        h('strong', {}, webAnswerInline(label))));
+      return;
+    }
+
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    const unordered = line.match(/^(?:[-+*]|•)\s+(.+)$/);
+    const type = ordered ? 'ol' : unordered ? 'ul' : '';
+    if (type) {
+      if (!list || listType !== type) {
+        list = h(type, {});
+        listType = type;
+        root.appendChild(list);
+      }
+      list.appendChild(h('li', {}, webAnswerInline((ordered || unordered)[1])));
+      return;
+    }
+
+    list = null;
+    listType = '';
+    // Open-web answers often arrive as four complete sentences on one line.
+    // Keeping that as one block recreates the dense paragraph Raed rejected.
+    webAnswerSentences(line).forEach((sentence) => {
+      root.appendChild(h('p', {}, webAnswerInline(sentence)));
+    });
+  });
+  return root;
 }
 
 // The answer's citations, as markers rather than titles.
@@ -3441,26 +3506,29 @@ function renderHome() {
     ));
   }
   if (!state.active_session && shownSession) {
+    // Back to exactly what it was. I replaced it with a <select> and he looked
+    // at it and said "رجّع لنفس مكان القديم" — same call he made on the banner,
+    // and the same answer: his screen, his decision.
+    let chooserOpen = false;
     const sessions = getActiveProgramme().sessions.filter(s => s.id !== shownSession.id);
     if (sessions.length) {
-      // A <select>, not a toggled row of chips. Raed uses this — "من وين ألقى
-      // أختار تمرين آخر؟" — so it stays; what it was is the problem. A ghost
-      // link with a text arrow that revealed four chips read as decoration,
-      // and the arrow glyph is bidi-neutral so it drifted in RTL. A native
-      // dropdown is one control, says what it is, and opens the platform's own
-      // picker instead of a row that has to fit on the screen.
-      const picker = h('select', {
-        class: 'session-picker', 'data-session-picker': 'true',
-        onChange: (event) => {
-          const chosen = sessions.find((item) => item.id === event.target.value);
-          if (chosen) showSessionPreview(chosen);
-          event.target.selectedIndex = 0;
-        },
-      },
-        h('option', { value: '' }, t('choose_other_session')),
-        sessions.map((item) => h('option', { value: item.id }, shortSessionName(item))),
+      const row = h('div', { class: 'alt-row session-chooser-row' },
+        sessions.map(s => h('button', {
+          type: 'button',
+          class: 'chip',
+          onClick: () => showSessionPreview(s),
+        }, shortSessionName(s)))
       );
-      context.appendChild(h('div', { class: 'session-chooser' }, picker));
+      const toggle = h('button', {
+        type: 'button',
+        class: 'btn tiny ghost session-chooser-toggle',
+        onClick: () => {
+          chooserOpen = !chooserOpen;
+          row.classList.toggle('open', chooserOpen);
+          toggle.textContent = chooserOpen ? 'Choose a different session ▴' : 'Choose a different session ▾';
+        },
+      }, 'Choose a different session ▾');
+      context.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
     }
   }
 
@@ -4989,7 +5057,6 @@ let coachUsageAt = 0;
 
 function renderCoachSettingsCard() {
   const card = h('div', { class: 'card', 'data-coach-settings': 'true' });
-  card.appendChild(h('h3', {}, '🏋️ ', t('coach_settings')));
   const body = h('div', { 'data-coach-usage-body': 'true' },
     h('div', { class: 'tiny muted' }, t('coach_searching')));
   card.appendChild(body);
@@ -5044,14 +5111,16 @@ function renderCoachSettingsCard() {
     }
   };
 
-  if (coachUsage && Date.now() - coachUsageAt < 60000) {
-    paint(coachUsage);
-  } else {
+  // Fetched when the section is opened, not when Settings is rendered — a
+  // collapsed card that calls the server anyway is a network request for
+  // something nobody is looking at.
+  card.load = () => {
+    if (coachUsage && Date.now() - coachUsageAt < 60000) { paint(coachUsage); return; }
     fetch(COACH_URL + '/usage', { headers: { 'X-Coach-Key': COACH_KEY }, signal: AbortSignal.timeout(15000) })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((usage) => { coachUsage = usage; coachUsageAt = Date.now(); paint(usage); })
       .catch(() => paint(null));
-  }
+  };
   return card;
 }
 
@@ -5075,21 +5144,21 @@ async function setCoachModel(model) {
 function renderSettings() {
   const root = $('#page-settings');
   root.innerHTML = '';
-  const disclosure = (label, content) => h('details', {
-    class: 'settings-disclosure', 'data-settings-disclosure': 'true',
-  }, h('summary', {}, label), content);
+  const disclosure = (label, content) => {
+    const node = h('details', {
+      class: 'settings-disclosure', 'data-settings-disclosure': 'true',
+    }, h('summary', {}, label), content);
+    // A section may want to fetch the first time it is opened rather than when
+    // the page renders. Nothing else needs this yet; the coach card does.
+    if (typeof content?.load === 'function') {
+      node.addEventListener('toggle', () => { if (node.open) content.load(); }, { once: true });
+    }
+    return node;
+  };
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, 'Settings'),
     h('div', { class: 'sub' }, 'Profile, programme, sync, and data.'),
   ));
-  // The coach's own card: what it has cost, and which model answers.
-  //
-  // Raed asked for this by name — "حط سيتينج خاص بالمدرب... يطلع فيها الرصيد
-  // المستعمل خلال الأسبوع، خلال الشهر، وخلال الفترة الماضية". The numbers come
-  // from the server's ledger, which records every call; nothing here is
-  // estimated from a price list.
-  root.appendChild(renderCoachSettingsCard());
-
   // Profile
   const profileCard = h('div', { class: 'card' });
   profileCard.appendChild(h('h3', {}, '👤 Profile'));
@@ -5472,6 +5541,12 @@ function renderSettings() {
     ),
   );
   preferencesContent.appendChild(langCard);
+  // The coach's own section, collapsed like every other one. I shipped it open
+  // and full-height at the top of the page — Raed: "المفروض فيه زر زي الزر حق
+  // الإعدادات الباقية... نفس السهم اللي على اليمين". He is right: a settings
+  // page where one card behaves differently from the other six is not a
+  // settings page, it is six settings and an announcement.
+  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard()));
   root.appendChild(disclosure('تفضيلات', preferencesContent));
   root.appendChild(disclosure('الموسيقى', musicCard));
   root.appendChild(disclosure('سحب البيانات', dataCard));

@@ -57,7 +57,15 @@ test('Phase 6 moves Help into collapsed Settings groups and frees its tab for th
   await expect(page.locator('.tab[data-route="coach"]')).toHaveCount(1);
   await page.locator('.tab[data-route="settings"]').click();
   const settingsPage = page.locator('#page-settings');
-  await expect(settingsPage.locator('[data-settings-disclosure]')).toHaveCount(6);
+  // Every section is a collapsed disclosure — that is the contract, not the
+  // count. Pinning the number meant adding the coach's own section broke this
+  // test while the thing it protects (nothing lands open, nothing sits outside
+  // a group) was never violated.
+  const sections = settingsPage.locator('[data-settings-disclosure]');
+  await expect(sections.first()).toBeVisible();
   await expect(settingsPage.locator('[data-settings-disclosure][open]')).toHaveCount(0);
+  // Nothing may sit loose above the groups: a card outside them is a card that
+  // cannot be collapsed, which is what Raed objected to.
+  await expect(settingsPage.locator('> .card')).toHaveCount(0);
   console.log('PHASE6_SETTINGS_NAV_CONTRACT_PASSED');
 });

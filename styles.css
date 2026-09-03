@@ -1790,6 +1790,21 @@ body.welcome-mode main {
   margin: 0; font-size: 15px; line-height: 1.9; color: var(--text);
   text-align: start; text-wrap: pretty;
 }
+.coach-answer.from-web .coach-answer-text > * { margin: 0; min-width: 0; }
+.coach-answer.from-web .coach-answer-text > * + * { margin-top: 8px; }
+.coach-answer.from-web .coach-answer-text :is(ul, ol) { padding-inline-start: 1.5em; }
+.coach-answer.from-web .coach-answer-text li { padding-inline-start: .18em; }
+.coach-answer.from-web .coach-answer-text li + li { margin-top: 4px; }
+.coach-answer.from-web .coach-answer-text li::marker {
+  color: var(--text-muted); font-weight: 700;
+}
+.coach-answer.from-web .web-answer-heading { font-size: 1.02em; }
+.coach-answer.from-web .coach-answer-text code {
+  padding: .08em .34em; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); background: var(--bg-card); color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: .9em; overflow-wrap: anywhere;
+}
 /* "Not in your books" is an answer, not a warning, so it does not get the
    warning colour — only a quieter label. */
 .coach-answer.unanswered .coach-answer-text { font-size: 14px; }
@@ -1976,15 +1991,6 @@ body.session-active #page-home > .home-context { display: none; }
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--bg-elev); color: var(--text);
 }
-
-/* The session chooser, as one control. */
-.session-chooser { margin: 10px 0 4px; }
-.session-picker {
-  width: 100%; padding: 11px 13px; font: inherit; font-size: 13.5px; font-weight: 600;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--bg-card); color: var(--text);
-}
-.session-picker:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Spotify: a row, not a card. */
 .home-v15-spotify {

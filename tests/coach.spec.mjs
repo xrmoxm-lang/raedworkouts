@@ -400,9 +400,9 @@ test('an HTML error page reads as an error, not as an unreachable server', async
 });
 
 test('an internet answer is marked as such, strips its markdown, and never widens the page', async ({ page }) => {
-  // The model replies in markdown. Printed raw it put a full tracking URL inside
-  // an Arabic sentence — wide enough to push the whole page sideways — and left
-  // literal ** around every number it wanted to emphasise.
+  // This is the shape the live model uses: a heading, Arabic prose containing
+  // Latin exercise names, and two kinds of list. Flattening it left ##, bullets,
+  // and numbers embedded in one paragraph instead of giving the answer a scan path.
   await page.route(COACH, (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -410,7 +410,15 @@ test('an internet answer is marked as such, strips its markdown, and never widen
       status: 'ok',
       answer: {
         status: 'ok', answered: true, source: 'web', pass: 3,
-        text: 'استهدف **0.5–1%** من وزنك أسبوعياً. ([nice.org.uk](https://www.nice.org.uk/guidance/NG226/chapter/recommendations?utm_source=openai)) وراقب المتوسط.',
+        text: [
+          '## البداية الآمنة',
+          'ابدأ بـ **شدّ عضلة الفخذ** (Quadriceps isometric). هذه خطوة أولى.',
+          '- اجعل الألم *محتملًا* ويهدأ خلال ساعتين.',
+          '- استخدم `sit-to-stand` بمدى مريح.',
+          '1. اضغط 10 ثوانٍ.',
+          '2. كرّر 7–10 مرات.',
+          'راجع ([nice.org.uk](https://www.nice.org.uk/guidance/NG226/chapter/recommendations?utm_source=openai)) عند الحاجة.',
+        ].join('\n'),
         citations: ['https://www.nice.org.uk/guidance/NG226/chapter/recommendations?utm_source=openai'],
         used: [],
       },
@@ -422,11 +430,21 @@ test('an internet answer is marked as such, strips its markdown, and never widen
 
   await expect(page.locator('[data-coach-web]')).toHaveCount(1);
   await expect(page.locator('#page-coach')).toContainText('من الإنترنت');
-  // The claim survives; the markdown does not.
-  await expect(page.locator('.coach-answer-text')).toContainText('0.5–1%');
+  // The content survives; markdown punctuation becomes semantic DOM.
+  await expect(page.locator('.web-answer-heading strong')).toHaveText('البداية الآمنة');
+  await expect(page.locator('.coach-answer-text > ul > li')).toHaveCount(2);
+  await expect(page.locator('.coach-answer-text > ol > li')).toHaveCount(2);
+  await expect(page.locator('.coach-answer-text em')).toHaveText('محتملًا');
+  await expect(page.locator('.coach-answer-text code')).toHaveText('sit-to-stand');
+  await expect(page.locator('.coach-answer-text strong').last()).toHaveText('شدّ عضلة الفخذ');
   await expect(page.locator('.coach-answer-text')).not.toContainText('**');
+  await expect(page.locator('.coach-answer-text')).not.toContainText('##');
   await expect(page.locator('.coach-answer-text')).not.toContainText('utm_source');
-  await expect(page.locator('.coach-answer-text strong').first()).toHaveText('0.5–1%');
+  // h() owns Latin isolation here too; the formatter must not wrap its output
+  // again and recreate the <bdi><bdi> regression.
+  await expect(page.locator('.coach-answer-text bdi.ltr-run', { hasText: 'Quadriceps isometric' })).toHaveCount(1);
+  await expect(page.locator('.coach-answer-text code bdi.ltr-run')).toHaveText('sit-to-stand');
+  await expect(page.locator('.coach-answer-text bdi bdi')).toHaveCount(0);
   // The source is a tappable host, once.
   await expect(page.locator('.coach-cite-link')).toHaveCount(1);
   await expect(page.locator('.coach-cite-link')).toContainText('nice.org.uk');
