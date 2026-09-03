@@ -1928,3 +1928,75 @@ body.session-active #page-home > .home-context { display: none; }
 .session-done h2 { margin: 0 0 6px; font-size: 20px; }
 .session-done-time { margin: 0 0 8px; font-size: 32px; font-weight: 800; color: var(--accent); }
 .session-done-stats { display: block; }
+
+/* ===== Coach: an answer off the internet ================= */
+/* Deliberately not the same card as a book answer. He asked for the answer AND
+   for it to say where it came from, and a badge on an identical card is the
+   version of that which stops being noticed by the third time. */
+.coach-answer.from-web {
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-strong);
+}
+/* A web answer can contain a URL or a long Latin run; neither may widen the
+   page. The citation chips below break on their own. */
+.coach-answer.from-web .coach-answer-text { overflow-wrap: anywhere; }
+.coach-cite-link { max-width: 100%; overflow-wrap: anywhere; }
+.coach-answer-label.web { color: var(--text-muted); }
+.coach-cites { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.coach-cite-link {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-muted); font-size: 11px; text-decoration: none;
+}
+.coach-cite-link:hover { color: var(--text); border-color: var(--accent-soft); }
+.coach-retry { margin-top: 8px; }
+
+/* ===== Coach settings: what it has cost =================== */
+.spend-row { display: flex; gap: 8px; margin: 4px 0 10px; }
+.spend-tile {
+  flex: 1; min-width: 0; padding: 12px 8px 10px; text-align: center;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.spend-cap { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+.spend-num {
+  margin-top: 4px; font-size: 19px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.spend-sub { margin-top: 2px; font-size: 10.5px; color: var(--text-muted); }
+.spend-alert {
+  padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12px;
+  background: var(--bg-elev); color: var(--text-muted); border: 1px solid var(--border);
+}
+/* Only this state earns the warning colour: he is past a number he chose. */
+.spend-alert.over {
+  background: var(--warning-soft); color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 38%, transparent); font-weight: 700;
+}
+.coach-model-select {
+  width: 100%; margin-top: 5px; padding: 10px 12px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+}
+
+/* The session chooser, as one control. */
+.session-chooser { margin: 10px 0 4px; }
+.session-picker {
+  width: 100%; padding: 11px 13px; font: inherit; font-size: 13.5px; font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--text);
+}
+.session-picker:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Spotify: a row, not a card. */
+.home-v15-spotify {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 6px 10px; margin: 10px 2px 4px;
+}
+
+/* Ending the session: the deliberate action is the button, and deleting is a
+   quiet link under it rather than a second full-width danger slab. */
+.session-close { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.session-discard {
+  align-self: center; padding: 4px 10px; font-size: 12px;
+  color: var(--danger); background: none; border: 0;
+}
+.session-discard:active { background: color-mix(in srgb, var(--danger) 10%, transparent); }

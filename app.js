@@ -2872,8 +2872,16 @@ async function askCoach(question, context = null) {
       body: JSON.stringify({
         question,
         ...(context ? { context: context.name } : {}),
-        top_k: 5,
+        // 10, not 5. Measured: of the questions his books answer but the coach
+        // refused, the answering passage ranked 10th, 16th and 19th — just
+        // outside a top_k of 5 — for +19% cost on a $0.0006 question.
+        top_k: 10,
         min_score: 0.35,
+        // The server may leave the library only because this says it may, and
+        // only after two passes over his books have failed. Anything it finds
+        // out there comes back labelled `source: "web"` and is rendered as
+        // such — he asked for the answer AND for it to say where it came from.
+        allow_web: true,
       }),
       signal: AbortSignal.timeout(30000),
     });
@@ -3114,6 +3122,43 @@ function coachPassageCard(passage, index, cited) {
   return card;
 }
 
+// The web answer arrives as markdown, and printing it raw put
+// `([nice.org.uk](https://www.nice.org.uk/guidance/NG226/...?utm_source=openai))`
+// in the middle of an Arabic sentence — a URL long enough to push the whole page
+// sideways — and literal ** around every emphasised phrase.
+//
+// The inline links are dropped rather than rendered: every one of them is
+// already in `citations`, listed under the answer as a tappable host name, so
+// keeping them inline would be the same source twice, once unreadably.
+function webAnswerText(text) {
+  const cleaned = String(text || '')
+    // [label](url) and bare (url) — the citation list has these.
+    .replace(/\(?\[([^\]]*)\]\((https?:[^)]*)\)\)?/g, '')
+    .replace(/\(https?:\/\/[^\s)]+\)/g, '')
+    // Stripping a link out of "(**term** (English))" leaves a doubled or
+    // orphaned bracket behind. Collapse those rather than shipping "((" into
+    // the middle of a sentence.
+    .replace(/\(\s*\)/g, '')
+    .replace(/\({2,}/g, '(')
+    .replace(/\){2,}/g, ')')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([،.!؟])/g, '$1')
+    .trim();
+  const node = h('p', { class: 'coach-answer-text' });
+  // **bold** becomes an actual bold run. The model uses it for the numbers,
+  // which is exactly what should stand out in an answer he is about to act on.
+  const pattern = /\*\*([^*]+)\*\*/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(cleaned)) !== null) {
+    if (match.index > cursor) node.appendChild(localizedTextNode(cleaned.slice(cursor, match.index)));
+    node.appendChild(h('strong', {}, match[1]));
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < cleaned.length) node.appendChild(localizedTextNode(cleaned.slice(cursor)));
+  return node;
+}
+
 // The answer's citations, as markers rather than titles.
 //
 // The model used to cite inline as "(The Ultimate Guide to Body Recomposition،
@@ -3161,14 +3206,49 @@ function renderCoachAnswer(root) {
   // built to make impossible. An answer that names no passage is treated as no
   // answer, and the passages are shown so he can judge for himself.
   const cited = answer && Array.isArray(answer.used) ? answer.used : [];
-  const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length > 0;
-  const unsourced = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length === 0;
+  // An answer off the open internet is a different kind of thing from a line in
+  // a book he paid for, so it is a separate state rather than a badge on the
+  // same card. It carries URLs instead of passage numbers, and it never claims
+  // his books as its source.
+  const fromWeb = answer && answer.status === 'ok' && answer.source === 'web' && answer.text;
+  const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length > 0 && !fromWeb;
+  const unsourced = answer && answer.status === 'ok' && answer.answered && answer.text
+    && cited.length === 0 && !fromWeb;
   const isRefusal = (answer && answer.status === 'ok' && !answer.answered) || unsourced;
 
-  if (isAnswer) {
+  if (fromWeb) {
+    const card = h('article', { class: 'card coach-answer from-web', 'data-coach-web': 'true' },
+      h('div', { class: 'coach-answer-label web' }, t('coach_from_web')),
+      webAnswerText(answer.text),
+      h('p', { class: 'tiny muted' }, t('coach_web_note')),
+    );
+    const urls = Array.isArray(answer.citations) ? answer.citations : [];
+    if (urls.length) {
+      const list = h('div', { class: 'coach-cites' },
+        h('div', { class: 'm-label tiny muted' }, t('coach_web_sources')));
+      urls.forEach((url) => {
+        let label = url;
+        // The host is what tells him whether to trust it; the rest of a
+        // tracking-laden URL is noise he cannot read on a phone anyway.
+        try { label = new URL(url).hostname.replace(/^www\./, ''); } catch (_) { /* keep raw */ }
+        list.appendChild(h('a', {
+          class: 'coach-cite-link', href: url, target: '_blank', rel: 'noopener noreferrer',
+        }, h('bdi', { class: 'ltr-run' }, label)));
+      });
+      card.appendChild(list);
+    }
+    root.appendChild(card);
+  } else if (isAnswer) {
     root.appendChild(h('article', { class: 'card coach-answer', 'data-coach-answer': 'true' },
       h('div', { class: 'coach-answer-label' }, t('coach_answer_label')),
       coachAnswerText(answer.text, results.length),
+      // Says so when the first search missed and the rewrite found it, because
+      // "your books do not cover this" was wrong a moment earlier and he should
+      // be able to see that the second look is what changed the answer.
+      answer.pass === 2 && answer.rewritten_as
+        ? h('p', { class: 'tiny muted coach-retry' },
+            tf('coach_searched_again', { q: answer.rewritten_as }))
+        : null,
     ));
   } else if (unsourced) {
     // The model claimed an answer and named no passage for it. Its sentence is
@@ -3194,6 +3274,14 @@ function renderCoachAnswer(root) {
       t('coach_answer_failed')));
   }
 
+  if (fromWeb) {
+    // Nothing from the library is shown under a web answer. The passages that
+    // came back are the ones the model judged did NOT answer the question, and
+    // printing them here would look exactly like sourcing. The usual footer is
+    // omitted for the same reason: «مكتوبة من المقاطع بالأسفل» would be a lie
+    // when there are no passages below.
+    return;
+  }
   const rest = results.map((_, i) => i).filter((i) => !cited.includes(i));
 
   if (cited.length) {
@@ -3353,26 +3441,26 @@ function renderHome() {
     ));
   }
   if (!state.active_session && shownSession) {
-    let chooserOpen = false;
     const sessions = getActiveProgramme().sessions.filter(s => s.id !== shownSession.id);
     if (sessions.length) {
-      const row = h('div', { class: 'alt-row session-chooser-row' },
-        sessions.map(s => h('button', {
-          type: 'button',
-          class: 'chip',
-          onClick: () => showSessionPreview(s),
-        }, shortSessionName(s)))
-      );
-      const toggle = h('button', {
-        type: 'button',
-        class: 'btn tiny ghost session-chooser-toggle',
-        onClick: () => {
-          chooserOpen = !chooserOpen;
-          row.classList.toggle('open', chooserOpen);
-          toggle.textContent = chooserOpen ? 'Choose a different session ▴' : 'Choose a different session ▾';
+      // A <select>, not a toggled row of chips. Raed uses this — "من وين ألقى
+      // أختار تمرين آخر؟" — so it stays; what it was is the problem. A ghost
+      // link with a text arrow that revealed four chips read as decoration,
+      // and the arrow glyph is bidi-neutral so it drifted in RTL. A native
+      // dropdown is one control, says what it is, and opens the platform's own
+      // picker instead of a row that has to fit on the screen.
+      const picker = h('select', {
+        class: 'session-picker', 'data-session-picker': 'true',
+        onChange: (event) => {
+          const chosen = sessions.find((item) => item.id === event.target.value);
+          if (chosen) showSessionPreview(chosen);
+          event.target.selectedIndex = 0;
         },
-      }, 'Choose a different session ▾');
-      context.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
+      },
+        h('option', { value: '' }, t('choose_other_session')),
+        sessions.map((item) => h('option', { value: item.id }, shortSessionName(item))),
+      );
+      context.appendChild(h('div', { class: 'session-chooser' }, picker));
     }
   }
 
@@ -3385,8 +3473,11 @@ function renderHome() {
   const sessionForMusic = activeProgrammeSession || shownSession;
   const platformPlaylists = getCurrentPlaylists(sessionForMusic);
   if (platformPlaylists.length) {
-    context.appendChild(h('div', { class: 'card compact home-v15-spotify', 'data-home-v15-spotify': 'true' },
-      h('div', { class: 'tiny muted', 'data-home-spotify-handoff': 'true', style: 'margin-bottom:6px;' }, t('home_spotify_handoff')),
+    // One row, not a card. It is two links to a playlist — useful, and not
+    // worth 84px of a card with its own border, shadow and heading above the
+    // thing he actually came to the screen for.
+    context.appendChild(h('div', { class: 'home-v15-spotify', 'data-home-v15-spotify': 'true' },
+      h('span', { class: 'tiny muted', 'data-home-spotify-handoff': 'true' }, t('home_spotify_handoff')),
       h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
         platformPlaylists.map((playlist) => h('a', {
           href: playlist.url, target: '_blank', rel: 'noopener', class: 'btn tiny', title: playlist.vibe,
@@ -3555,13 +3646,23 @@ function renderHome() {
       const idx = Math.min(Math.max(focusExerciseIdx ?? 0, 0), entries.length - 1);
       return idx >= entries.length - 1;
     })();
-    root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
-      onLastExercise
-        ? h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session'))
-        : null,
-      h('div', { class: 'spacer-12' }),
-      h('button', { class: 'btn danger ghost full', 'data-discard-session': 'true', onClick: () => discardSession() }, t('discard_session')),
-    ));
+    // On the LAST exercise only, and small.
+    //
+    // Deleting the session was a full-width danger button in its own card under
+    // every one of the seven exercises — seven chances to lose the workout, and
+    // a whole card spent on the thing he least wants to press. Raed: "المربع
+    // حقها مرة كبير... يصير بس موجود في آخر جلسة". It now sits beside "finish
+    // and save" on the last exercise, at text size: same place he goes to end
+    // the session deliberately, and nowhere else.
+    if (onLastExercise) {
+      root.appendChild(h('div', { class: 'card session-close', style: 'margin-top:16px;' },
+        h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session')),
+        h('button', {
+          class: 'btn tiny ghost session-discard', 'data-discard-session': 'true',
+          onClick: () => discardSession(),
+        }, t('discard_session')),
+      ));
+    }
   } else {
     // Show today's planned exercises preview
     const sess = planned || next.session;
@@ -4880,6 +4981,97 @@ async function switchProfile() {
   render();
 }
 
+// Usage is fetched once per Settings visit and cached, so opening the page does
+// not hammer the server, and a failure degrades to a line saying so rather than
+// an empty card pretending the coach is free.
+let coachUsage = null;
+let coachUsageAt = 0;
+
+function renderCoachSettingsCard() {
+  const card = h('div', { class: 'card', 'data-coach-settings': 'true' });
+  card.appendChild(h('h3', {}, '🏋️ ', t('coach_settings')));
+  const body = h('div', { 'data-coach-usage-body': 'true' },
+    h('div', { class: 'tiny muted' }, t('coach_searching')));
+  card.appendChild(body);
+
+  const money = (n) => '$' + Number(n || 0).toFixed(n >= 1 ? 2 : 4);
+
+  const paint = (usage) => {
+    body.innerHTML = '';
+    if (!usage || usage.status === 'unavailable') {
+      body.appendChild(h('div', { class: 'tiny muted', 'data-coach-usage-error': 'true' },
+        t('coach_usage_unavailable')));
+      return;
+    }
+    const tile = (labelKey, bucket, sub) => h('div', { class: 'spend-tile' },
+      h('div', { class: 'spend-cap' }, t(labelKey)),
+      h('div', { class: 'spend-num' }, h('bdi', { class: 'ltr-run' }, money(bucket.usd))),
+      h('div', { class: 'spend-sub' }, sub),
+    );
+    body.appendChild(h('div', { class: 'spend-row', 'data-coach-spend': 'true' },
+      tile('coach_spend_week', usage.week, tf('coach_spend_questions', { n: usage.week.questions })),
+      tile('coach_spend_month', usage.month, tf('coach_spend_questions', { n: usage.month.questions })),
+      tile('coach_spend_all', usage.all,
+        usage.since ? tf('coach_spend_since', { d: usage.since }) : tf('coach_spend_questions', { n: usage.all.questions })),
+    ));
+
+    // The limit he set, and whether he is past it. Stated either way: a limit
+    // you only hear about when you cross it is a limit you cannot plan against.
+    const over = usage.over_alert;
+    body.appendChild(h('div', { class: 'spend-alert' + (over ? ' over' : ''), 'data-coach-alert': 'true' },
+      tf(over ? 'coach_alert_over' : 'coach_alert_under', { n: usage.alert_usd })));
+
+    // A dropdown, as he asked: "بس يكون دروب داون".
+    body.appendChild(h('div', { class: 'm-label tiny muted', style: 'margin-top:14px;' },
+      t('coach_model_label')));
+    const select = h('select', {
+      class: 'coach-model-select', 'data-coach-model': 'true',
+      onChange: (event) => {
+        const chosen = event.target.value;
+        setCoachModel(chosen).then((ok) => {
+          if (ok) { toast(t('coach_model_saved')); coachUsageAt = 0; renderSettings(); }
+        });
+      },
+    }, (usage.models || []).map((m) => h('option', {
+      value: m.id, ...(m.id === usage.model ? { selected: '' } : {}),
+    }, `${m.id} — ${m.note}`)));
+    body.appendChild(select);
+    const active = (usage.models || []).find((m) => m.id === usage.model);
+    if (active) {
+      body.appendChild(h('div', { class: 'tiny muted', style: 'margin-top:5px;' },
+        h('bdi', { class: 'ltr-run' }, `$${active.in} / $${active.out}`), ' ',
+        t('coach_model_price_suffix')));
+    }
+  };
+
+  if (coachUsage && Date.now() - coachUsageAt < 60000) {
+    paint(coachUsage);
+  } else {
+    fetch(COACH_URL + '/usage', { headers: { 'X-Coach-Key': COACH_KEY }, signal: AbortSignal.timeout(15000) })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((usage) => { coachUsage = usage; coachUsageAt = Date.now(); paint(usage); })
+      .catch(() => paint(null));
+  }
+  return card;
+}
+
+// Switching models is a server-side setting, not a client preference: the key
+// and the price table live there, and the app must not be able to disagree with
+// it about which model is answering.
+async function setCoachModel(model) {
+  try {
+    const res = await fetch(COACH_URL + '/model', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Coach-Key': COACH_KEY },
+      body: JSON.stringify({ model }),
+      signal: AbortSignal.timeout(15000),
+    });
+    return res.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
 function renderSettings() {
   const root = $('#page-settings');
   root.innerHTML = '';
@@ -4890,6 +5082,14 @@ function renderSettings() {
     h('h1', {}, 'Settings'),
     h('div', { class: 'sub' }, 'Profile, programme, sync, and data.'),
   ));
+  // The coach's own card: what it has cost, and which model answers.
+  //
+  // Raed asked for this by name — "حط سيتينج خاص بالمدرب... يطلع فيها الرصيد
+  // المستعمل خلال الأسبوع، خلال الشهر، وخلال الفترة الماضية". The numbers come
+  // from the server's ledger, which records every call; nothing here is
+  // estimated from a price list.
+  root.appendChild(renderCoachSettingsCard());
+
   // Profile
   const profileCard = h('div', { class: 'card' });
   profileCard.appendChild(h('h3', {}, '👤 Profile'));

@@ -159,6 +159,27 @@ export const LOCALE = Object.freeze({
   // session, so it says the number plainly.
   finish_with_open: pair('{n} exercises are still unfinished. Finish the session anyway?', 'باقي {n} تمارين ما خلصت. أنهي الجلسة على أي حال؟'),
   finish_anyway: pair('Finish anyway', 'أنهِ على أي حال'),
+  // The coach's own settings section: what it costs and which model answers.
+  choose_other_session: pair('Train a different session…', 'درّب حصة ثانية…'),
+  coach_settings: pair('Coach', 'المدرب'),
+  coach_spend_week: pair('This week', 'هذا الأسبوع'),
+  coach_spend_month: pair('This month', 'هذا الشهر'),
+  coach_spend_all: pair('Since the start', 'من البداية'),
+  coach_spend_questions: pair('{n} questions', '{n} سؤال'),
+  coach_spend_since: pair('since {d}', 'منذ {d}'),
+  coach_model_label: pair('Which model answers', 'الموديل اللي يجاوب'),
+  coach_model_price_suffix: pair('per million tokens, in / out', 'لكل مليون توكن، دخل / خرج'),
+  coach_alert_over: pair('Past the ${n} monthly limit you set.', 'تجاوز حد الـ${n} الشهري اللي حدّدته.'),
+  coach_alert_under: pair('Alert at ${n} a month.', 'التنبيه عند ${n} بالشهر.'),
+  coach_usage_unavailable: pair('The server did not report usage.', 'الخادم ما أرجع بيانات الاستهلاك.'),
+  coach_model_saved: pair('Model changed', 'تغيّر الموديل'),
+  // Where an answer came from. The distinction is the point: a line from a book
+  // he owns is not the same kind of thing as a page off the open internet.
+  coach_from_books: pair('From your books', 'من كتبك'),
+  coach_from_web: pair('From the internet — not from your books', 'من الإنترنت — مو من كتبك'),
+  coach_web_note: pair('Your books do not cover this, so this came from the open internet. Sources below.', 'كتبك ما تغطي هذا، فالجواب من الإنترنت العام. المصادر بالأسفل.'),
+  coach_web_sources: pair('Sources', 'المصادر'),
+  coach_searched_again: pair('Searched your books again as: {q}', 'أعاد البحث في كتبك بـ: {q}'),
   coach_unsourced_hint: pair('An answer came back without naming a passage it came from, so it is not shown. The passages found are below.', 'رجع جواب بدون ما يحدّد المقطع اللي جاء منه، فما عُرض. المقاطع اللي وُجدت بالأسفل.'),
   coach_unanswered_hint: pair('The search found passages, but none of them answer this. They are below if you want to look.', 'البحث وجد مقاطع، لكن لا شيء فيها يجيب على هذا. هي بالأسفل لو حاب تشوفها.'),
   coach_answer_off: pair('The written answer is switched off on the server. The passages are below.', 'الإجابة المكتوبة مطفأة في الخادم. المقاطع بالأسفل.'),

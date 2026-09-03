@@ -68,6 +68,13 @@ test('the delete-session button says it deletes, and asks in-app', async ({ page
   await completeFirstExercise(page);
   const before = await readState(page);
 
+  // It lives on the LAST exercise now, beside "finish and save" — it used to be
+  // a full-width danger button under every one of the seven, which is seven
+  // chances to lose the workout.
+  await expect(page.locator('[data-discard-session]'), 'not under a mid-session exercise')
+    .toHaveCount(0);
+  await goToLastExercise(page);
+
   const discard = page.locator('[data-discard-session]').first();
   await expect(discard).toHaveCount(1);
   await expect(discard, 'the label must name the consequence').toContainText('احذف');

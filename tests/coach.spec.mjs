@@ -217,8 +217,13 @@ test('nothing about the answer is invented on this page', async ({ page }) => {
   // No prompt, no system message, no model name, no API key leaves this page.
   // The question, how many passages, and the floor — nothing else. With no
   // session running there is no context field either.
-  expect(sentBody).toMatchObject({ question: 'ما شدة التمرين المناسبة للعائد', top_k: 5, min_score: 0.35 });
-  expect(Object.keys(sentBody).sort()).toEqual(['min_score', 'question', 'top_k']);
+  expect(sentBody).toMatchObject({
+    question: 'ما شدة التمرين المناسبة للعائد', top_k: 10, min_score: 0.35, allow_web: true,
+  });
+  // allow_web is the app's permission for the server to leave the library. It
+  // must be an explicit field, not a server default, so the internet can never
+  // answer a request that did not ask for it.
+  expect(Object.keys(sentBody).sort()).toEqual(['allow_web', 'min_score', 'question', 'top_k']);
   await expect(page.locator('#page-coach')).toContainText('مكتوبة من المقاطع بالأسفل');
   console.log('COACH_GROUNDED_VERBATIM');
 });
@@ -392,6 +397,47 @@ test('an HTML error page reads as an error, not as an unreachable server', async
   await expect(page.locator('#page-coach')).toContainText('502');
   await expect(page.locator('#page-coach')).not.toContainText('لا يستجيب');
   console.log('COACH_HTTP_ERROR_NAMED');
+});
+
+test('an internet answer is marked as such, strips its markdown, and never widens the page', async ({ page }) => {
+  // The model replies in markdown. Printed raw it put a full tracking URL inside
+  // an Arabic sentence — wide enough to push the whole page sideways — and left
+  // literal ** around every number it wanted to emphasise.
+  await page.route(COACH, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      status: 'ok',
+      answer: {
+        status: 'ok', answered: true, source: 'web', pass: 3,
+        text: 'استهدف **0.5–1%** من وزنك أسبوعياً. ([nice.org.uk](https://www.nice.org.uk/guidance/NG226/chapter/recommendations?utm_source=openai)) وراقب المتوسط.',
+        citations: ['https://www.nice.org.uk/guidance/NG226/chapter/recommendations?utm_source=openai'],
+        used: [],
+      },
+      results: [{ text: 'unrelated', work: 'Some Book', page: 3, score: 0.4 }],
+    }),
+  }));
+  await openCoach(page);
+  await ask(page, 'كم أنزل بالأسبوع؟');
+
+  await expect(page.locator('[data-coach-web]')).toHaveCount(1);
+  await expect(page.locator('#page-coach')).toContainText('من الإنترنت');
+  // The claim survives; the markdown does not.
+  await expect(page.locator('.coach-answer-text')).toContainText('0.5–1%');
+  await expect(page.locator('.coach-answer-text')).not.toContainText('**');
+  await expect(page.locator('.coach-answer-text')).not.toContainText('utm_source');
+  await expect(page.locator('.coach-answer-text strong').first()).toHaveText('0.5–1%');
+  // The source is a tappable host, once.
+  await expect(page.locator('.coach-cite-link')).toHaveCount(1);
+  await expect(page.locator('.coach-cite-link')).toContainText('nice.org.uk');
+  // No library passage is shown under a web answer — that would read as sourcing.
+  await expect(page.locator('[data-coach-passage]')).toHaveCount(0);
+  await expect(page.locator('#page-coach')).not.toContainText('مكتوبة من المقاطع');
+  // And the page must not scroll sideways.
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, 'the page must not scroll horizontally').toBeLessThanOrEqual(1);
+  console.log('COACH_WEB_ANSWER_LABELLED_AND_CLEAN');
 });
 
 test('a citation marker points at a real passage, and one that does not is dropped', async ({ page }) => {
