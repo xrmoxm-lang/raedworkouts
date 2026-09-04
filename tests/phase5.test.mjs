@@ -129,12 +129,39 @@ test('Phase 5 hand-reviewed catalogue crosswalk resolves programmes and every su
   console.log('PHASE5_CATALOGUE_CROSSWALK_PASSED');
 });
 
-test('Phase 5 programme is an Upper/Lower history-driven four-session rotation with two resolved blocks', () => {
+test('Phase 5 programme is an Upper/Lower history-driven four-session rotation, and the mesocycle is complete', () => {
   const programme = rawData.PROGRAMME;
   assert.equal(programme.id, 'upper_lower');
   assert.deepEqual(Array.from(programme.rotation_order), ['upper_a', 'lower_a', 'upper_b', 'lower_b']);
   assert.deepEqual(Array.from(programme.weekly_layout), ['upper_a', 'lower_a', 'rest', 'upper_b', 'lower_b', 'rest', 'rest']);
-  assert.equal(programme.blocks.length, 2);
+  // Was `blocks.length === 2`, which pinned the programme at eight weeks and so
+  // certified the very gap it should have caught: the week clock ran out, week 12
+  // was unreachable, and the backstop deload that research/06 §7.2 mandates could
+  // never fire. Assert the SHAPE a mesocycle must have instead of a count.
+  const blocks = programme.blocks;
+  assert.ok(blocks.length >= 2, 'a programme needs at least two blocks');
+  // Weeks must be contiguous from 1 with no gap and no overlap, or a week maps
+  // to no block and resolveProgrammeBlock silently falls back to the last one.
+  const spans = blocks.map((b) => [b.week_start, b.week_end]).sort((a, b) => a[0] - b[0]);
+  assert.equal(spans[0][0], 1, 'the first block must start at week 1');
+  spans.forEach(([start, end], i) => {
+    assert.ok(end >= start, `block ${i} ends before it starts`);
+    if (i) assert.equal(start, spans[i - 1][1] + 1, `a gap or overlap before week ${start}`);
+  });
+  // The deload is not optional: research/06 §7.2 makes it the week-12 backstop.
+  const deload = blocks.find((b) => b.deload);
+  assert.ok(deload, 'the mesocycle must contain a deload block');
+  assert.equal(deload.week_end, 12, 'the backstop deload is week 12');
+  for (const session of deload.sessions) {
+    for (const row of session.exercises) {
+      const worked = blocks.find((b) => b.id === 'B').sessions
+        .find((x) => x.id === session.id).exercises.find((x) => x.order === row.order);
+      assert.ok(row.work_sets < worked.work_sets,
+        `deload ${session.id}/${row.exercise_id} must cut at least one working set`);
+      assert.ok(row.rpe_set1 <= worked.rpe_set1,
+        `deload ${session.id}/${row.exercise_id} must not ask for more effort than the block it follows`);
+    }
+  }
 
   for (const block of programme.blocks) {
     assert.equal(block.sessions.length, 4, `${block.id} has the four adopted sessions`);
@@ -345,4 +372,49 @@ test('the programme clock advances with logged sessions, so Block B is reachable
   const armsA = programme.blocks[0].sessions.find((s) => s.id === 'upper_a').exercises.map((e) => e.exercise_id);
   const armsB = programme.blocks[1].sessions.find((s) => s.id === 'upper_a').exercises.map((e) => e.exercise_id);
   assert.notDeepEqual(armsA, armsB, 'Block B is supposed to change the exercises');
+});
+
+// Added 2026-09-04, after Raed asked whether the programme advances on its own
+// for the next twelve months or whether he has to come back and set it up.
+//
+// It did not advance. derivedWeek() was `Math.min(lastWeek, ...)`, the programme
+// ended at week 8, and the clock froze there — Block B on a loop, for ever, with
+// no deload. research/06 §7.2 mandates a week-12 backstop deload that the code
+// could therefore never reach.
+test('the programme carries itself: a repeating twelve-week mesocycle with a deload every cycle', () => {
+  const programme = rawData.PROGRAMME;
+  const cycleLength = Math.max(...programme.blocks.map((b) => b.week_end));
+  assert.equal(cycleLength, 12, 'a mesocycle is twelve weeks');
+
+  // The same arithmetic app.js uses: weeks elapsed, wrapped by cycle length.
+  const week = (sessions) => 1 + (Math.floor(sessions / 4) % cycleLength);
+  const cycle = (sessions) => 1 + Math.floor(Math.floor(sessions / 4) / cycleLength);
+  const blockFor = (w) => programme.blocks.find((b) => w >= b.week_start && w <= b.week_end);
+
+  // Every week of a cycle resolves to exactly one block — no week falls through.
+  for (let w = 1; w <= cycleLength; w++) {
+    assert.ok(blockFor(w), `week ${w} maps to no block`);
+  }
+
+  // A full year at four sessions a week must keep moving, and must deload
+  // repeatedly rather than once or never.
+  const deloadWeeks = new Set();
+  const blocksSeen = new Set();
+  for (let done = 0; done <= 208; done += 4) {
+    const w = week(done);
+    const b = blockFor(w);
+    blocksSeen.add(b.id);
+    if (b.deload) deloadWeeks.add(`${cycle(done)}:${w}`);
+  }
+  assert.ok(blocksSeen.has('A') && blocksSeen.has('B'), 'a year must revisit the early blocks');
+  assert.ok(deloadWeeks.size >= 4,
+    `a year at 4 sessions/week must contain at least four deload weeks, found ${deloadWeeks.size}`);
+
+  // And it must never stick: the week after a deload is week 1 of a new cycle.
+  const atDeload = 44;                       // 11 weeks done -> week 12
+  assert.equal(week(atDeload), 12);
+  assert.ok(blockFor(week(atDeload)).deload);
+  assert.equal(week(atDeload + 4), 1, 'the cycle restarts instead of freezing on the deload');
+  assert.equal(cycle(atDeload + 4), cycle(atDeload) + 1);
+  console.log('PROGRAMME_MESOCYCLE_REPEATS_PASSED');
 });

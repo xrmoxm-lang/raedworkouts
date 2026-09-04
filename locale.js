@@ -402,6 +402,19 @@ export const LOCALE = Object.freeze({
   block_name_strength: pair('strength', 'القوة'),
   block_name_peak: pair('peak intensity', 'الذروة'),
   block_name_new: pair('new block', 'مرحلة جديدة'),
+  block_name_deload: pair('deload', 'التفريغ'),
+  // The deload has to say what it is and why, or fewer sets reads as a bug.
+  // [LADDER] L9844: it is not permission to sandbag. L9846 calls it a technique
+  // week, which is the framing used here.
+  deload_week_begins: pair(
+    'Deload week. Fewer sets, lighter effort, same weights — on purpose. Train the movement well; do not chase numbers. Back to normal next week.',
+    'أسبوع تفريغ. مجموعات أقل وجهد أخف بنفس الأوزان — بقصد. اشتغل على إتقان الحركة، لا تلاحق الأرقام. الأسبوع الجاي يرجع الحمل.'),
+  cycle_begins: pair(
+    'Cycle {n} begins — twelve fresh weeks, starting from the loads you finished on.',
+    'بدأت الدورة {n} — اثنا عشر أسبوعاً جديدة، تبدأ من الأوزان اللي وقفت عندها.'),
+  cycle_review_due: pair(
+    'Cycle {n}. About six months of training — a good moment to review the programme with me.',
+    'الدورة {n}. تقريباً ستة أشهر تدريب — وقت مناسب نراجع فيه البرنامج مع بعض.'),
   sync_connection_failed: pair('Connection failed — {reason}', 'فشل الاتصال — {reason}'),
   theme_toggle_label: pair('Appearance: {mode} — tap to change', 'المظهر: {mode} — اضغط للتغيير'),
   rest_fallback: pair('Rest timer (fallback)', 'مؤقّت الراحة (احتياطي)'),
@@ -807,6 +820,8 @@ export const LOCALE = Object.freeze({
   programme_lower_b: pair('Lower B', 'سفلي ب'),
   programme_block_a: pair('Upper/Lower — Block A (Weeks 1–4)', 'علوي/سفلي — الكتلة أ (أسابيع 1–4)'),
   programme_block_b: pair('Upper/Lower — Block B (Weeks 5–8)', 'علوي/سفلي — الكتلة ب (أسابيع 5–8)'),
+  programme_block_c: pair('Upper/Lower — Block C (Weeks 9–11)', 'علوي/سفلي — الكتلة ج (أسابيع 9–11)'),
+  programme_block_deload: pair('Deload Week (Week 12)', 'أسبوع التفريغ (الأسبوع 12)'),
   programme_note_history_rotation: pair('The next session is selected from completed-session history, never from the weekday.', 'الجلسة التالية تُختار من سجلّ ما أكملته، لا من يوم الأسبوع.'),
   programme_note_block_b: pair('Block B retains the same primary compounds and rotates only the listed isolation slots.', 'الكتلة ب تُبقي المركّبات الأساسية كما هي، ولا تبدّل إلا تمارين العزل المذكورة.'),
   programme_note_history_seed: pair('Seed each first working weight from logged history where it exists; the ramp probe is the fallback, not the default.', 'ابدأ كل وزن عمل أول من سجلّك حين يوجد؛ والتدرّج الاستكشافي بديل عند غيابه لا الأصل.'),
