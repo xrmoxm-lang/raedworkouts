@@ -1,14 +1,28 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
 // The picker is intentionally separate from the installed app. Its C3 rows
 // are hand-reviewed PDF evidence, so this guard verifies exact source context
 // rather than pretending a fuzzy video match is safe.
-const pickerPath = path.resolve(process.cwd(), '..', 'link-picker.html');
+// Resolved from THIS FILE, not from process.cwd(): the picker lives beside the
+// worktree, one level above the repo, so a cwd-relative path only worked when
+// the suite happened to be run from ~/RaedWorkoutsV2/worktree-v16. From the main
+// checkout it resolved to a file that does not exist and the test failed for a
+// reason that had nothing to do with the picker.
+const pickerPath = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname), '..', '..', 'link-picker.html');
 
-test('C3 link picker renders all nine source-backed rows with verbatim PDF context', async () => {
+test('C3 link picker renders all nine source-backed rows with verbatim PDF context', async (t) => {
+  // The picker is an authoring tool that lives OUTSIDE the repository, so a
+  // clone will not have it. Skipping with a reason is honest; failing is a false
+  // alarm and passing silently would be worse.
+  if (!existsSync(pickerPath)) {
+    t.skip(`link-picker.html is not in this checkout (${pickerPath}) — it lives beside the worktree`);
+    return;
+  }
   const source = await readFile(pickerPath, 'utf8');
   const backlog = source.match(/const BACKLOG_ROWS = \[(.*?)\n\];/s)?.[1] || '';
   const rows = [
