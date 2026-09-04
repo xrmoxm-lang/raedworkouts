@@ -3546,6 +3546,21 @@ function webAnswerText(text) {
   return root;
 }
 
+// A citation URL reaches this page from a web search the model ran, so it is
+// untrusted input that ends up in an href. `javascript:` and `data:` hrefs
+// execute on tap; nothing was checking the scheme. Only real http(s) links are
+// offered, and anything else is dropped rather than shown as an inert chip —
+// a source he cannot open is not a source.
+function isSafeHttpUrl(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch (_) {
+    return false;
+  }
+}
+
 // The answer's citations, as markers rather than titles.
 //
 // The model used to cite inline as "(The Ultimate Guide to Body Recomposition،
@@ -3597,7 +3612,15 @@ function renderCoachAnswer(root) {
   // a book he paid for, so it is a separate state rather than a badge on the
   // same card. It carries URLs instead of passage numbers, and it never claims
   // his books as its source.
-  const fromWeb = answer && answer.status === 'ok' && answer.source === 'web' && answer.text;
+  // Same rule as the library answer above, which the web branch used to skip.
+  // `fromWeb` asked only for status/source/text, so {source:'web', citations:[]}
+  // rendered a confident card headed «من الإنترنت — مو من كتبك» with nothing
+  // behind it at all. An answer off the open internet that cannot name where it
+  // came from is worth LESS than one from his books, not more, and this feature
+  // exists precisely to make an unsourced claim impossible.
+  const webUrls = answer && Array.isArray(answer.citations) ? answer.citations.filter(isSafeHttpUrl) : [];
+  const fromWeb = answer && answer.status === 'ok' && answer.source === 'web' && answer.text
+    && webUrls.length > 0;
   const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length > 0 && !fromWeb;
   const unsourced = answer && answer.status === 'ok' && answer.answered && answer.text
     && cited.length === 0 && !fromWeb;
@@ -3609,7 +3632,7 @@ function renderCoachAnswer(root) {
       webAnswerText(answer.text),
       h('p', { class: 'tiny muted' }, t('coach_web_note')),
     );
-    const urls = Array.isArray(answer.citations) ? answer.citations : [];
+    const urls = webUrls;
     if (urls.length) {
       const list = h('div', { class: 'coach-cites' },
         h('div', { class: 'm-label tiny muted' }, t('coach_web_sources')));
