@@ -2187,6 +2187,7 @@ function startSession(session) {
       confirmLabel: t('discard_session_confirm'),
     }).then((yes) => {
       if (!yes) return;
+      cancelRest();
       state.active_session = null;
       startSession(session);
     });
@@ -2348,6 +2349,7 @@ function discardSession() {
     // between him and an hour of work, with no record afterwards anywhere. The
     // session is kept in memory and put back exactly as it was, the same way
     // reopenSession restores a finished one.
+    cancelRest();
     const discarded = state.active_session;
     state.active_session = null;
     state.forced_next_session = null;
@@ -2379,6 +2381,7 @@ function endSession() {
       confirmLabel: t('discard_session'),
     }).then((yes) => {
       if (!yes) return;
+      cancelRest();
       state.active_session = null;
       state.forced_next_session = null;
       focusExerciseIdx = null;
@@ -2418,6 +2421,12 @@ function endSession() {
     const device = exercisePrefs(entry.swapped_to || exerciseId).device;
     if (device) entry.device = device;
   }
+  // The rest timer is a session-scoped thing and nothing ever stopped it. Tick
+  // the last set (rest starts), tap «إنهاء وحفظ», and the floating ⏱ kept
+  // counting over the summary screen, then vibrated, toasted and fired a system
+  // notification for a workout that was already over. cancelRest was bound to
+  // exactly one thing: the ✕ on the overlay.
+  cancelRest();
   const finishedSession = { ...a, ended_at: new Date().toISOString(), prs: sessionPRs, stats };
   state.history.push(finishedSession);
   // An undo window. The toast already supports one action, and this is the
@@ -4400,6 +4409,14 @@ function renderExerciseCard(ex_id, exState) {
               return;
             }
             if (isFinalWorkingSet && !set.effort) {
+              // Refusing has to REVEAL the thing it is asking for. The picker
+              // only opened when the second-to-last set was ticked, so ticking
+              // the final set first — or an exercise with a single working set,
+              // where there is no prior set at all — got «اختر الجهد» with no
+              // picker anywhere on screen and no way forward.
+              set.effort_prompted = true;
+              saveLocal();
+              render();
               toast(t('final_set_prompt'));
               return;
             }
@@ -4435,9 +4452,14 @@ function renderExerciseCard(ex_id, exState) {
       // is to open something that has already opened is chrome. The strip is
       // shown directly: prompting when the prior set is done, and staying
       // visible afterwards to show the choice he made.
+      // `priorSet?.completed` alone was too narrow twice over: an exercise with
+      // ONE working set has no prior set, and ticking the sets out of order
+      // leaves the immediate predecessor unticked while others are done. Both
+      // hid the picker while the check button demanded it.
       const priorSet = workingSets[workingSets.length - 2];
-      const promptNow = Boolean(priorSet?.completed) && !set.effort;
-      const openNow = Boolean(set.effort) || promptNow;
+      const anyPriorDone = workingSets.some((s, i) => i < workingSets.length - 1 && s.completed);
+      const promptNow = !set.effort && (!priorSet || Boolean(priorSet.completed) || anyPriorDone);
+      const openNow = Boolean(set.effort) || promptNow || Boolean(set.effort_prompted);
       const strip = h('div', { class: 'effort-strip' + (promptNow ? ' prompting' : ''),
                                hidden: openNow ? undefined : true });
       row.appendChild(h('span', { class: 'effort-slot' }));
