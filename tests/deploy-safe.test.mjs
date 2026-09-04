@@ -29,7 +29,16 @@ test('Deploy safety: every v16 family profile resolves only to its namespaced HP
   console.log('V16_SYNC_NAMESPACE_PASSED');
 });
 
-test('Deploy safety: provisioning v16 server identities is additive and leaves v15 allowlist keys untouched', async () => {
+test('Deploy safety: provisioning v16 server identities is additive and leaves v15 allowlist keys untouched', async (t) => {
+  // This shells out to python3. Where it is not on PATH the test used to die
+  // with a raw spawnSync ENOENT, which reads as a broken app rather than a
+  // missing interpreter.
+  try {
+    execFileSync('python3', ['--version'], { stdio: 'ignore' });
+  } catch {
+    t.skip('python3 is not on PATH in this environment');
+    return;
+  }
   const directory = await mkdtemp(path.join(os.tmpdir(), 'raedworkouts-v16-allowlist-'));
   const allowlist = path.join(directory, 'allowlist.json');
   const v15 = {
