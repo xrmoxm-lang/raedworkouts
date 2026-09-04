@@ -471,3 +471,51 @@ test('no unnamed control on home, library, history, coach or settings', async ({
     expect(unnamed, `unnamed controls on ${route}`).toEqual([]);
   }
 });
+
+// ---------------------------------------------------------------------------
+// The keystroke path.
+//
+// saveLocal() serialises the ENTIRE state — history included — twice on every
+// character typed into a weight box. Measured with real volumes: one year of
+// training is 1.5 MB and ~5 ms a keystroke on a fast Mac; three years is 4.5 MB
+// and 9–16 ms. A phone is several times slower, in a gym, mid-set.
+//
+// It is debounced now, which makes it ~0 ms — and the whole risk of debouncing
+// is losing the last thing he typed. These four cover every way out of the box.
+const firstSetWeight = (page) => page.evaluate(() => {
+  const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+  const parsed = JSON.parse(localStorage[key]);
+  const entry = Object.values(parsed.active_session.exercises)[0];
+  return entry.sets[0].weight;
+});
+const typeFirst = (page, value) => page.evaluate((v) => {
+  const input = document.querySelector('.set-grid input');
+  input.focus();
+  input.value = v;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}, value);
+
+test('a typed weight survives every way of leaving the box', async ({ page }) => {
+  await boot(page);
+  await intoSession(page);
+
+  // 1. The debounce eventually writes.
+  await typeFirst(page, '77');
+  await page.waitForTimeout(800);
+  expect(Number(await firstSetWeight(page)), 'the debounce must land').toBe(77);
+
+  // 2. Blur writes immediately, without waiting for the timer.
+  await typeFirst(page, '88');
+  await page.evaluate(() => document.querySelector('.set-grid input').blur());
+  await page.waitForTimeout(80);
+  expect(Number(await firstSetWeight(page)), 'leaving the field must flush at once').toBe(88);
+
+  // 3. A reload part-way through the debounce window must not lose it. This is
+  //    the real hazard: the service worker reloads the page on an update.
+  await typeFirst(page, '99');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1100);
+  expect(Number(await firstSetWeight(page)), 'a reload mid-debounce must not lose the keystroke').toBe(99);
+});

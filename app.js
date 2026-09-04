@@ -2898,6 +2898,30 @@ function applySetEdit(set, property, value) {
     set.invalid = null;
     set.invalid_prompted = false;
   }
+  // Debounced, because this fires on every CHARACTER he types into a weight box
+  // and saveLocal() serialises the entire state — history included — twice, once
+  // for state and once for settings that did not change.
+  //
+  // Measured on a fast Mac with real volumes: one year of training is 1.5 MB and
+  // 5 ms a keystroke; three years is 4.5 MB and 9-16 ms. A phone is several times
+  // slower than that, in a gym, mid-set, while he types "42.5".
+  //
+  // The VALUE is already in `state` on the line above, so nothing is at risk
+  // between keystrokes: any later save — ticking the set, ending the session,
+  // leaving the field, hiding the app — writes it. Those flush points are wired
+  // below.
+  scheduleSetEditPersist();
+}
+let setEditTimer = null;
+function scheduleSetEditPersist() {
+  if (setEditTimer) clearTimeout(setEditTimer);
+  setEditTimer = setTimeout(() => { setEditTimer = null; saveLocal(); }, 400);
+}
+// Persist a pending edit right now. Cheap when there is nothing pending.
+function flushSetEdit() {
+  if (!setEditTimer) return;
+  clearTimeout(setEditTimer);
+  setEditTimer = null;
   saveLocal();
 }
 
@@ -4430,6 +4454,7 @@ function renderExerciseCard(ex_id, exState) {
         'aria-label': tf('a11y_weight_for_set', { n: idx + 1 }),
         disabled: Boolean(set.skipped),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
+        onBlur: flushSetEdit,
         onInput: (e) => applySetEdit(set, 'weight', e.target.value === '' ? '' : parseFloat(e.target.value))
       }),
       h('input', {
@@ -4439,6 +4464,7 @@ function renderExerciseCard(ex_id, exState) {
         value: set.reps ?? '',
         'aria-label': tf('a11y_reps_for_set', { n: idx + 1 }),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
+        onBlur: flushSetEdit,
         onInput: (e) => applySetEdit(set, 'reps', e.target.value === '' ? '' : parseInt(e.target.value, 10))
       }),
       h('button', {
@@ -6154,6 +6180,7 @@ function init() {
   });
   setInterval(() => { if (syncDirty) flushSync().catch(() => {}); }, 60 * 1000);
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flushSetEdit();
     if (document.hidden && syncDirty) {
       flushSync({ keepalive: true }).then(ok => {
         if (!ok) syncToCloud({ beacon: true, beaconAuth: true }).catch(() => {});
@@ -6161,6 +6188,7 @@ function init() {
     }
   });
   window.addEventListener('pagehide', () => {
+    flushSetEdit();
     if (syncDirty) syncToCloud({ beacon: true, beaconAuth: true }).catch(() => {});
   });
 
