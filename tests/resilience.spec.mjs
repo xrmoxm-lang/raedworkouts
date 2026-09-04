@@ -321,3 +321,59 @@ test('every movement eventually earns more weight, accessories included', async 
   expect(Number(suggested.biceps_curl)).toBe(9);
   expect(Number(suggested.chest_press_machine)).toBe(42.5);
 });
+
+// ---------------------------------------------------------------------------
+// A swapped exercise had no memory.
+//
+// A session stores a swapped movement under the ORIGINAL programme id with the
+// replacement in `swapped_to`, so history for a hack squat that replaced a
+// goblet squat lives at `exercises.goblet_squat`. Both history lookups asked for
+// the REPLACEMENT id, found nothing, and reported no history at all — so every
+// swapped exercise was permanently stuck on its first exposure, showing
+// «معايرة» and never progressing.
+test('a swapped exercise remembers what he actually lifted on it', async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const session = (date) => ({
+      date, session_id: 'lower_b', started_at: `${date}T09:00:00Z`, ended_at: `${date}T10:00:00Z`,
+      exercises: {
+        goblet_squat: {
+          planned: { exercise_id: 'hack_squat', reps: '8-10' },
+          swapped_to: 'hack_squat',
+          sets: [0, 1, 2].map((i) => ({
+            is_warmup: false, weight: 80, reps: 10, completed: true,
+            effort: i === 2 ? 'right' : null,
+          })),
+        },
+      },
+      prs: [], stats: {},
+    });
+    parsed.history = [session('2026-08-24'), session('2026-08-27')];
+    parsed.active_session = null;
+    parsed.forced_next_session = 'lower_b';
+    parsed.substitutions = [{
+      id: 's1', from_exercise_id: 'goblet_squat', to_exercise_id: 'hack_squat',
+      scope: 'always', created_at: '2026-08-24T09:00:00Z',
+    }];
+    localStorage[key] = JSON.stringify(parsed);
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(1000);
+
+  const entry = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const ex = parsed.active_session.exercises.goblet_squat;
+    return { swappedTo: ex?.swapped_to, weight: (ex?.sets || []).find((s) => !s.is_warmup)?.weight };
+  });
+
+  expect(entry.swappedTo, 'the permanent swap must still resolve').toBe('hack_squat');
+  expect(Number(entry.weight), 'two sessions at 80kg must not present as a movement he has never done')
+    .toBeGreaterThanOrEqual(80);
+});

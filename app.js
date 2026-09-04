@@ -1740,12 +1740,40 @@ function rememberDevice(exerciseId, name) {
   saveLocal();
 }
 
+// A session stores a swapped exercise under the ORIGINAL programme id, with the
+// replacement recorded in `swapped_to`. So history for a hack squat that
+// replaced a goblet squat lives at `exercises.goblet_squat`, and this function —
+// which is asked for `hack_squat`, because that is what suggestNextWeight is
+// given — found nothing at `exercises.hack_squat` and reported no history at
+// all.
+//
+// Proven: two lower_b sessions of hack squat at 80 kg, permanent swap in place,
+// and the third session offered a blank box and «معايرة» — calibrate a movement
+// he had done twice that week. Every swapped exercise was permanently stuck on
+// its first exposure, so it could never progress either.
+//
+// Matching on the EFFECTIVE id — what he actually performed — fixes both
+// directions: asking for the replacement finds the swapped entries, and asking
+// for the original finds only the sessions where he really did the original.
+function performedId(key, entry) {
+  return entry?.swapped_to || key;
+}
+function findPerformedEntry(session, exercise_id) {
+  const exercises = session?.exercises || {};
+  const direct = exercises[exercise_id];
+  // The common case, and the cheap one: an unswapped entry under its own id.
+  if (direct && !direct.swapped_to) return direct;
+  for (const [key, entry] of Object.entries(exercises)) {
+    if (performedId(key, entry) === exercise_id) return entry;
+  }
+  return undefined;
+}
 function getLastTwoPerformances(exercise_id) {
   const device = exercisePrefs(exercise_id).device;
   const collect = (matchDevice) => {
     const out = [];
     for (let i = state.history.length - 1; i >= 0 && out.length < 2; i--) {
-      const ex = state.history[i].exercises[exercise_id];
+      const ex = findPerformedEntry(state.history[i], exercise_id);
       if (!ex?.sets?.some(isCountableWorkingSet)) continue;
       if (matchDevice && (ex.device || '') !== device) continue;
       out.push({ date: state.history[i].date, ...ex });
@@ -4513,7 +4541,11 @@ function exerciseHistoryRows(exerciseId, limit = 6) {
   const rows = [];
   for (let i = state.history.length - 1; i >= 0 && rows.length < limit; i--) {
     const session = state.history[i];
-    const entry = session.exercises?.[exerciseId];
+    // Same lookup as getLastTwoPerformances, and for the same reason: this table
+    // is opened with the REPLACEMENT id when a swap is active, while the session
+    // stored the work under the original programme id. It showed «لا يوجد سجل»
+    // for a movement he had been doing for weeks.
+    const entry = findPerformedEntry(session, exerciseId);
     const sets = (entry?.sets || []).filter(isCountableWorkingSet);
     if (!sets.length) continue;
     const top = sets.reduce((best, set) =>
