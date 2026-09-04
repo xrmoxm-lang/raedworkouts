@@ -41,7 +41,6 @@ const h = (tag, attrs = {}, ...children) => {
     else if (k === 'style') el.setAttribute('style', attrs[k]);
     else if (k.startsWith('on') && typeof attrs[k] === 'function')
       el.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
-    else if (k === 'html') el.innerHTML = attrs[k];
     else if (attrs[k] != null && attrs[k] !== false) {
       const value = /^(?:title|placeholder|aria-label)$/.test(k) ? localizeText(attrs[k]) : attrs[k];
       el.setAttribute(k, value);
@@ -2529,7 +2528,15 @@ function renderSessionEnd() {
   root.innerHTML = '';
   const s = _endScreenSession;
   if (!s) {
-    root.innerHTML = '<div class="empty"><div class="big">✓</div><p class="muted">Session saved.</p><a class="btn primary" href="#home">Home</a></div>';
+    // Was a hand-written innerHTML string, and the only one in the file: English
+    // («Session saved.» / «Home») on an Arabic-only screen, and markup where
+    // every other screen builds nodes. The Arabic-leak scan could not see it
+    // because it looked at toast() and t() calls, not at raw markup.
+    root.appendChild(h('div', { class: 'empty' },
+      h('div', { class: 'big' }, '✓'),
+      h('p', { class: 'muted' }, t('session_saved')),
+      h('a', { class: 'btn primary', href: '#home' }, t('home')),
+    ));
     return;
   }
   const stats = s.stats || { sets: 0, reps: 0, volume_kg: 0 };

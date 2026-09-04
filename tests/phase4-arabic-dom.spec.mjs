@@ -2,12 +2,23 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
 import {
+
   ALLOWED_EXERCISE_NAMES,
   ALLOWED_PLAYLIST_TITLES,
   ALLOWED_PROPER_NOUN_ABBREVIATIONS,
   ALLOWED_PROPER_NOUNS,
   ALLOWED_WARMUP_DRILL_NAMES,
 } from '../locale.js';
+
+// The app ships Raed's real sync credentials and points at his real server, so
+// ANY test that navigates without blocking that host pushes whatever it does to
+// his live cloud row. history-delete.spec.mjs deletes sessions. Seven spec files
+// had no block at all. Nothing in a test run may ever touch his data.
+async function blockLiveSync(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (route) => route.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+}
+
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = pathToFileURL(path.join(repoRoot, 'index.html')).href;
@@ -156,6 +167,7 @@ async function openSignedInArabicApp(page) {
     localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.settings.v1`, JSON.stringify(settings));
     sessionStorage.setItem('phase4-arabic-dom-seeded', 'true');
   }, { user: testUser, state: seededState(), settings: seededSettings() });
+  await blockLiveSync(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 }
@@ -202,6 +214,7 @@ test('Phase 4 Arabic UI renders no undeclared visible Latin text on every reacha
       { user_id: 'arabic-profile', display_name: 'ملف تجريبي', experience: 'returning' },
     ]));
   });
+  await blockLiveSync(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   findings.push(...await scanVisibleLatin(page, 'profiles'));
   await page.getByRole('button', { name: /ملف تجريبي/ }).click();

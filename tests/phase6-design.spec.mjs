@@ -2,6 +2,16 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
 
+// The app ships Raed's real sync credentials and points at his real server, so
+// ANY test that navigates without blocking that host pushes whatever it does to
+// his live cloud row. history-delete.spec.mjs deletes sessions. Seven spec files
+// had no block at all. Nothing in a test run may ever touch his data.
+async function blockLiveSync(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (route) => route.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+}
+
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = pathToFileURL(path.join(repoRoot, 'index.html')).href;
 const testUser = 'phase6-design';
@@ -35,6 +45,7 @@ async function openHome(page) {
     localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.state.v1`, JSON.stringify(savedState));
     localStorage.setItem(`raedworkouts.${encodeURIComponent(user)}.settings.v1`, JSON.stringify(savedSettings));
   }, { user: testUser, savedState: state(), savedSettings: settings() });
+  await blockLiveSync(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
 }
 

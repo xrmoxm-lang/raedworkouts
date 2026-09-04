@@ -1,5 +1,15 @@
 import { expect, test } from '@playwright/test';
 
+// The app ships Raed's real sync credentials and points at his real server, so
+// ANY test that navigates without blocking that host pushes whatever it does to
+// his live cloud row. history-delete.spec.mjs deletes sessions. Seven spec files
+// had no block at all. Nothing in a test run may ever touch his data.
+async function blockLiveSync(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (route) => route.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+}
+
+
 // The whole point of remembering the machine is that the weight history follows
 // it. 60 kg on one leg press is not 60 kg on another, so a suggestion built from
 // a mixed history is a suggestion built from nothing. These assertions pin the
@@ -37,6 +47,7 @@ async function boot(page, prefs, history) {
       exercise_prefs: p,
     }));
   }, { u: user, p: prefs, hist: history });
+  await blockLiveSync(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
 }

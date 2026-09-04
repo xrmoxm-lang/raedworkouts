@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { LOCALE } from '../locale.js';
 
+// The app ships Raed's real sync credentials and points at his real server, so
+// ANY test that navigates without blocking that host pushes whatever it does to
+// his live cloud row. history-delete.spec.mjs deletes sessions. Seven spec files
+// had no block at all. Nothing in a test run may ever touch his data.
+async function blockLiveSync(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (route) => route.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+}
+
+
 const deployUrl = process.env.PWA_DEPLOY_URL || '';
 
 test.use({
@@ -15,6 +25,7 @@ test.use({
 test('Deploy PWA: HTTPS install metadata, controlled shell, and offline reload all work', async ({ page, context }) => {
   expect(deployUrl, 'set PWA_DEPLOY_URL to the separate HTTPS v16 site; this gate must not pass without it').toMatch(/^https:\/\//);
 
+  await blockLiveSync(page);
   const response = await page.goto(deployUrl, { waitUntil: 'domcontentloaded' });
   expect(response?.url()).toMatch(/^https:\/\//);
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

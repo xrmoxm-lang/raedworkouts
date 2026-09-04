@@ -1,5 +1,15 @@
 import { expect, test } from '@playwright/test';
 
+// The app ships Raed's real sync credentials and points at his real server, so
+// ANY test that navigates without blocking that host pushes whatever it does to
+// his live cloud row. history-delete.spec.mjs deletes sessions. Seven spec files
+// had no block at all. Nothing in a test run may ever touch his data.
+async function blockLiveSync(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (route) => route.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+}
+
+
 // Deleting the wrong row is the failure that matters here: the list is rendered
 // newest-first via [...history].reverse(), so the loop index is the REVERSE
 // position. Deleting by it would remove a session from the other end of the log
@@ -36,6 +46,8 @@ test('deleting a session removes exactly that session', async ({ page }) => {
     session('2026-08-20T09:00:00.000Z', 'THIRD'),
     session('2026-08-30T09:00:00.000Z', 'NEWEST'),
   ] });
+
+  await blockLiveSync(page);
 
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
@@ -79,6 +91,8 @@ test('cancelling the delete leaves the session alone', async ({ page }) => {
       programme_overrides: null, prs: {}, msg_index: 0, substitutions: [],
     }));
   }, { u: user, hist: [session('2026-08-20T09:00:00.000Z', 'ONLY')] });
+
+  await blockLiveSync(page);
 
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);

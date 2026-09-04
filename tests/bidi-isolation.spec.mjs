@@ -1,4 +1,14 @@
 import { expect, test } from '@playwright/test';
+
+// The app ships Raed's real sync credentials and points at his real server, so
+// ANY test that navigates without blocking that host pushes whatever it does to
+// his live cloud row. history-delete.spec.mjs deletes sessions. Seven spec files
+// had no block at all. Nothing in a test run may ever touch his data.
+async function blockLiveSync(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (route) => route.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (route) => route.abort());
+}
+
 test.use({ viewport: { width: 390, height: 844 } });
 // Every Latin or numeric run inside Arabic must be isolated in a <bdi>/.ltr-run,
 // or the bidi algorithm may reorder it against the surrounding text. This is not
@@ -12,6 +22,7 @@ test('no un-isolated Latin or numeric runs inside Arabic, on any screen', async 
     localStorage.setItem('raedworkouts.active_user', 'b');
     localStorage.setItem('raedworkouts.b.settings.v1', JSON.stringify({ user_id: 'b', theme: 'light', skin: 'hadid', lang: 'ar', locale_version: 1 }));
   });
+  await blockLiveSync(page);
   await page.goto(process.env.BIDI_URL || 'http://127.0.0.1:8899/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
   // Any run of Latin/digits that is NOT inside a bdi/ltr-run is a bidi risk:

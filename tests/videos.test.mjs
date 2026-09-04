@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
@@ -213,4 +213,26 @@ test('the programme data is referentially sound and its supersets are well forme
         `${sid}: the FIRST half of superset ${letter} must prescribe 0 rest — that is what makes it a superset`);
     }
   }
+});
+
+// Added 2026-09-04, after finding seven spec files that navigated to the app
+// without blocking the real sync host.
+//
+// app.js ships Raed's actual SYNC_KEY and points at his actual server, so a test
+// that opens the app and does something is doing it to his live cloud row —
+// and one of those seven, history-delete.spec.mjs, deletes sessions. Nothing in
+// a test run may ever reach his data.
+test('every browser test blocks the live sync host before it opens the app', async () => {
+  const dir = new URL('./', import.meta.url);
+  const files = (await readdir(dir)).filter((f) => f.endsWith('.spec.mjs'));
+  const unguarded = [];
+  for (const file of files) {
+    const src = await readFile(new URL(file, dir), 'utf8');
+    if (!/page\.goto\(/.test(src)) continue;
+    // Either it aborts the host itself, or it calls a helper that does.
+    const guards = /raed-hp\.tail53bd35\.ts\.net/.test(src);
+    if (!guards) unguarded.push(file);
+  }
+  assert.deepEqual(unguarded, [],
+    'a test that opens the app without blocking the sync host writes to his real cloud data');
 });

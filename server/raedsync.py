@@ -707,6 +707,10 @@ def notify_p180_sessions(con: sqlite3.Connection, user_id: str, state_obj: dict)
             sys.stderr.write(f"p180 live ingest failed for {ref[:80]}: {exc!r}\n")
 
 
+# 32 MB. His state is ~4.5 MB after three years of training, so this is roughly
+# seven times the largest legitimate push and still far too small to hurt the box.
+MAX_BODY_BYTES = 32 * 1024 * 1024
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "RaedSync/2"
 
@@ -743,7 +747,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, {"error": error})
 
     def read_json_body(self) -> dict:
-        raw = self.rfile.read(int(self.headers.get("content-length") or "0"))
+        # Bounded, and tolerant of a header that is not a number.
+        #
+        # This read whatever Content-Length claimed. The service is reachable
+        # from the open internet through the Tailscale funnel, so anyone could
+        # send `Content-Length: 5000000000` and make the box try to pull five
+        # gigabytes into memory — a one-line denial of service against his home
+        # server, no credentials needed, because the body is read BEFORE auth is
+        # checked. A non-numeric header raised ValueError and became a 500.
+        #
+        # The cap is generous on purpose: a real push is his whole state, which
+        # is ~1.5 MB after a year of training and ~4.5 MB after three.
+        try:
+            declared = int(self.headers.get("content-length") or "0")
+        except (TypeError, ValueError):
+            return {}
+        if declared <= 0:
+            return {}
+        if declared > MAX_BODY_BYTES:
+            return {}
+        raw = self.rfile.read(declared)
         if not raw:
             return {}
         try:
