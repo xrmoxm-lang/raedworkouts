@@ -252,3 +252,72 @@ test('tapping your own profile with the server unreachable does not destroy your
   expect(after.sessions, 'opening a profile must never overwrite its stored history').toBe(3);
   expect(after.prs, 'nor its personal records').toBe(1);
 });
+
+// ---------------------------------------------------------------------------
+// Accessories never graduated to more weight.
+//
+// `bump = isAccessory ? 0 : 2.5` made both increase branches unreachable, so an
+// upper-body isolation movement sat at one load PERMANENTLY while the card said
+// «أضف تكرارًا بدل الوزن» every session. In Upper A that is the biceps curl, the
+// rope triceps extension and the cable lateral raise — three of seven.
+// SKILL.md §5.2 says accessories add reps first and THEN weight; only the first
+// half was implemented.
+test('every movement eventually earns more weight, accessories included', async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const loads = {
+      chest_press_machine: 40,              // compound        -> +2.5
+      biceps_curl: 8,                       // accessory < 10  -> +1
+      lateral_raise_cable: 6,               // accessory < 10  -> +1
+      single_arm_rope_triceps_extension: 12, // accessory >= 10 -> +2.5
+    };
+    // Two sessions where every working set cleared the top of its range. 15 is
+    // above every range in the programme, so this does not depend on which one.
+    const session = (date) => ({
+      date, session_id: 'upper_a', started_at: `${date}T09:00:00Z`, ended_at: `${date}T10:00:00Z`,
+      exercises: Object.fromEntries(Object.entries(loads).map(([id, w]) => [id, {
+        planned: { exercise_id: id },
+        sets: [0, 1, 2].map((i) => ({
+          is_warmup: false, weight: w, reps: 15, completed: true,
+          effort: i === 2 ? 'right' : null,
+        })),
+      }])),
+      prs: [], stats: {},
+    });
+    parsed.history = [session('2026-08-25'), session('2026-08-28')];
+    parsed.active_session = null;
+    parsed.forced_next_session = 'upper_a';
+    localStorage[key] = JSON.stringify(parsed);
+    return loads;
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(1000);
+
+  const suggested = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    return Object.fromEntries(Object.entries(parsed.active_session.exercises).map(([id, entry]) => [
+      id, (entry.sets.find((s) => !s.is_warmup) || {}).weight,
+    ]));
+  });
+
+  const previous = {
+    chest_press_machine: 40,
+    biceps_curl: 8,
+    lateral_raise_cable: 6,
+    single_arm_rope_triceps_extension: 12,
+  };
+  for (const [id, was] of Object.entries(previous)) {
+    expect(Number(suggested[id]), `${id} must not be frozen at ${was}kg after two sessions at the top of its range`)
+      .toBeGreaterThan(was);
+  }
+  // And the step stays sane: never more than a plate on an accessory.
+  expect(Number(suggested.biceps_curl)).toBe(9);
+  expect(Number(suggested.chest_press_machine)).toBe(42.5);
+});

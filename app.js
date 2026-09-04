@@ -1928,13 +1928,47 @@ function suggestNextWeight(exercise_id, planned) {
       ? { weight: Number(historicWeight), note: t('why_last_logged') }
       : { weight: null, note: t('why_calibrate') };
   }
-  const lastTopSet = workingSets[workingSets.length - 1];
+  // Two different sets, for two different questions.
+  //
+  // The WEIGHT comes from the heaviest working set — which is what the comment
+  // above this block always claimed and what exerciseHistoryRows() already shows
+  // him in the log table, but the code took `workingSets[length - 1]`, the LAST
+  // one. Identical on straight sets, and wrong the moment he drops the load on a
+  // final set because he is cooked: the app would then propose the reduced
+  // weight as his new working load and quietly walk him backwards.
+  //
+  // The EFFORT still comes from the final set, because that is the only set the
+  // app ever records effort on — by design, effort only carries information near
+  // failure. Reading it off the heaviest set would usually read `null`.
+  const finalSet = workingSets[workingSets.length - 1];
+  const lastTopSet = workingSets.reduce(
+    (best, set) => ((Number(set.weight) || 0) > (Number(best.weight) || 0) ? set : best),
+    workingSets[0]);
   const allHitTarget = workingSets.every(s => s.reps >= topReps);
-  const finalEffort = lastTopSet.effort || null;
+  const finalEffort = finalSet.effort || null;
   // Check if last 2 sessions both hit target
   const isLowerBody = ['quads','glutes','hamstrings','calves'].some(m => ex.primary.includes(m));
   const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
-  const bump = isLowerBody ? 5 : (isAccessory ? 0 : 2.5);
+  // Accessories add reps BEFORE weight — but they have to add weight eventually.
+  //
+  // This was `isAccessory ? 0 : 2.5`, and a bump of zero makes both increase
+  // branches below unreachable, so an upper-body isolation movement was pinned
+  // at one load PERMANENTLY while the card said «أضف تكرارًا بدل الوزن» — add a
+  // rep instead — every single session, for ever. In Upper A that is the biceps
+  // curl, the rope triceps extension and the cable lateral raise: three of seven.
+  //
+  // SKILL.md §5.2 is explicit that this is only half the rule — "add reps first
+  // (until you exceed the rep range), THEN add weight" — and its own worked
+  // example bumps a lateral raise from 4 kg to 5 kg once 15/15/15 lands twice.
+  // So: a small step, and only on the two-consecutive-sessions branch, never on
+  // a single easy session. 1 kg under 10 kg because that is a real dumbbell and
+  // 2.5 would be a 60% jump; 2.5 kg above it, where that is the smallest plate
+  // or pin most machines offer.
+  //
+  // Lower-body isolation (leg curl, calf, leg extension) was never affected —
+  // isLowerBody wins first and gives it 5 kg.
+  const accessoryBump = (load) => (Number(load) < 10 ? 1 : 2.5);
+  const bump = isLowerBody ? 5 : (isAccessory ? accessoryBump(lastTopSet.weight) : 2.5);
   if (allHitTarget && last2.length === 2) {
     const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
     const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
@@ -1949,7 +1983,9 @@ function suggestNextWeight(exercise_id, planned) {
       }
     }
   }
-  if (allHitTarget && finalEffort === 'easy' && bump > 0) {
+  // Deliberately NOT for accessories: one easy session is the moment to add a
+  // rep, not load. They only graduate on the two-session branch above.
+  if (allHitTarget && finalEffort === 'easy' && bump > 0 && !isAccessory) {
     return { weight: lastTopSet.weight + bump, note: tf('why_easy_bump', { reps: topReps, kg: bump }) };
   }
   // Tagged, because the card suppresses this one note and matching on the
