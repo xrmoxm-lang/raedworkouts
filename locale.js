@@ -81,10 +81,8 @@ export const LOCALE = Object.freeze({
   // Paths the Arabic gates never open — restore, import, the finish screen.
   // English survived here precisely because these screens are rare, which is the
   // same way the swap modal and the rest-day banner hid.
-  personal_records: pair('🏆 Personal Records', '🏆 أرقامك الشخصية'),
   next_label: pair('Next: ', 'التالي: '),
   block_complete: pair('Block complete.', 'اكتملت الكتلة.'),
-  undo: pair('Undo', 'تراجع'),
   loading_ellipsis: pair('Loading…', 'جارٍ التحميل…'),
   close: pair('Close', 'إغلاق'),
   imported: pair('Imported.', 'تم الاستيراد.'),
@@ -375,7 +373,9 @@ export const LOCALE = Object.freeze({
   library: pair('Library', 'المكتبة'),
   home: pair('Home', 'الرئيسية'),
   help: pair('Help', 'المساعدة'),
-  save: pair('Save', 'حفظ'),
+  // Referenced by t('saved') in three places and never defined, so it rendered
+  // the literal English word "saved" on an Arabic-only screen.
+  saved: pair('Saved', 'انحفظ'),
   cancel: pair('Cancel', 'إلغاء'),
   wipe_data: pair('Wipe all data', 'امسح كل البيانات'),
   theme: pair('Theme', 'الثيم'),
@@ -386,9 +386,7 @@ export const LOCALE = Object.freeze({
   working_sets: pair('working sets', 'مجموعات عمل'),
   last_time: pair('Last time', 'آخر مرة'),
   warmup: pair('Warm-up', 'الإحماء'),
-  add_set: pair('+ Set', '+ مجموعة'),
   swap: pair('⇄ Swap', '⇄ استبدال'),
-  done: pair('Done', 'تم'),
   sessions_4wk: pair('sessions / 4 wks', 'جلسات / 4 أسابيع'),
   kg_this_week: pair('kg this week', 'كغ هذا الأسبوع'),
   foundation: pair('foundation', 'التأسيس'),
@@ -399,7 +397,6 @@ export const LOCALE = Object.freeze({
   of: pair('of', 'من'),
   auto_color: pair('Auto color (by block)', 'لون تلقائي حسب البلوك'),
   syncing: pair('Syncing…', 'جارٍ المزامنة…'),
-  sync_ok: pair('Synced', 'تمت المزامنة'),
   block_begins: pair('Block {block} — the {name} phase begins.', 'المرحلة {block} — تبدأ مرحلة {name}.'),
   block_name_foundation: pair('foundation', 'التأسيس'),
   block_name_strength: pair('strength', 'القوة'),
@@ -425,8 +422,6 @@ export const LOCALE = Object.freeze({
   machine_weight_hint: pair('The machine carries no number. Reps carry the progress instead.', 'الجهاز ما له رقم. التقدّم يمشي على التكرارات بدله.'),
   swap_from_settings_hint: pair('Replace this movement for today or for the rest of the programme.', 'استبدل هذه الحركة لليوم فقط أو لبقية البرنامج.'),
   open_swap_list: pair('Open the alternatives', 'افتح قائمة البدائل'),
-  on: pair('On', 'مفعّل'),
-  off: pair('Off', 'مطفأ'),
   done: pair('Done', 'تم'),
   save: pair('Save', 'حفظ'),
   last_on_device: pair('Last time on {device}', 'آخر مرة على {device}'),

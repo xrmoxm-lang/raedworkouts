@@ -91,3 +91,30 @@ test('clips confirmed removed from YouTube are retired, not silently left in pla
     assert.ok(remaining > 0, `${exercise.id} lost its last clip when the dead one was retired`);
   }
 });
+
+// Added 2026-09-04. locale.js had 8 duplicate keys; in three of them the two
+// definitions carried DIFFERENT Arabic, so the earlier translation was silently
+// dead and a later one won — the kind of thing that only shows up on screen.
+// And t('saved'), called in three places, was never defined at all, so it
+// rendered the literal English word "saved" on an Arabic-only screen.
+test('locale.js defines each key exactly once, and defines everything app.js asks for', async () => {
+  const src = await readFile(new URL('../locale.js', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const { LOCALE } = await import('../locale.js');
+
+  const seen = new Map();
+  const duplicates = [];
+  for (const m of src.matchAll(/^ {2}([a-zA-Z_]\w*): (?:pair|programmeTiedPair)\(/gm)) {
+    const line = src.slice(0, m.index).split('\n').length;
+    if (seen.has(m[1])) duplicates.push(`${m[1]} (lines ${seen.get(m[1])} and ${line})`);
+    else seen.set(m[1], line);
+  }
+  assert.deepEqual(duplicates, [], 'a duplicate key silently discards the earlier translation');
+
+  const referenced = new Set();
+  for (const m of app.matchAll(/\b(?:t|tf)\(\s*'([a-zA-Z_]\w*)'/g)) referenced.add(m[1]);
+  // t('equip_' + kind) — a prefix, resolved at runtime, not a key itself.
+  referenced.delete('equip_');
+  const missing = [...referenced].filter((key) => !LOCALE[key]);
+  assert.deepEqual(missing, [], 'a key with no entry renders its own name in English');
+});
