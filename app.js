@@ -1876,8 +1876,22 @@ function suggestedWeightPlaceholder(value) {
   // so the honest word is «معايرة»: this session is the calibration.
   return hasWorkingWeight(value) ? fmtKgValue(value) : t('calibrate');
 }
+// Blank and zero are different things, and this used to collapse them.
+//
+// It was `hasWorkingWeight(value) ? Number(value) : ''`, and hasWorkingWeight is
+// `> 0` — so an explicit 0, which the app supports on purpose for a machine that
+// carries its own stack, came back as ''. Consequences, all proven on screen:
+// a completed 0 kg set re-rendered with an EMPTY weight box, so work he had
+// logged looked unrecorded and tapping the tick again answered «مطلوب»; and
+// «+ مجموعة» after a 0 kg set created a row holding '' rather than 0, which on
+// a readOnly machine-weight card he could never fill in and never complete.
+//
+// domain/runner-session.js already draws this distinction correctly in
+// hasValidWorkingValues. This is the same rule: absent is blank, 0 is a number.
 function editableWeightValue(value) {
-  return hasWorkingWeight(value) ? Number(value) : '';
+  if (value === '' || value === null || value === undefined) return '';
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : '';
 }
 // Compound ramp, sourced: 50% x 6-10 then 70% x 4-6 (ML L11160/L11162, PPL L:1454/1457).
 //

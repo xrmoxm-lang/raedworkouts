@@ -377,3 +377,37 @@ test('a swapped exercise remembers what he actually lifted on it', async ({ page
   expect(Number(entry.weight), 'two sessions at 80kg must not present as a movement he has never done')
     .toBeGreaterThanOrEqual(80);
 });
+
+// ---------------------------------------------------------------------------
+// 0 kg is a real load — a machine carrying its own stack — and editableWeightValue
+// collapsed it to blank, because hasWorkingWeight is `> 0`. A completed 0 kg set
+// re-rendered with an EMPTY weight box, so logged work looked unrecorded, and
+// «+ مجموعة» after one produced a row holding '' that a readOnly machine-weight
+// card could never fill in or complete.
+test('a logged 0 kg set still reads as 0 after a reload', async ({ page }) => {
+  await boot(page);
+  await intoSession(page);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const id = Object.keys(parsed.active_session.exercises)[0];
+    const entry = parsed.active_session.exercises[id];
+    entry.machine_weight = true;
+    for (const set of entry.sets) if (!set.is_warmup) set.weight = 0;
+    const first = entry.sets.find((s) => !s.is_warmup);
+    first.completed = true;
+    first.reps = 10;
+    localStorage[key] = JSON.stringify(parsed);
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200);
+
+  const weights = await page.evaluate(() => [...document.querySelectorAll('.set-grid')]
+    .filter((row) => !/تدرّج/.test(row.textContent))
+    .map((row) => [...row.querySelectorAll('input')][0]?.value));
+
+  expect(weights.length).toBeGreaterThan(0);
+  expect(weights.every((w) => w === '0'), `a stored 0 must render as 0, got ${JSON.stringify(weights)}`).toBe(true);
+});
