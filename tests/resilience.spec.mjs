@@ -519,3 +519,82 @@ test('a typed weight survives every way of leaving the box', async ({ page }) =>
   await page.waitForTimeout(1100);
   expect(Number(await firstSetWeight(page)), 'a reload mid-debounce must not lose the keystroke').toBe(99);
 });
+
+// ---------------------------------------------------------------------------
+// Two things that were dead rather than wrong.
+//
+// `state.current_block` is written NOWHERE — initialised to 1 in defaultState()
+// and read in exactly one place. So the block the app thought it was in was
+// permanently 1, isBlockTransition was permanently false, and every block
+// announcement was unreachable: the "block N begins" toast, the block-boundary
+// skin offer, and the deload week's own explanation. The programme's real
+// position comes from derivedBlock().
+//
+// A deload week that arrives with no explanation reads as the app breaking —
+// fewer sets, lower targets, same weights — or gets sandbagged, which [LADDER]
+// L9844 warns about by name.
+test('entering the deload week explains itself, in Arabic', async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    // 44 completed sessions = 11 weeks done = week 12 = the deload block.
+    parsed.history = Array.from({ length: 44 }, (_, i) => ({
+      date: '2026-01-01', session_id: ['upper_a', 'lower_a', 'upper_b', 'lower_b'][i % 4],
+      started_at: '2026-01-01T09:00:00Z', ended_at: '2026-01-01T10:00:00Z', uid: `u${i}`,
+      exercises: { chest_press_machine: { planned: { exercise_id: 'chest_press_machine', reps: '8-10' },
+        sets: [{ is_warmup: false, weight: 40, reps: 10, completed: true }] } },
+      prs: [], stats: {},
+    }));
+    parsed.active_session = null;
+    parsed._last_toasted_block = 3;   // he was in Block C; this is a real crossing
+    localStorage[key] = JSON.stringify(parsed);
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(1600);
+
+  const toast = page.locator('#toast');
+  await expect(toast).toHaveClass(/show/);
+  await expect(toast, 'the deload must say what it is and that it is deliberate').toContainText('تفريغ');
+});
+
+// The deload must be trainable, not just reachable: two of its rows drop to a
+// single working set, and a single-set exercise is the case that used to hide
+// the effort picker the check button demanded.
+test('a deload session builds with reduced sets and no errors', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message));
+  await boot(page);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.history = Array.from({ length: 44 }, (_, i) => ({
+      date: '2026-01-01', session_id: ['upper_a', 'lower_a', 'upper_b', 'lower_b'][i % 4],
+      started_at: '2026-01-01T09:00:00Z', ended_at: '2026-01-01T10:00:00Z', uid: `u${i}`,
+      exercises: {}, prs: [], stats: {},
+    }));
+    parsed.active_session = null;
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(1000);
+
+  const counts = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    return Object.values(parsed.active_session.exercises)
+      .map((e) => e.sets.filter((s) => !s.is_warmup).length);
+  });
+  expect(counts.length, 'the deload session must build').toBeGreaterThan(0);
+  expect(Math.max(...counts), 'no deload exercise may keep three working sets').toBeLessThanOrEqual(2);
+  expect(pageErrors, 'a one-working-set exercise must not throw').toEqual([]);
+});
