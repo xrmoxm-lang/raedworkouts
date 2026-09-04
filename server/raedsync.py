@@ -52,6 +52,13 @@ SETTINGS_DENY = {
     "pending_variant",
     "pending_registration",
     "needs_pin_reauth",
+    # Navigation targets assigned to window.location.href. Neither of these two
+    # is editable anywhere in the UI, so a value arriving over the wire could
+    # ONLY have been put there by someone holding the shared token. Denied.
+    # gym_launch_override is deliberately NOT denied: he sets it himself and it
+    # should keep syncing — the client validates its scheme instead.
+    "gym_launch_scheme", "gym_launch_fallback",
+
 }
 
 _allowlist_cache: dict[str, object] = {"mtime": None, "users": {}}

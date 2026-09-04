@@ -543,9 +543,18 @@ function setJNUrl(exerciseId, url) {
   }
   saveLocal();
 }
+// Anchored to a real http(s) YouTube URL.
+//
+// The pattern was unanchored, so it matched a video id ANYWHERE in the string
+// and `javascript:alert(1)//v=AAAAAAAAAAA` was accepted as a valid clip. That URL
+// is then stored and rendered as `href: v.url` on the exercise card — tapping the
+// tile would execute it. Clips also arrive from a synced or imported state, not
+// only from him typing one in.
 function ytIdFromUrl(url) {
   if (!url) return null;
-  const m = String(url).match(/(?:shorts\/|v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+  const raw = String(url);
+  if (!/^https?:\/\//i.test(raw.trim())) return null;
+  const m = raw.match(/(?:shorts\/|v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
   return m ? m[1] : null;
 }
 function youtubeThumbUrl(id, file) {
@@ -609,9 +618,12 @@ function buildVideoTile(v, opts = {}) {
     opts.className || '',
   ].filter(Boolean).join(' ');
   const link = h('a', {
-    href: v.url,
+    // Belt as well as braces: ytIdFromUrl now refuses a non-http URL on the way
+    // IN, and this refuses one on the way OUT, so a clip already stored from
+    // before that guard existed still cannot become a javascript: href.
+    href: isSafeHttpUrl(v.url) ? v.url : '#',
     target: '_blank',
-    rel: 'noopener',
+    rel: 'noopener noreferrer',
     class: classes,
     title: v.title || label,
   });
