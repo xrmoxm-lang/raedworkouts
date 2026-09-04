@@ -728,6 +728,11 @@ export const LOCALE = Object.freeze({
     'Not saved — not on the phone, not on the server. Write down this set.',
     'ما انحفظ — لا على الجوال ولا على الخادم. سجّل هذي المجموعة عندك.'),
   storage_recovered: pair('Saving again', 'رجع الحفظ يشتغل'),
+  // An early warning, years before the ceiling. Deliberately says nothing about
+  // deleting anything: his history is not the app's to trade away for room.
+  storage_getting_full: pair(
+    'This app is using {mb} MB on the phone. Nothing is lost — tell me and I will make room.',
+    'التطبيق مستخدم {mb} ميجا على الجوال. ما ضاع شيء — قل لي وأنا أوفّر مساحة.'),
   // Deliberately not «حدث خطأ». It has to tell him what to DO about it, because
   // the one thing that matters after an unexpected error is whether the numbers
   // in front of him can be trusted.

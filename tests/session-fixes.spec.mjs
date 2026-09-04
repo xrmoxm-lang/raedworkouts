@@ -240,6 +240,30 @@ test('a swapped exercise says it was swapped and names what it replaced', async 
 
 test('an "always" substitution outlives the session it was made in', async ({ page }) => {
   await intoSession(page);
+  // Pin the session on BOTH sides of the restart.
+  //
+  // Without this the test was a coin toss on the calendar. Measured on
+  // 2026-09-04: the first start landed on lower_b and the swap was made on
+  // goblet_squat; the restart landed on upper_a, which has no goblet_squat in
+  // it, so "the substitution did not resolve" was the CORRECT answer and the
+  // test failed for a reason that had nothing to do with substitutions. On a
+  // day where two consecutive starts pick the same session it passed — for a
+  // reason equally unrelated. Forcing the id is what makes it test the feature
+  // it names, and this file already uses exactly this trick two tests above.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.active_session = null;
+    parsed.forced_next_session = 'lower_b';
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(900);
+
   await openSwap(page);
   const option = page.locator('#modal .swap-option').first();
   test.skip(!(await option.count()), 'this exercise has no alternatives to swap to');
@@ -265,6 +289,9 @@ test('an "always" substitution outlives the session it was made in', async ({ pa
     const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
     const parsed = JSON.parse(localStorage[key]);
     parsed.active_session = null;
+    // The same session again, so what is being tested is whether the swap
+    // survives — not which day the rotation happens to serve.
+    parsed.forced_next_session = 'lower_b';
     localStorage[key] = JSON.stringify(parsed);
   });
   await page.reload({ waitUntil: 'networkidle' });

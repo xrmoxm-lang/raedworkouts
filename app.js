@@ -1013,6 +1013,42 @@ function persistLocal() {
   safeSetItem(lastWriteKey(settings.user_id), now);
   registerLocalProfile({ user_id: settings.user_id, ...state.profile });
 }
+// Headroom, NOT pruning.
+//
+// `state.history` grows forever — about a megabyte a year at four sessions a
+// week, against a localStorage budget of roughly five. That is years away, and
+// deleting his training history to stay under a limit is not a trade this app
+// gets to make on its own. So nothing is ever removed here. The only job is to
+// stop the ceiling arriving as a surprise: measure what this app is actually
+// using, and say so once, early, while there is still plenty of room to act.
+//
+// Cheap enough to run at boot and after a session, nowhere near the keystroke
+// path.
+const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
+const STORAGE_WARN_RATIO = 0.7;
+let storageWarned = false;
+function appStorageBytes() {
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('raedworkouts.')) continue;
+      // UTF-16 code units: two bytes each, which is how browsers actually count.
+      total += (key.length + (localStorage.getItem(key) || '').length) * 2;
+    }
+  } catch (_) { return 0; }
+  return total;
+}
+function checkStorageHeadroom() {
+  if (storageWarned || storageFailed) return;
+  const used = appStorageBytes();
+  if (used < STORAGE_BUDGET_BYTES * STORAGE_WARN_RATIO) return;
+  storageWarned = true;
+  const mb = (used / (1024 * 1024)).toFixed(1);
+  console.warn('[raedworkouts] local storage at ' + mb + 'MB of ~5MB');
+  toast(tf('storage_getting_full', { mb }), 9000);
+}
+
 function markDirty() {
   syncDirty = true;
   writeDirtyMarker(settings.user_id);
@@ -2299,6 +2335,8 @@ function endSession() {
   saveLocal();
   // Show end-of-session screen instead of jumping to history
   showSessionEnd(finishedSession);
+  // The only moment history actually grows.
+  checkStorageHeadroom();
   // The undo. Offered for long enough to notice the mistake, and it puts the
   // session back exactly as it was rather than starting a new one.
   toast(t('session_finished'), 9000, t('undo'), () => {
@@ -6014,6 +6052,9 @@ function init() {
 
   // A rest that was running when the app was last closed, reloaded, or evicted.
   restoreRestTimer();
+
+  // Early warning only. Never prunes.
+  checkStorageHeadroom();
 
   // Auto-hide bottom nav on scroll-down, show on scroll-up
   initAutoHideNav();

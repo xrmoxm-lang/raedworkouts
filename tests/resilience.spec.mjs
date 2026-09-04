@@ -114,6 +114,12 @@ test('the set toggle reports its state, not just its name', async ({ page }) => 
 test('every control is at least 44px to the thumb, even where it looks smaller', async ({ page }) => {
   await boot(page);
   await intoSession(page);
+  // The «بدأت الجلسة» toast sits over the runner's own buttons for its first
+  // ~1.8s, and point-testing through it reported a dozen controls at 0x0. That
+  // was this test measuring a transient overlay, not a real defect — wait for
+  // the toast to go before measuring anything.
+  await page.locator('#toast:not(.show)').waitFor({ state: 'attached', timeout: 5000 });
+  await page.waitForTimeout(200);
 
   const small = await page.evaluate(() => {
     const reachable = (el, dx, dy) => {

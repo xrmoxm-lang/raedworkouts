@@ -1044,15 +1044,18 @@ body.runner-mode .page-runner.active {
   -webkit-overflow-scrolling: touch; padding-bottom: 2px;
 }
 .video-row::-webkit-scrollbar { display: none; }
-/* Height cut from 96px to 76px on 2026-09-04. Measured, because Raed said the
+/* Height cut from 96px to 64px on 2026-09-04 (96 -> 76 -> 64; he left the final
+   figure to me). Measured, because Raed said the
    box on the exercise card is «كبيرة مرة» and the previous session could not
    work out which box he meant: the clip strip is 98px tall plus a 10px margin,
    and 223px of the card sits above the first set row on a 390px screen. The
    WIDTH is untouched, so the same three-and-a-peek still fit and the "every
-   clip the same size" rule he asked for is intact; 104x76 is also closer to
-   16:9, so a normal YouTube thumbnail is cropped less than it was. */
+   clip the same size" rule he asked for is intact. 104x64 is 1.63:1, near
+   enough to 16:9 that a normal YouTube thumbnail is barely cropped at all —
+   the old 104x96 box was cutting the sides off every one of them. The play
+   glyph and the JN chip both still have room; below about 56px they would not. */
 .video-thumb {
-  position: relative; width: 170px; height: 76px;
+  position: relative; width: 170px; height: 64px;
   border-radius: var(--radius-sm);
   background-color: var(--bg-elev);
   border: 1px solid var(--border);
