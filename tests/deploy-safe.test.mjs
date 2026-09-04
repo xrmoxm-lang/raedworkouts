@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   isV16SyncUserId,
@@ -51,7 +52,11 @@ test('Deploy safety: provisioning v16 server identities is additive and leaves v
   try {
     await writeFile(allowlist, JSON.stringify(v15));
     const output = execFileSync('python3', ['server/add-v16-allowlist.py', '--allowlist', allowlist], {
-      cwd: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'),
+      // fileURLToPath, not URL.pathname: this repo also lives at a path with a
+      // SPACE in it ("raedworkouts GITHUB"), and pathname leaves that as %20, so
+      // the cwd handed to python3 did not exist and spawnSync failed with a bare
+      // ENOENT that read as "python3 is missing".
+      cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
       encoding: 'utf8',
     });
     const updated = JSON.parse(await readFile(allowlist, 'utf8'));
