@@ -1049,6 +1049,18 @@ function checkStorageHeadroom() {
   toast(tf('storage_getting_full', { mb }), 9000);
 }
 
+// Confirming a save that did not happen is worse than saying nothing.
+//
+// When a local write fails, onStorageWriteFailed() puts an eight-second warning
+// on screen. Every one of these success toasts fires in the same tick, straight
+// afterwards, and replaces it — so the last thing he sees is «انحفظ» about data
+// that is not saved anywhere. Exactly the bug already fixed for the sync toast.
+// If storage is failing, the warning is left standing.
+function toastSaved(message) {
+  if (storageFailed) return;
+  toast(message);
+}
+
 function markDirty() {
   syncDirty = true;
   writeDirtyMarker(settings.user_id);
@@ -1629,7 +1641,7 @@ function showSkinSuggestion(suggestion) {
       saveLocal();
       applyTheme();
       closeSkinSuggestion();
-      toast(t('saved'));
+      toastSaved(t('saved'));
       if ($('#page-settings').classList.contains('active')) renderSettings();
     } }, t('change_it')),
     h('button', { type: 'button', class: 'btn tiny', onClick: () => {
@@ -5134,7 +5146,7 @@ function renderLibExerciseCard(ex) {
           if (confirm(`Delete custom exercise "${ex.name}"? This cannot be undone.`)) {
             deleteCustomExercise(ex.id);
             renderLibrary();
-            toast('Deleted.');
+            toastSaved('Deleted.');
           }
         }
       }, '🗑 Delete this custom exercise'));
@@ -5239,7 +5251,7 @@ function renderHistory() {
         if (!v) return;
         state.bodyweight_log.push({ date: todayISO(), kg: v });
         saveLocal();
-        toast('Bodyweight logged.');
+        toastSaved('Bodyweight logged.');
         renderHistory();
       }}, 'Log'),
     ),
@@ -5806,7 +5818,7 @@ function renderSettings() {
       settings.sync_url = getSyncUrl();
       settings.sync_key = SYNC_KEY;
       render();
-      toast('Local profile wiped.');
+      toastSaved('Local profile wiped.');
     }}, 'Wipe local'),
   ));
   // append after the remaining preferences controls are assembled below
@@ -5910,12 +5922,12 @@ function renderSettings() {
             state.forced_next_session = state.forced_next_session === session.id ? null : session.id;
             saveLocal();
             renderSettings();
-            toast(t('saved'));
+            toastSaved(t('saved'));
           }
         }, session.name)
       ),
       state.forced_next_session
-        ? h('button', { class: 'btn tiny', onClick: () => { state.forced_next_session = null; saveLocal(); renderSettings(); toast(t('saved')); } }, t('clear_button'))
+        ? h('button', { class: 'btn tiny', onClick: () => { state.forced_next_session = null; saveLocal(); renderSettings(); toastSaved(t('saved')); } }, t('clear_button'))
         : null,
     ),
   ));
@@ -5948,7 +5960,7 @@ function renderSettings() {
         body: t('clear_prs_body'),
         confirmLabel: t('clear_prs'),
       })) return;
-      state.prs = {}; saveLocal(); toast('PRs cleared.');
+      state.prs = {}; saveLocal(); toastSaved('PRs cleared.');
     }}, 'Clear PRs'),
   ));
 

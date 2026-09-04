@@ -160,3 +160,57 @@ test('no NEW function is left defined but never called', async () => {
   const stale = [...KNOWN_DEAD_FUNCTIONS].filter((name) => !dead.includes(name));
   assert.deepEqual(stale, [], 'these are no longer dead — remove them from KNOWN_DEAD_FUNCTIONS');
 });
+
+// Added 2026-09-04. The programme data itself audited clean — every exercise id
+// and alternative resolves, orders are unique and contiguous, and all four
+// supersets are well formed. This keeps it that way, because the data is edited
+// by hand and a broken pair is invisible until mid-workout.
+//
+// The A1/A2 convention matters here: the LETTER is the group and the DIGIT is
+// the position. Matching on exact equality found one member every time, which is
+// how the superset note once shipped never having rendered at all.
+test('the programme data is referentially sound and its supersets are well formed', async () => {
+  const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
+  const sandbox = { window: {} };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox);
+  const RW = sandbox.window.RW;
+
+  const ids = new Set(RW.EXERCISES.map((e) => e.id));
+  const sessions = (RW.PROGRAMME_UPPER_LOWER || RW.PROGRAMME);
+  const rowsOf = (s) => (Array.isArray(s) ? s : s.exercises);
+
+  for (const [sid, session] of Object.entries(sessions.sessions || sessions)) {
+    const rows = rowsOf(session);
+    if (!Array.isArray(rows)) continue;
+
+    for (const row of rows) {
+      if (row.exercise_id) {
+        assert.ok(ids.has(row.exercise_id), `${sid}: exercise "${row.exercise_id}" is not in the catalogue`);
+      }
+      for (const key of ['sub1', 'sub2']) {
+        if (row[key]) assert.ok(ids.has(row[key]), `${sid}/${row.exercise_id}: alternative "${row[key]}" does not exist`);
+      }
+    }
+
+    const orders = rows.map((r) => r.order).filter((o) => o != null).sort((a, b) => a - b);
+    assert.equal(new Set(orders).size, orders.length, `${sid}: duplicate order values`);
+    orders.forEach((o, i) => {
+      if (i) assert.equal(o, orders[i - 1] + 1, `${sid}: a gap in the exercise order (${orders.join(',')})`);
+    });
+
+    const groups = {};
+    for (const row of rows) {
+      const m = String(row.superset_group || '').match(/^([A-Z])(\d)$/);
+      if (m) (groups[m[1]] ||= []).push({ row, pos: Number(m[2]) });
+    }
+    for (const [letter, members] of Object.entries(groups)) {
+      members.sort((a, b) => a.pos - b.pos);
+      assert.equal(members.length, 2, `${sid}: superset ${letter} needs exactly two halves`);
+      const [first, second] = members;
+      assert.equal(second.row.order, first.row.order + 1, `${sid}: superset ${letter} halves are not adjacent`);
+      assert.equal(Number(first.row.rest_min), 0,
+        `${sid}: the FIRST half of superset ${letter} must prescribe 0 rest — that is what makes it a superset`);
+    }
+  }
+});
