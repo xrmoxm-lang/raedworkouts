@@ -278,8 +278,20 @@ This is implemented in `app.js` as `suggestNextWeight()`.
 ### 5.4 Warm-up rule (auto-applied)
 
 For each exercise:
-- **First exercise of each muscle group** (`is_first_of_muscle: true`): **2 warm-up sets** auto-prepended (50% × 10, then 75% × 6).
-- **All other exercises** (the same muscle is already warm): **1 light set or 0** — the `warmup` field in `data.js` says exactly what to do.
+- **First exercise of each muscle group**: **2 ramp sets** auto-prepended — **50% × 10, then 70% × 6**.
+- **All other exercises**: **1 ramp set at 60%** for 6–10 reps, or none. The
+  programme's `ramp_sets` count decides; `warmup` is the legacy v15 string.
+
+> **Corrected 2026-09-04.** This section said 75% for the second set. It is
+> **70%** — `research/07-warmup-protocol.md` §2.2, and `[ML L11160/L11162]`.
+> Worse, the app was giving a SINGLE ramp set 50%, the first half of the two-set
+> pair, when the sourced number for one set is **60%** ("about 60% of your
+> planned working weight for 6 to 10 reps", [ML L804–858]). Sixteen of the
+> twenty-six rows in his programme prescribe one ramp set, so most of his
+> warm-ups were 10% light. Fixed in `rampLoadsFor()`.
+>
+> The first-set percentage moves with the COUNT, which is the part that was
+> missed: 1 set → 60%, 2 → 50/70, 3 → 45/65/85, 4 → 45/60/75/85.
 
 Warm-up sets don't count toward working set total. They're displayed dimmed (W1, W2) above working sets (1, 2, 3).
 

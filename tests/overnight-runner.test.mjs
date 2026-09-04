@@ -122,3 +122,41 @@ test('skipping an exercise records what he did NOT do, and never retracts what h
   // And the exercise still reads as resolved, so finishing is not blocked.
   assert.equal(isRunnerExerciseResolved(skipped), true);
 });
+
+// The ramp percentages come from research/07-warmup-protocol.md §2.2, and the
+// first-set percentage MOVES with how many ramp sets are prescribed. The app
+// used the two-set number for both, so all sixteen single-ramp rows in his
+// programme warmed up at 50% when his own source says 60%.
+test('ramp loads follow the sourced table for the prescribed number of sets', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const body = app.match(/function rampLoadsFor\(weight, count, step\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(body, 'rampLoadsFor must exist');
+  // Rebuild the two helpers it depends on, so this tests the real arithmetic.
+  const roundToGymIncrement = (value, step) => {
+    const n = Number(value) || 0;
+    const s = Number(step) > 0 ? Number(step) : 2.5;
+    return Math.max(s, Math.floor(n / s) * s);
+  };
+  const rampLoadsFor = new Function('roundToGymIncrement', `${body}; return rampLoadsFor;`)(roundToGymIncrement);
+
+  // ONE set is 60%, not the 50% first half of the two-set pair.
+  assert.equal(rampLoadsFor(25, 1)[0].weight, 15, '25kg with one ramp set is 60% = 15kg');
+  assert.equal(rampLoadsFor(60, 1)[0].weight, 35, '60kg with one ramp set is 60% = 35kg');
+  assert.equal(rampLoadsFor(25, 1).length, 1);
+
+  // TWO sets are 50% then 70%, and must ascend.
+  const pair = rampLoadsFor(25, 2);
+  assert.equal(pair.length, 2);
+  assert.equal(pair[0].weight, 12.5);
+  assert.equal(pair[1].weight, 17.5);
+
+  // A ramp that cannot ascend collapses rather than repeating the same load,
+  // and never reaches the working weight.
+  for (const working of [2.5, 5, 7.5, 10, 12.5, 20, 40, 100]) {
+    const loads = rampLoadsFor(working, 2).map((r) => r.weight);
+    if (loads.length === 2) {
+      assert.ok(loads[1] > loads[0], `${working}kg ramp must ascend, got ${loads.join(',')}`);
+      assert.ok(loads[1] < working, `${working}kg ramp must stay under the working load`);
+    }
+  }
+});
