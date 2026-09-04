@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 // The picker is intentionally separate from the installed app. Its C3 rows
 // are hand-reviewed PDF evidence, so this guard verifies exact source context
@@ -13,7 +14,7 @@ import test from 'node:test';
 // checkout it resolved to a file that does not exist and the test failed for a
 // reason that had nothing to do with the picker.
 const pickerPath = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname), '..', '..', 'link-picker.html');
+  path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'link-picker.html');
 
 test('C3 link picker renders all nine source-backed rows with verbatim PDF context', async (t) => {
   // The picker is an authoring tool that lives OUTSIDE the repository, so a
