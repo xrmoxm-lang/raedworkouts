@@ -205,3 +205,50 @@ test('a running rest survives a reload', async ({ page }) => {
   const visible = await page.evaluate(() => document.querySelector('#rest-timer')?.style.display);
   expect(visible, 'the countdown must resume after a reload').toBe('flex');
 });
+
+// ---------------------------------------------------------------------------
+// The worst one this audit found.
+//
+// openProfile() and finishLocalProfile() both built a fresh defaultState() and
+// then persistLocal()'d it, without ever reading what the device already held
+// for that profile. So tapping your own name on the welcome screen while the
+// server was unreachable — gym wifi, HP off, aeroplane mode — wrote a blank
+// state straight over the training log. No warning, no undo, suite green.
+test('tapping your own profile with the server unreachable does not destroy your history', async ({ page }) => {
+  await boot(page);
+
+  const seeded = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.history = [
+      { date: '2026-08-20', session_id: 'upper_a', started_at: '2026-08-20T09:00:00Z', ended_at: '2026-08-20T10:00:00Z', exercises: {}, prs: [], stats: {} },
+      { date: '2026-08-22', session_id: 'lower_a', started_at: '2026-08-22T09:00:00Z', ended_at: '2026-08-22T10:00:00Z', exercises: {}, prs: [], stats: {} },
+      { date: '2026-08-25', session_id: 'upper_b', started_at: '2026-08-25T09:00:00Z', ended_at: '2026-08-25T10:00:00Z', exercises: {}, prs: [], stats: {} },
+    ];
+    parsed.prs = { chest_press_machine: { kg: 40, reps: 10, date: '2026-08-25', score: 53.3 } };
+    parsed.active_session = null;
+    localStorage[key] = JSON.stringify(parsed);
+    // Back to the welcome screen: what a new device, a cleared pointer, or a
+    // "wipe local" leaves behind.
+    localStorage.removeItem('raedworkouts.active_user');
+    return key;
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await expect(page.locator('.profile-tile').first()).toBeVisible();
+
+  await page.evaluate(() => {
+    const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
+    if (tile) tile.click();
+  });
+  await page.waitForTimeout(2500);
+
+  const after = await page.evaluate((key) => {
+    const parsed = JSON.parse(localStorage[key] || '{}');
+    return { sessions: (parsed.history || []).length, prs: Object.keys(parsed.prs || {}).length };
+  }, seeded);
+
+  expect(after.sessions, 'opening a profile must never overwrite its stored history').toBe(3);
+  expect(after.prs, 'nor its personal records').toBe(1);
+});

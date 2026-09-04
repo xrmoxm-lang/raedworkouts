@@ -88,3 +88,37 @@ test('an explicit zero counts and an untouched box does not — one rule, in the
   assert.equal(hasValidWorkingValues({ weight: 25, reps: '' }), false, 'reps are still required');
   assert.equal(hasValidWorkingValues({ weight: 0, reps: 0 }), false, 'zero reps is not a set');
 });
+
+// The test above skips an exercise whose sets were ALL still open, so it could
+// never have caught this: skipRunnerExercise rewrote every non-warmup set to
+// completed:false + skipped:true, including sets he had already ticked. Skipping
+// leg press after two working sets — because someone took the machine — silently
+// retracted both, and they left the session stats, the weekly volume, the
+// per-exercise history and the next weight suggestion with them.
+test('skipping an exercise records what he did NOT do, and never retracts what he did', () => {
+  const at = '2026-09-04T09:00:00.000Z';
+  const skipped = skipRunnerExercise({
+    sets: [
+      { is_warmup: true, weight: 60, reps: 10, completed: true },
+      { is_warmup: false, weight: 100, reps: 12, completed: true },
+      { is_warmup: false, weight: 100, reps: 11, completed: true },
+      { is_warmup: false, weight: '', reps: 10, completed: false },
+    ],
+  }, at);
+
+  const countable = skipped.sets.filter(isCountableWorkingSet);
+  assert.equal(countable.length, 2, 'both logged sets must survive the skip');
+  assert.deepEqual(countable.map((s) => `${s.weight}x${s.reps}`), ['100x12', '100x11']);
+
+  // A completed set is left alone entirely — not even tagged.
+  assert.equal(skipped.sets[1].skipped, undefined);
+  assert.equal(skipped.sets[1].completed, true);
+
+  // The set he never did IS the record of the skip.
+  assert.equal(skipped.sets[3].skipped, true);
+  assert.equal(skipped.sets[3].skipped_at, at);
+  assert.equal(skipped.skipped, true);
+
+  // And the exercise still reads as resolved, so finishing is not blocked.
+  assert.equal(isRunnerExerciseResolved(skipped), true);
+});

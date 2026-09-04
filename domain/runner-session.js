@@ -81,17 +81,37 @@ export function applyWorkingSetAttempt(set = {}, recordedAt) {
   };
 }
 
+// A skip is a record of the work he did NOT do. It must never retract work he
+// did.
+//
+// This used to rewrite EVERY non-warmup set to completed:false + skipped:true,
+// including sets he had already ticked. Proven by running this module: leg press
+// with 100kg x 12 and 100kg x 11 logged and a third set still open went from two
+// countable sets to zero the moment he tapped «تخطي التمرين» — which is the
+// realistic case, because you skip an exercise when someone takes the machine
+// half way through. Those two sets then disappeared from the session stats, the
+// weekly volume, the per-exercise history, and from suggestNextWeight, so the
+// next Lower A would also have suggested the wrong load.
+//
+// The whole suite stayed green because tests/overnight-runner.test.mjs only ever
+// skips sets that were already completed:false.
+//
+// Completed sets are now left exactly as they are. Only the sets he never did
+// are marked skipped.
 export function skipRunnerExercise(exercise = {}, skippedAt) {
   return {
     ...exercise,
     skipped: true,
     skipped_at: skippedAt,
-    sets: (exercise.sets || []).map((set) => (set.is_warmup ? set : {
-      ...set,
-      completed: false,
-      skipped: true,
-      skipped_at: skippedAt,
-      invalid_prompted: false,
-    })),
+    sets: (exercise.sets || []).map((set) => {
+      if (set.is_warmup || set.completed === true) return set;
+      return {
+        ...set,
+        completed: false,
+        skipped: true,
+        skipped_at: skippedAt,
+        invalid_prompted: false,
+      };
+    }),
   };
 }

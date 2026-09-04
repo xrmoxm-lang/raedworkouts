@@ -1380,15 +1380,36 @@ async function selectProfile(profile) {
   welcomeSelectedProfile = profile;
   await openProfile(profile);
 }
-function finishLocalProfile(userId, profile) {
-  settings = { ...defaultSettings(), user_id: userId, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
-  state = { ...defaultState(), profile: {
-    display_name: profile?.display_name || userId,
-    experience: profile?.experience || 'returning',
-    bodyweight_kg: profile?.bodyweight_kg ?? null,
-    created_at: new Date().toISOString(),
-  }};
+// Adopt a profile on THIS device without ever discarding what the device
+// already holds for it.
+//
+// This and openProfile below both used to do `state = { ...defaultState() }`
+// and then persistLocal(). Nothing read the stored state first. So tapping your
+// own name on the welcome screen with the server unreachable — gym wifi, HP
+// off, aeroplane mode — wrote a blank state straight over your training log.
+// Proven with a probe: three sessions and a personal record seeded, tile
+// tapped, both gone. There was no undo and no warning, and the suite was green.
+//
+// Now the stored state is loaded first and only genuinely missing profile
+// fields are filled in. A brand-new profile has nothing stored, so it still
+// starts empty — the same result, reached without destroying anything.
+function adoptProfileLocally(userId, profile) {
   setActiveUser(userId);
+  loadLocal();
+  settings.user_id = userId;
+  settings.sync_url = getSyncUrl();
+  settings.sync_key = SYNC_KEY;
+  const existing = state.profile || {};
+  state.profile = {
+    ...existing,
+    display_name: existing.display_name || profile?.display_name || userId,
+    experience: existing.experience || profile?.experience || 'returning',
+    bodyweight_kg: existing.bodyweight_kg ?? profile?.bodyweight_kg ?? null,
+    created_at: existing.created_at || new Date().toISOString(),
+  };
+}
+function finishLocalProfile(userId, profile) {
+  adoptProfileLocally(userId, profile);
   persistLocal();
   syncDirty = false;
   clearDirtyMarker(userId);
@@ -1396,14 +1417,10 @@ function finishLocalProfile(userId, profile) {
 }
 async function openProfile(profile) {
   const userId = profile.user_id || profile.display_name;
-  settings = { ...defaultSettings(), sync_url: getSyncUrl(), sync_key: SYNC_KEY, user_id: userId };
-  state = { ...defaultState(), profile: {
-    display_name: profile.display_name || userId,
-    experience: profile.experience || 'returning',
-    bodyweight_kg: profile.bodyweight_kg ?? null,
-    created_at: new Date().toISOString(),
-  }};
-  setActiveUser(userId);
+  // See adoptProfileLocally: this line used to be a defaultState() assignment,
+  // and the persistLocal() a few lines down then wrote that empty state over
+  // his history whenever the pull did not replace it first.
+  adoptProfileLocally(userId, profile);
   try {
     const pulled = await pullFromCloud();
     persistLocal();
