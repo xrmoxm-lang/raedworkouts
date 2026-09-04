@@ -56,10 +56,11 @@
     <button class="tab" data-route="settings" data-i18n-aria-label="settings" aria-label="الإعدادات"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label" data-i18n="settings">الإعدادات</span></button>
   </nav>
 
-  <!-- Floating rest timer -->
+  <!-- Floating rest timer. aria-live is off: it reprints every 200ms, and a
+       polite region would read the countdown aloud continuously. -->
   <div id="rest-timer" class="rest-timer" style="display:none;">
-    <span class="rt-ico">⏱</span>
-    <span id="rest-timer-text" class="rt-time">2:00</span>
+    <span class="rt-ico" aria-hidden="true">⏱</span>
+    <span id="rest-timer-text" class="rt-time" aria-live="off">2:00</span>
     <button id="rest-cancel" class="rt-cancel" data-i18n-aria-label="cancel_rest" aria-label="ألغِ الراحة">✕</button>
   </div>
 
@@ -68,8 +69,11 @@
     <div id="modal" class="modal"></div>
   </div>
 
-  <!-- Toast -->
-  <div id="toast" class="toast"></div>
+  <!-- Toast. This is the app's only channel for "your set was not saved" and
+       "nothing was saved anywhere", so it has to be announced, not just drawn.
+       assertive rather than polite: by the time a save has failed, interrupting
+       is the point. -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
   <script src="./data.js"></script>
   <script type="module" src="./app.js"></script>

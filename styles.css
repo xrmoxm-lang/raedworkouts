@@ -479,7 +479,10 @@ body.runner-mode .page-runner.active {
   gap: 8px;
 }
 .set-grid-headers {
-  margin: 4px 0 6px;
+  /* 12px top, absorbing the empty spacer div that used to be appended above it
+     in app.js. One rule owning the gap instead of a element pretending to be a
+     margin. */
+  margin: 12px 0 6px;
   font-size: 10px; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
   text-align: center;
@@ -1041,8 +1044,15 @@ body.runner-mode .page-runner.active {
   -webkit-overflow-scrolling: touch; padding-bottom: 2px;
 }
 .video-row::-webkit-scrollbar { display: none; }
+/* Height cut from 96px to 76px on 2026-09-04. Measured, because Raed said the
+   box on the exercise card is «كبيرة مرة» and the previous session could not
+   work out which box he meant: the clip strip is 98px tall plus a 10px margin,
+   and 223px of the card sits above the first set row on a 390px screen. The
+   WIDTH is untouched, so the same three-and-a-peek still fit and the "every
+   clip the same size" rule he asked for is intact; 104x76 is also closer to
+   16:9, so a normal YouTube thumbnail is cropped less than it was. */
 .video-thumb {
-  position: relative; width: 170px; height: 96px;
+  position: relative; width: 170px; height: 76px;
   border-radius: var(--radius-sm);
   background-color: var(--bg-elev);
   border: 1px solid var(--border);

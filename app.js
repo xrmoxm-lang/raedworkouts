@@ -1456,7 +1456,7 @@ function renderWelcome() {
   document.body.classList.add('welcome-mode');
   const root = $('#page-home');
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-home'));
-  $$('.tab').forEach(t => t.classList.remove('active'));
+  $$('.tab').forEach(t => { t.classList.remove('active'); t.removeAttribute('aria-current'); });
   root.innerHTML = '';
   if (!welcomeProfiles && !welcomeLoading) loadWelcomeProfiles();
   const profiles = welcomeProfiles || welcomeProfilesForV16();
@@ -2664,7 +2664,14 @@ function render() {
   // treatment. It is a normal page, not the full-viewport Phase 4 takeover.
   document.body.classList.remove('runner-mode');
   $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + route));
-  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.route === route));
+  // The active tab was marked with a CLASS only, so a screen reader had no way
+  // to tell which of the five was current — colour was the entire signal.
+  $$('.tab').forEach(t => {
+    const on = t.dataset.route === route;
+    t.classList.toggle('active', on);
+    if (on) t.setAttribute('aria-current', 'page');
+    else t.removeAttribute('aria-current');
+  });
   // The retired custom runner used to live here behind `if (false && ...)`, with
   // renderRunner/renderRunnerWarmup/renderV15Workout/renderSessionPreview/
   // appendV15HomeExerciseList below. All were unreachable: the guard short-circuits,
@@ -4184,8 +4191,9 @@ function renderExerciseCard(ex_id, exState) {
       tf('superset_with', { name: getAllExercises().find((item) => item.id === partner.exercise_id)?.name || partner.exercise_id })));
   }
 
-  // Sets table
-  body.appendChild(h('div', { class: 'spacer-12' }));
+  // Sets table. The 12px spacer div that used to sit here was a element whose
+  // only job was to be empty — the same "gap with no reason" Raed asked about by
+  // name. The headers carry their own margin instead.
   body.appendChild(h('div', { class: 'set-grid-headers' },
     // The first column held the set number until Raed asked for it to go. It
     // now carries only a mark on ramp rows, so "#" labels an empty column.
