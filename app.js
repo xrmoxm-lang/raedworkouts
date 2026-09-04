@@ -2188,6 +2188,7 @@ function startSession(session) {
     }).then((yes) => {
       if (!yes) return;
       cancelRest();
+      noteActiveCleared(state.active_session);
       state.active_session = null;
       startSession(session);
     });
@@ -2335,6 +2336,25 @@ let endSessionConfirmed = false;
 // confirmAction, not confirm(): an installed PWA can suppress the native one,
 // and this is the last thing that should silently do nothing — or silently
 // proceed.
+// A tombstone for a session the user deliberately ended.
+//
+// The sync server merges an incoming push against the head row. When the client
+// sends `active_session: null` — because he finished or discarded one — the
+// server could not tell that apart from "this writer simply has no session
+// running", so it restored its own copy. Measured against the real merge:
+// finishing a session put it in history AND brought it back as "in progress",
+// so finishing again duplicated it and double-counted the volume; discarding
+// one simply undid the discard.
+//
+// The server cannot infer intent, so the client states it. Only the exact
+// session named here is cleared; a genuinely concurrent session from another
+// device is untouched.
+function noteActiveCleared(session) {
+  if (!session) return;
+  const key = `${session.started_at || session.date || ''}|${session.session_id || ''}`;
+  state.active_cleared = { key, at: new Date().toISOString() };
+}
+
 function discardSession() {
   if (!state.active_session) return;
   confirmAction({
@@ -2351,6 +2371,7 @@ function discardSession() {
     // reopenSession restores a finished one.
     cancelRest();
     const discarded = state.active_session;
+    noteActiveCleared(discarded);
     state.active_session = null;
     state.forced_next_session = null;
     focusExerciseIdx = null;
@@ -2382,6 +2403,7 @@ function endSession() {
     }).then((yes) => {
       if (!yes) return;
       cancelRest();
+      noteActiveCleared(state.active_session);
       state.active_session = null;
       state.forced_next_session = null;
       focusExerciseIdx = null;
@@ -2432,6 +2454,7 @@ function endSession() {
   // An undo window. The toast already supports one action, and this is the
   // action it exists for: an hour of work is one mis-tap from gone otherwise.
   lastFinishedSession = finishedSession;
+  noteActiveCleared(finishedSession);
   state.active_session = null;
   state.forced_next_session = null;  // clear override after session ends
   focusExerciseIdx = null;

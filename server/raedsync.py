@@ -522,6 +522,20 @@ def archive_active(history: list, active: dict, updated_at: str, reason: str) ->
     merge_session_into_history(history, sess)
 
 
+
+def _clears_head_active(incoming_state: dict, head_active: dict) -> bool:
+    """True when the incoming client says it deliberately ended head's session.
+
+    The client stamps `active_cleared: {key, at}` when it finishes or discards a
+    session. Matching on the key means an unrelated session belonging to another
+    device is never cleared by someone else's finish.
+    """
+    cleared = incoming_state.get("active_cleared")
+    if not isinstance(cleared, dict):
+        return False
+    return bool(cleared.get("key")) and cleared.get("key") == session_key(head_active)
+
+
 def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, incoming_updated_at: str) -> dict:
     newer_is_incoming = parse_iso(incoming_updated_at) >= parse_iso(head_updated_at)
     out = copy.deepcopy(incoming_state if newer_is_incoming else head_state)
@@ -544,6 +558,17 @@ def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, i
             archive_active(out["history"], loser, incoming_updated_at if loser is incoming_active else head_updated_at, "recovered_draft")
     elif incoming_active:
         out["active_session"] = copy.deepcopy(incoming_active)
+    elif head_active and _clears_head_active(incoming_state, head_active):
+        # The client says it deliberately ended THIS session — it finished it or
+        # discarded it — so its absence is intent, not ignorance.
+        #
+        # Without this the branch below restored head's copy, and measured
+        # against this very function: finishing a session put it in history AND
+        # handed it back as "in progress", so finishing again duplicated it and
+        # double-counted the volume; discarding one simply undid the discard.
+        # Only the session the client actually named is cleared, so a genuinely
+        # concurrent session from another device still survives below.
+        out["active_session"] = None
     else:
         out["active_session"] = copy.deepcopy(head_active) if head_active else None
 

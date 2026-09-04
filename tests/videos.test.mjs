@@ -118,3 +118,45 @@ test('locale.js defines each key exactly once, and defines everything app.js ask
   const missing = [...referenced].filter((key) => !LOCALE[key]);
   assert.deepEqual(missing, [], 'a key with no entry renders its own name in English');
 });
+
+// Added 2026-09-04. This codebase's signature failure is code that LOOKS live
+// and is not: superset_group sat in data.js read by nothing, updateRunnerSet
+// held the "editing clears the invalid flag" rule and was called by nothing, and
+// a whole screen once vanished behind a stray return with 32/32 tests green.
+//
+// This does not delete the twelve dead functions that exist today — removing
+// them is Raed's call, and none of them changes behaviour. It fences them in.
+// The suite fails if a THIRTEENTH appears, which is the moment the next
+// superset_group is created and the only moment it is cheap to notice.
+const KNOWN_DEAD_FUNCTIONS = new Set([
+  // Superseded by the inline handlers on the v15-style card that shipped in
+  // Phase 6. The card carries its own copies of this logic.
+  'toggleRunnerSet', 'addRunnerSet', 'resetCurrentRunnerSet', 'moveRunnerExercise',
+  'completeRunnerWarmup', 'runnerLongPress',
+  // The session preview was retired 2026-08-28 at Raed's request; the plan is
+  // already on home.
+  'previewedSession', 'discardActiveSessionFromHome',
+  // Help moved into the collapsed Settings groups in Phase 6 to free its tab for
+  // the coach; router() redirects 'help' to 'settings'. #page-help in index.html
+  // is the matching leftover.
+  'renderHelp',
+  // Helpers whose callers were replaced by domain/runner-session.js equivalents.
+  'isPRSet', 'isLoggableWeight', 'currentPlaylistPlatform',
+]);
+
+test('no NEW function is left defined but never called', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const defined = [...app.matchAll(/^(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)].map((m) => m[1]);
+  const dead = defined.filter((name) => {
+    const uses = app.match(new RegExp(`\\b${name}\\b`, 'g')) || [];
+    return uses.length <= 1; // its own definition and nothing else
+  });
+  const unexpected = dead.filter((name) => !KNOWN_DEAD_FUNCTIONS.has(name));
+  assert.deepEqual(unexpected, [],
+    'a function nothing calls is how this app loses features silently — wire it up or delete it');
+
+  // And the fence must shrink, never quietly widen: if one of these is removed
+  // or revived, take it out of the list rather than leaving a lie behind.
+  const stale = [...KNOWN_DEAD_FUNCTIONS].filter((name) => !dead.includes(name));
+  assert.deepEqual(stale, [], 'these are no longer dead — remove them from KNOWN_DEAD_FUNCTIONS');
+});
