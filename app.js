@@ -147,7 +147,20 @@ const fmtTime = (d) => {
   if (activeLanguage() === 'ar') return `${hour}:${minute} ${period === 'PM' ? 'م' : 'ص'}`;
   return `${hour}:${minute} ${period || ''}`.trim();
 };
-const todayISO = () => new Date().toISOString().slice(0,10);
+// His local calendar date, not UTC's.
+//
+// This was `new Date().toISOString().slice(0,10)`, which is the date in UTC.
+// Riyadh is UTC+3, so between local midnight and 03:00 the app stamped
+// YESTERDAY. Proven live at 01:37 on 5 September: the app wrote 2026-09-04.
+// Raed trains late — an earlier screenshot shows a session started 12:05 ص — and
+// this date stamps his workouts, his personal records, his bodyweight log and
+// his exports. A late session landed on the wrong day in every one of them, and
+// the week strip then drew it on the wrong square.
+//
+// Device-local rather than a hardcoded Asia/Riyadh, so it stays right if he
+// travels. 'en-CA' is the locale whose short date is already YYYY-MM-DD.
+const localISODate = (date = new Date()) => date.toLocaleDateString('en-CA');
+const todayISO = () => localISODate();
 const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
   t.innerHTML = '';
@@ -1695,8 +1708,26 @@ function showSkinSuggestion(suggestion) {
 // history-driven principle the session rotation already uses. Deriving it means
 // there is no counter to forget to advance, and it self-corrects if he misses a
 // week or logs two sessions in a day.
+// Only sessions from THIS programme move the programme clock.
+//
+// This was `state.history.length`, which counts everything — including the v15
+// full-body sessions the migration deliberately preserves, and anything he
+// restores from a backup or imports from a JSON export. Since the clock is
+// `sessions / 4`, importing a few months of old history would drop him into an
+// arbitrary week: block B, block C, or straight into a deload he has not earned,
+// and it would fire the six-month review prompt at the wrong time.
+//
+// Counting by the current rotation's session ids is the check that matches how
+// the week is used. Entries with no session_id at all are counted, because a
+// hand-restored row from this programme should not be silently ignored either —
+// the failure mode being closed is a FOREIGN programme, not a sparse record.
 function completedSessionCount() {
-  return (state.history || []).length;
+  const rotation = new Set((RW.PROGRAMME?.rotation_order) || []);
+  if (!rotation.size) return (state.history || []).length;
+  return (state.history || []).filter((entry) => {
+    const id = entry?.session_id;
+    return !id || rotation.has(id);
+  }).length;
 }
 // The mesocycle REPEATS. It used to stop.
 //
@@ -2202,8 +2233,13 @@ function scopedReplacementFor(session, exerciseId) {
   const active = (state.substitutions || []).filter((entry) => {
     if (entry.from_exercise_id !== exerciseId) return false;
     if (entry.scope === 'always') return true;
-    if (entry.scope === 'this_week') return entry.expires_after_week === derivedWeek();
-    if (entry.scope === 'this_block') return entry.block === derivedBlock();
+    // A scoped swap belongs to ONE cycle. Entries written before `cycle` existed
+    // carry undefined, and those are honoured only in the cycle he is in now —
+    // there is no way to know which cycle they came from, and the safe reading
+    // of an unknown is "this one", never "every future one".
+    const sameCycle = entry.cycle == null || entry.cycle === derivedCycle();
+    if (entry.scope === 'this_week') return sameCycle && entry.expires_after_week === derivedWeek();
+    if (entry.scope === 'this_block') return sameCycle && entry.block === derivedBlock();
     return false;
   });
   return active.length ? active[active.length - 1].to_exercise_id : exerciseId;
@@ -2766,6 +2802,15 @@ function recordSubstitution(exercise_id, alt_id, scope, assessment, override = n
     session_id: scope === 'this_session' ? state.active_session?.session_id : null,
     expires_after_week: scope === 'this_week' ? derivedWeek() : null,
     block: scope === 'this_block' ? derivedBlock() : null,
+    // The cycle a scoped swap belongs to.
+    //
+    // Weeks and blocks REPEAT now that the twelve-week mesocycle wraps, so a
+    // week number on its own stopped identifying a point in time: a swap scoped
+    // to week 5 of cycle 1 matched week 5 of cycle 2 as well, and a block-B swap
+    // came back in every future block B. Raed would be put on a substitute
+    // months after whatever caused it — a busy machine, a tweaked shoulder — had
+    // been forgotten. Recorded here so the matcher can tell the two apart.
+    cycle: scope === 'this_week' || scope === 'this_block' ? derivedCycle() : null,
     created_at: new Date().toISOString(),
     ledger_delta: assessment.ledger_delta,
     warning: assessment.classification.severity === 'clean' ? null : assessment.classification,
@@ -6189,7 +6234,9 @@ function buildWeekStrip() {
   // Week starts Saturday, as it does in Saudi.
   const start = new Date(today);
   start.setDate(today.getDate() - ((today.getDay() + 1) % 7));
-  const iso = (date) => date.toISOString().slice(0, 10);
+  // Same bug as todayISO had: this function had already worked out the local
+  // Saturday boundary and then converted back through UTC, undoing it.
+  const iso = (date) => localISODate(date);
 
   const trainedOn = new Map();
   for (const entry of state.history || []) {

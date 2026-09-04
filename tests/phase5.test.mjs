@@ -418,3 +418,35 @@ test('the programme carries itself: a repeating twelve-week mesocycle with a del
   assert.equal(cycle(atDeload + 4), cycle(atDeload) + 1);
   console.log('PROGRAMME_MESOCYCLE_REPEATS_PASSED');
 });
+
+// Added 2026-09-05 from the Codex review, all three verified before fixing.
+test('the programme clock and scoped swaps survive a repeating cycle and a legacy import', async () => {
+  // 1. Only sessions from THIS programme move the clock. `state.history.length`
+  //    counted the v15 sessions the migration deliberately preserves, so a
+  //    restore or import dropped him into an arbitrary week — possibly a deload
+  //    he had not earned.
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const counter = app.match(/function completedSessionCount\(\)[\s\S]*?\n\}/)?.[0];
+  assert.ok(counter, 'completedSessionCount must exist');
+  assert.ok(/rotation_order/.test(counter),
+    'the clock must filter history by the current rotation, not count every row');
+
+  // 2. A scoped substitution must record its CYCLE. Weeks and blocks repeat now,
+  //    so a week-5 swap in cycle 1 matched week 5 of cycle 2 and a block-B swap
+  //    came back in every future block B.
+  const record = app.match(/function recordSubstitution\([\s\S]*?\n\}/)?.[0];
+  assert.ok(/cycle:/.test(record), 'a scoped substitution must store the cycle it belongs to');
+  const matcher = app.match(/function scopedReplacementFor\([\s\S]*?\n\}/)?.[0];
+  assert.ok(/derivedCycle\(\)/.test(matcher), 'the matcher must compare cycles, not only week or block numbers');
+
+  // 3. Dates are stamped in HIS timezone. toISOString() is UTC, and Riyadh is
+  //    UTC+3, so between local midnight and 03:00 every workout, PR, bodyweight
+  //    entry and export was dated YESTERDAY. Proven live at 01:37.
+  assert.ok(/const localISODate =/.test(app), 'a local-date helper must exist');
+  assert.ok(!/const todayISO = \(\) => new Date\(\)\.toISOString\(\)/.test(app),
+    'todayISO must not stamp UTC');
+  const strip = app.match(/function buildWeekStrip\(\)[\s\S]*?const iso = [^\n]*/)?.[0] || '';
+  assert.ok(/localISODate/.test(strip),
+    'the week strip must not convert its local Saturday boundary back through UTC');
+  console.log('CLOCK_SWAP_DATE_INVARIANTS_PASSED');
+});
