@@ -3671,9 +3671,17 @@ function renderCoachAnswer(root) {
     ));
   } else if (isRefusal) {
     // Not an error state. The search worked; the books do not cover it.
+    //
+    // The model's own sentence used to be printed here, while the `unsourced`
+    // branch three lines up deliberately refuses to print it — two branches
+    // disagreeing about the same principle. A refusal sentence is still
+    // unverified prose, and it routinely smuggles a claim: "your books don't
+    // cover this, but generally rest two to three minutes" is an answer with no
+    // passage behind it, which is the one thing this screen exists to prevent.
+    // The fixed line plus the near-miss passages below carry everything
+    // actionable. Restoring it is one line, if Raed decides he wants it back.
     root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
       h('strong', {}, t('coach_unanswered')),
-      h('p', { class: 'coach-answer-text' }, answer.text),
       h('p', { class: 'tiny muted' }, t('coach_unanswered_hint')),
     ));
   } else if (answer && answer.status === 'unconfigured') {
@@ -5548,10 +5556,14 @@ function renderSettings() {
   profileCard.appendChild(h('h3', {}, '👤 Profile'));
   const displayName = h('input', {
     type: 'text',
+    // The label is a sibling <div>, not a <label>, so nothing associated the
+    // two and this announced as an unnamed text field.
+    'aria-label': t('display_name'),
     value: state.profile?.display_name || settings.user_id,
     onChange: (e) => { state.profile.display_name = e.target.value.trim() || settings.user_id; saveLocal(); renderSettings(); }
   });
   const experienceSelect = h('select', {
+    'aria-label': t('experience'),
     onChange: (e) => { state.profile.experience = e.target.value; saveLocal(); renderSettings(); }
   },
     ['beginner','detrained','returning','experienced'].map(v => h('option', { value: v, ...(state.profile?.experience === v ? { selected: '' } : {}) },
@@ -5640,6 +5652,7 @@ function renderSettings() {
     ),
     h('input', {
       type: 'number', value: settings.rest_seconds, min: 30, max: 600, step: 15,
+      'aria-label': t('rest_fallback'),
       onChange: (e) => { settings.rest_seconds = parseInt(e.target.value, 10) || 120; saveLocal(); }
     }),
   ));
@@ -6203,8 +6216,85 @@ function init() {
   // Auto-hide bottom nav on scroll-down, show on scroll-up
   initAutoHideNav();
 
+  // Dialog semantics, focus trap, focus return and Escape for every sheet.
+  initModalA11y();
+
   // Optional: ask for notification permission on first interaction (deferred)
   initNotifications();
+}
+
+// ---- Modal keyboard + screen-reader behaviour ----------------
+//
+// #modal-overlay is opened from a dozen places by adding a class, and it had
+// none of the behaviour a dialog needs: no role, no aria-modal, focus left
+// behind on <body>, Tab wandering out into the page underneath, and Escape did
+// nothing at all — the swap sheet, the exercise sheet and every destructive
+// confirmation could only be dismissed by finding and tapping the right button.
+//
+// Rather than edit every call site, this watches the class the call sites
+// already toggle. One place to get right, and it cannot drift out of step with
+// a new sheet added later.
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+function initModalA11y() {
+  const overlay = $('#modal-overlay');
+  const modal = $('#modal');
+  if (!overlay || !modal) return;
+  let lastFocused = null;
+
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('tabindex', '-1');
+
+  const focusables = () => [...modal.querySelectorAll(FOCUSABLE)]
+    .filter((el) => !el.disabled && el.getBoundingClientRect().width > 0);
+
+  const close = () => overlay.classList.remove('show');
+
+  const onOpen = () => {
+    lastFocused = document.activeElement;
+    // The heading names the sheet; without it a screen reader announces only
+    // "dialog".
+    const heading = modal.querySelector('h3');
+    if (heading) modal.setAttribute('aria-label', heading.textContent.trim());
+    else modal.removeAttribute('aria-label');
+    const first = focusables()[0];
+    (first || modal).focus({ preventScroll: true });
+  };
+
+  const onClose = () => {
+    // Back where he was, not to the top of the page.
+    if (lastFocused && document.contains(lastFocused)) {
+      try { lastFocused.focus({ preventScroll: true }); } catch (_) { /* gone */ }
+    }
+    lastFocused = null;
+  };
+
+  new MutationObserver(() => {
+    if (overlay.classList.contains('show')) onOpen();
+    else onClose();
+  }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
+
+  document.addEventListener('keydown', (e) => {
+    if (!overlay.classList.contains('show')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // Trap: Tab must cycle inside the sheet, not step onto the page behind it.
+    const items = focusables();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
 }
 
 // ---- Auto-hide bottom nav on scroll --------------------------

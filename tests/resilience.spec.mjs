@@ -411,3 +411,63 @@ test('a logged 0 kg set still reads as 0 after a reload', async ({ page }) => {
   expect(weights.length).toBeGreaterThan(0);
   expect(weights.every((w) => w === '0'), `a stored 0 must render as 0, got ${JSON.stringify(weights)}`).toBe(true);
 });
+
+// ---------------------------------------------------------------------------
+// #modal-overlay is opened from a dozen places by adding a class, and had none
+// of the behaviour a dialog needs: no role, no aria-modal, focus left on <body>,
+// Tab wandering onto the page underneath, and Escape doing nothing — every sheet
+// and every destructive confirmation could only be dismissed by finding the
+// right button.
+test('a sheet behaves like a dialog: named, focused, and Escape closes it', async ({ page }) => {
+  await boot(page);
+  await intoSession(page);
+  await page.evaluate(() => document.querySelector('#page-home .ex.expanded [data-exercise-settings]')?.click());
+  await page.waitForTimeout(700);
+
+  const state = await page.evaluate(() => {
+    const modal = document.querySelector('#modal');
+    return {
+      open: document.querySelector('#modal-overlay')?.classList.contains('show'),
+      role: modal?.getAttribute('role'),
+      ariaModal: modal?.getAttribute('aria-modal'),
+      focusInside: modal?.contains(document.activeElement),
+    };
+  });
+  expect(state.open).toBe(true);
+  expect(state.role).toBe('dialog');
+  expect(state.ariaModal).toBe('true');
+  expect(state.focusInside, 'focus must move into the sheet, not stay on body').toBe(true);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const stillOpen = await page.evaluate(() => document.querySelector('#modal-overlay')?.classList.contains('show'));
+  expect(stillOpen, 'Escape must close a sheet').toBe(false);
+});
+
+// Every interactive control on every screen needs a name. The session screen is
+// covered above; this covers the other four.
+test('no unnamed control on home, library, history, coach or settings', async ({ page }) => {
+  await boot(page);
+  for (const route of ['home', 'library', 'history', 'coach', 'settings']) {
+    await page.evaluate((r) => document.querySelector(`.tab-bar .tab[data-route="${r}"]`)?.click(), route);
+    await page.waitForTimeout(700);
+    if (route === 'settings') {
+      await page.evaluate(() => document.querySelectorAll('#page-settings details, #page-settings summary')
+        .forEach((el) => el.click?.()));
+      await page.waitForTimeout(600);
+    }
+    const unnamed = await page.evaluate(() => {
+      const out = [];
+      document.querySelectorAll('button, a[href], select, input, textarea').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const named = (el.textContent || '').trim() || el.getAttribute('aria-label')
+          || el.getAttribute('aria-labelledby') || el.getAttribute('title')
+          || el.closest('label') || el.getAttribute('placeholder');
+        if (!named) out.push(`${el.tagName}.${el.className}`.slice(0, 50));
+      });
+      return out;
+    });
+    expect(unnamed, `unnamed controls on ${route}`).toEqual([]);
+  }
+});

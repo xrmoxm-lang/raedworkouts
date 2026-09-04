@@ -10,7 +10,7 @@
  * index.html. The new SW installs in the background, calls skipWaiting(), and
  * the page (see app.js) reloads itself once to apply — no manual force-refresh.
  */
-const VERSION = 'v69';
+const VERSION = 'v70';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is

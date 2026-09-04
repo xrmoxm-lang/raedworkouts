@@ -511,11 +511,17 @@ body.runner-mode .page-runner.active {
 .set-grid input::-webkit-outer-spin-button,
 .set-grid input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .set-grid input::placeholder { color: var(--text-muted); font-weight: 500; }
+/* `outline: none` here overrides the global :where() focus ring — zero
+   specificity loses to anything — and replaced it with a --focus-ring glow.
+   That token is rgba(0,0,0,.42) in all three dark skins: a BLACK halo on a dark
+   ground, i.e. no focus indicator at all on the screen he actually works on.
+   The ring is now drawn from the accent, so it is visible on both grounds and
+   speaks the same focus language as the rest of the app. */
 .set-grid input:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--bg-card);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 /* completed set row → tints green (stays editable) */
 .set-grid.done input {
@@ -1141,7 +1147,7 @@ body.runner-mode .page-runner.active {
   transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 .search-input::placeholder { color: var(--text-muted); }
-.search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent); }
 .lib-grid { display: grid; gap: 10px; }
 
 .lib-group {
@@ -1277,7 +1283,7 @@ body.runner-mode .page-runner.active {
   background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 8px 12px; color: var(--text); font-size: 14px;
 }
-.setting-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.setting-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent); }
 
 .sync-status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .sync-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -1419,7 +1425,7 @@ body.runner-mode .page-runner.active {
   border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); width: 100%;
 }
 .modal input:focus,
-.modal select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.modal select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent); }
 
 /* ===== Toast ============================================= */
 .toast {
