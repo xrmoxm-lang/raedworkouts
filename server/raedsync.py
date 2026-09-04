@@ -288,8 +288,18 @@ def clear_failed(user_id: str) -> None:
 
 
 def auth_ok(con: sqlite3.Connection, user_id: str, headers, body: dict | None = None, require_legacy=False) -> tuple[bool, str]:
-    if rate_limited(user_id):
-        return False, "rate"
+    # The throttle is checked AFTER the credential, not before it.
+    #
+    # It is keyed by user_id alone, so checking it first meant anyone who could
+    # reach this service — it is public through the funnel — could send eight bad
+    # requests for "raed-v16" and lock Raed out of his own sync for fifteen
+    # minutes, from any machine, with no credential at all. His phone would then
+    # be unable to push a finished workout.
+    #
+    # A rate limit exists to slow down guessing. It has no business rejecting a
+    # request that presents the CORRECT secret, so a valid token is now honoured
+    # even while the counter is hot, and only failures are refused.
+    throttled = rate_limited(user_id)
     token = read_token()
     auth = headers.get("authorization") or headers.get("Authorization") or ""
     legacy = auth.startswith("Bearer ") and token and hmac.compare_digest(auth[7:].strip(), token)
@@ -300,7 +310,7 @@ def auth_ok(con: sqlite3.Connection, user_id: str, headers, body: dict | None = 
         if legacy:
             return True, "legacy"
         record_failed(user_id)
-        return False, "auth"
+        return False, "rate" if throttled else "auth"
 
     row = con.execute("select * from users where lower(user_id)=lower(?)", (user_id,)).fetchone()
     user_key = headers.get("x-user-key") or headers.get("X-User-Key") or ""
@@ -315,12 +325,12 @@ def auth_ok(con: sqlite3.Connection, user_id: str, headers, body: dict | None = 
             clear_failed(user_id)
             return True, "legacy-grace"
         record_failed(user_id)
-        return False, "auth"
+        return False, "rate" if throttled else "auth"
     if legacy:
         clear_failed(user_id)
         return True, "legacy"
     record_failed(user_id)
-    return False, "auth"
+    return False, "rate" if throttled else "auth"
 
 
 def validate_user_id(value: str) -> str:
