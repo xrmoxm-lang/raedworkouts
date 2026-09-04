@@ -684,18 +684,41 @@ function buildVideoTile(v, opts = {}) {
   link.insertBefore(img, chip);
   return link;
 }
+// Was a native prompt(): English, unstyled, and suppressible by an installed PWA
+// shell — the same class already replaced everywhere else, missed because the
+// earlier scan only looked for a quoted literal after the paren and this one
+// interpolates the exercise name.
 function editJNUrlPrompt(exerciseId) {
   const ex = getAllExercises().find(e => e.id === exerciseId);
   if (!ex) return;
-  const current = getJNUrl(exerciseId);
-  const next = prompt(
-    `Edit Jeff Nippard URL for "${ex.name}".\n\nPaste a full YouTube link (video, shorts, or playlist). Leave empty to reset to default.`,
-    current
-  );
-  if (next === null) return;  // cancelled
-  setJNUrl(exerciseId, next);
-  if (typeof toast === 'function') toast('JN URL updated.');
-  render();
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  const close = () => $('#modal-overlay').classList.remove('show');
+  const input = h('input', {
+    type: 'url', class: 'search-input', dir: 'ltr',
+    'aria-label': t('video_edit_jn'),
+    placeholder: 'https://youtube.com/…',
+    value: getJNUrl(exerciseId) || '',
+  });
+  modal.appendChild(h('h3', {}, t('video_edit_jn')));
+  modal.appendChild(h('p', { class: 'tiny muted' },
+    h('bdi', { class: 'ltr-run' }, ex.name)));
+  modal.appendChild(h('p', { class: 'tiny muted' }, t('jn_url_hint')));
+  modal.appendChild(input);
+  modal.appendChild(h('button', {
+    class: 'btn primary full', style: 'margin-top:10px;',
+    onClick: () => {
+      const next = input.value.trim();
+      close();
+      setJNUrl(exerciseId, next);
+      toastSaved(t('jn_url_updated'));
+      render();
+    },
+  }, t('save')));
+  modal.appendChild(h('button', {
+    class: 'btn ghost full', style: 'margin-top:8px;', onClick: close,
+  }, t('cancel')));
+  $('#modal-overlay').classList.add('show');
 }
 
 // ---- Music platform ------------------------------------------
@@ -5288,10 +5311,15 @@ function renderLibExerciseCard(ex) {
     }, jnHasCustomOverride(ex.id) ? t('video_edit_jn_custom') : t('video_edit_jn')));
     if (customVids.length) {
       body.appendChild(h('button', { class: 'btn tiny ghost', style: 'margin-left:6px;', onClick: () => {
-        if (confirm(t('video_clear_confirm'))) {
+        confirmAction({
+          title: t('video_clear_custom'),
+          body: t('video_clear_confirm'),
+          confirmLabel: t('video_clear_custom'),
+        }).then((yes) => {
+          if (!yes) return;
           delete state.custom_videos[ex.id];
           saveLocal(); renderLibrary();
-        }
+        });
       }}, t('video_clear_custom')));
     }
     if (ex.alternatives?.length) {
@@ -5309,11 +5337,16 @@ function renderLibExerciseCard(ex) {
       body.appendChild(h('button', {
         class: 'btn tiny danger ghost',
         onClick: () => {
-          if (confirm(`Delete custom exercise "${ex.name}"? This cannot be undone.`)) {
+          confirmAction({
+            title: t('delete_custom_exercise'),
+            body: tf('delete_custom_exercise_body', { name: ex.name }),
+            confirmLabel: t('delete_custom_exercise'),
+          }).then((yes) => {
+            if (!yes) return;
             deleteCustomExercise(ex.id);
             renderLibrary();
             toastSaved('Deleted.');
-          }
+          });
         }
       }, '🗑 Delete this custom exercise'));
     }

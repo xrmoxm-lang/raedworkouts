@@ -656,6 +656,12 @@ export const LOCALE = Object.freeze({
   deleted: pair('Deleted.', 'تم الحذف.'),
   paste_youtube: pair('Paste a YouTube link to add to this exercise:', 'الصق رابط يوتيوب لإضافته لهذا التمرين:'),
   jn_url_updated: pair('JN URL updated.', 'تم تحديث رابط JN.'),
+  jn_url_hint: pair(
+    'Paste a full YouTube link — video, shorts or playlist. Leave it empty to go back to the default.',
+    'الصق رابط يوتيوب كامل — فيديو أو شورتس أو قائمة. اتركه فارغاً للرجوع للافتراضي.'),
+  delete_custom_exercise_body: pair(
+    'Deletes "{name}" from your library. This cannot be undone.',
+    'يحذف «{name}» من مكتبتك. ما فيه رجعة.'),
 
   profile: pair('👤 Profile', '👤 الملف'),
   display_name: pair('Display name', 'اسم العرض'),
