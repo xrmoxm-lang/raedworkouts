@@ -2139,6 +2139,36 @@ function getWeeklyVolume() {
   return { totalSets, totalKg: Math.round(totalKg) };
 }
 
+// A real estimate instead of the number 70.
+//
+// This was `tf('home_minutes', { n: 70 })` — a hardcoded literal on every
+// session. A six-exercise lower day said 70 minutes and so did a seven-exercise
+// upper day, and now a deload week with two working sets per exercise says it
+// too, which is roughly twice the truth. A number the app cannot justify is the
+// exact thing Raed objected to on the weight card.
+//
+// Built from the programme's own columns: each working set is about 40 seconds
+// under load, each ramp set about 30, and the rest between them is `rest_min`,
+// which the programme states per exercise. The general warm-up is capped at 15
+// and realistically runs about 8.
+const WARMUP_MINUTES = 8;
+function estimateSessionMinutes(session) {
+  const rows = session?.exercises || [];
+  if (!rows.length) return WARMUP_MINUTES;
+  const seconds = rows.reduce((total, row) => {
+    const working = Number(row.sets ?? row.work_sets) || 0;
+    const ramps = Number(row.ramp_sets) || 0;
+    const rest = Number(row.rest_min);
+    const restSeconds = (Number.isFinite(rest) ? rest : 2) * 60;
+    // The last set of an exercise is followed by the next exercise's setup, not
+    // by a full prescribed rest, so one rest is dropped per exercise.
+    return total + ramps * 30 + working * 40 + Math.max(0, working + ramps - 1) * restSeconds;
+  }, 0);
+  // To the nearest five, because a minute-accurate estimate would be a lie of a
+  // different kind.
+  return Math.max(10, Math.round((WARMUP_MINUTES + seconds / 60) / 5) * 5);
+}
+
 // ---- Session warm-up phase ---------------------------------
 function warmupTypeForSession(session) {
   // D12 is data-led: both Upper sessions use the merged push+pull warm-up;
@@ -2332,7 +2362,13 @@ function startSession(session) {
   focusExerciseIdx = null;
   // A block transition may offer a configured skin, but cannot apply one.
   const prevBlock = state._last_toasted_block;
-  const curBlock = state.current_block || 1;
+  // `state.current_block` is written NOWHERE. grep the file: it is initialised to
+  // 1 in defaultState() and read only here, so curBlock was permanently 1,
+  // isBlockTransition was permanently false, and every block announcement — the
+  // "block N begins" toast, the block-boundary skin offer, and the deload week's
+  // own explanation — was unreachable code. The programme's real position comes
+  // from derivedBlock(), which is what resolveProgrammeBlock already uses.
+  const curBlock = derivedBlock();
   const isBlockTransition = prevBlock != null && prevBlock !== curBlock;
   const skinBoundary = resolveBlockSkinBoundary({
     previousBlock: prevBlock,
@@ -3915,7 +3951,7 @@ function renderHome() {
       // No subtitle when the name has no " — " half. The fallback was the FULL
       // name, so a session called just «سفلي أ» printed its own title twice.
       parts[1] ? h('p', {}, parts[1]) : null,
-      h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ~', tf('home_minutes', { n: 70 })),
+      h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ~', tf('home_minutes', { n: estimateSessionMinutes(planned) })),
     ));
   } else {
     // data-home-overview marks "home drew its banner", not "a session is running",
