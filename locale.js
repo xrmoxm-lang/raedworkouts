@@ -715,6 +715,57 @@ export const LOCALE = Object.freeze({
   permission_denied: pair('Permission denied. Enable in browser settings.', 'رُفض الإذن. فعّله من إعدادات المتصفح.'),
   cant_reach_server: pair("Can't reach the server — check connection.", 'تعذر الوصول للخادم — تحقق من الاتصال.'),
 
+  // A failed LOCAL write. Distinct from a failed sync on purpose: sync failing
+  // is routine and harmless because the phone still holds the session, whereas
+  // this means the phone does NOT, and the server row is the only copy left.
+  // It has to say what to do, not just what broke.
+  storage_full: pair(
+    'This phone refused to save. Your workout is only on the server now — stay online until it syncs.',
+    'الجوال رفض الحفظ. تمرينك الحين محفوظ على الخادم فقط — خلّك متصل لين تكتمل المزامنة.'),
+  storage_full_status: pair('Phone storage full', 'ذاكرة الجوال ممتلئة'),
+  // Both copies failed. The app must not soften this.
+  nothing_saved_anywhere: pair(
+    'Not saved — not on the phone, not on the server. Write down this set.',
+    'ما انحفظ — لا على الجوال ولا على الخادم. سجّل هذي المجموعة عندك.'),
+  storage_recovered: pair('Saving again', 'رجع الحفظ يشتغل'),
+  // Deliberately not «حدث خطأ». It has to tell him what to DO about it, because
+  // the one thing that matters after an unexpected error is whether the numbers
+  // in front of him can be trusted.
+  app_error: pair(
+    'Something went wrong. Reload the app and check your last set was saved.',
+    'صار خطأ. أعد فتح التطبيق وتأكد أن آخر مجموعة انحفظت.'),
+  // The rest alarm: the one notification this app sends. Its Arabic has existed
+  // in this file since the feature shipped and nothing ever read it.
+  rest_done_body: pair("Time to lift again. Don't scroll past it.", 'وقت الرفع. لا تفوّتها.'),
+  finish_ramp_first: pair("Finish this exercise's ramp set first.", 'كمّل مجموعة التدرّج أول.'),
+  // Bodies for the four destructive confirmations that used to be native
+  // browser dialogs — English, unstyled, and suppressible by a standalone PWA
+  // shell, which would have made the tap do nothing at all.
+  start_over_active_body: pair(
+    'A session is already running. Starting a new one deletes it.',
+    'فيه جلسة شغّالة الحين. لو بدأت وحدة جديدة تنحذف.'),
+  restore_revision_body: pair(
+    'Your current data is saved first, and the restore becomes a new cloud revision.',
+    'بياناتك الحالية تُحفظ أول، والاستعادة تصير نسخة جديدة في السحابة.'),
+  wipe_local_body: pair(
+    'Removes this profile from THIS device only. Your cloud data is untouched.',
+    'يمسح هذا الملف من هذا الجهاز فقط. بياناتك في السحابة ما تُمس.'),
+  clear_prs_body: pair(
+    'Deletes every stored personal record. This cannot be undone.',
+    'يحذف كل الأرقام الشخصية المحفوظة. ما فيه رجعة.'),
+  import_failed: pair('Import failed: {reason}', 'فشل الاستيراد: {reason}'),
+  // Discarding now offers the same undo that finishing already did.
+  session_discarded: pair('Session discarded.', 'تجاهلت الجلسة.'),
+  session_restored: pair('Session restored. Nothing was lost.', 'رجعت الجلسة. ما ضاع شيء.'),
+  undo_unavailable: pair('A new session is already open.', 'فيه جلسة جديدة مفتوحة الحين.'),
+  // Screen-reader names. The set rows deliberately show no number any more, so
+  // the number lives here instead — it is the only way to tell the rows apart
+  // by ear.
+  a11y_weight_for_set: pair('Weight in kg, set {n}', 'الوزن بالكيلو، المجموعة {n}'),
+  a11y_reps_for_set: pair('Reps, set {n}', 'التكرارات، المجموعة {n}'),
+  a11y_complete_set: pair('Mark set {n} done', 'علّم المجموعة {n} كمكتملة'),
+  a11y_complete_ramp_set: pair('Mark ramp set {n} done', 'علّم مجموعة التدرّج {n} كمكتملة'),
+
   cue_incline: pair('Set bench 30°. Drive elbows down and in, no flare.', 'اضبط المقعد على 30°. ادفع المرفقين للأسفل والداخل بلا فتح.'),
   cue_chest_press: pair('Handles in line with mid-chest. Squeeze pecs at lockout.', 'المقابض بمحاذاة منتصف الصدر. اعصر الصدر عند النهاية.'),
   cue_chest_fly: pair('Slight bend in elbows, lock them. Stretch deep, squeeze hard.', 'اثنِ المرفقين قليلاً وثبّتهما. مدّ عميق ثم عصر قوي.'),

@@ -13,7 +13,13 @@
   <meta name="apple-mobile-web-app-title" content="Raedworkouts Go" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icon-192.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="./icon-192.svg" />
+  <!-- iOS does not accept SVG for apple-touch-icon, and it does not read the
+       manifest's icons for the home screen either. This app is installed on
+       exactly one iPhone, and until now that home-screen tile was iOS's
+       fallback: a downscaled screenshot of the first paint. The PNG is
+       full-bleed and opaque on purpose — iOS applies its own corner mask, and
+       renders any transparency as black. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>

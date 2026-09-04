@@ -173,12 +173,57 @@ const LEGACY_LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
 const ACTIVE_USER_KEY = 'raedworkouts.active_user';
 const PROFILE_INDEX_KEY = 'raedworkouts.profiles.v1';
 
-function getSyncUrl() {
+// ---- Guarded storage ---------------------------------------------------
+//
+// Every write in this file used to call localStorage.setItem bare. There was no
+// try/catch on a single one of the fifteen, and no window.onerror either. A
+// QuotaExceededError — a full origin, Safari with site data blocked, a private
+// window — therefore threw straight out of saveLocal(), out of the tap handler
+// that called it, and died as an uncaught page error. Proven, not theorised: a
+// probe that made setItem throw showed the set still ticked on screen, no toast,
+// no sync status, and nothing written. He would have finished the workout and
+// found it gone.
+//
+// So: writes never throw, and a failed write is LOUD. It also stops pretending
+// the data is safe locally and pushes to the server immediately, because the
+// cloud row is the only place left that can hold it.
+let storageFailed = false;
+function safeSetItem(key, value) {
   try {
-    return (localStorage.getItem(SYNC_OVERRIDE_KEY) || '').trim() || SYNC_URL;
-  } catch (_) {
-    return SYNC_URL;
+    localStorage.setItem(key, value);
+    if (storageFailed) {
+      storageFailed = false;
+      setSyncStatus('ok', t('storage_recovered'));
+    }
+    return true;
+  } catch (err) {
+    onStorageWriteFailed(err);
+    return false;
   }
+}
+function safeRemoveItem(key) {
+  try { localStorage.removeItem(key); return true; } catch (_) { return false; }
+}
+function safeGetItem(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+function onStorageWriteFailed(err) {
+  const first = !storageFailed;
+  storageFailed = true;
+  // The in-memory state is still correct, so the server can still save it.
+  // Marking dirty by hand: markDirty() writes a marker that would fail too.
+  syncDirty = true;
+  setSyncStatus('err', t('storage_full_status'));
+  if (first) {
+    console.error('[raedworkouts] local save failed', err);
+    toast(t('storage_full'), 8000);
+    // Straight to the server, no debounce — this is the last copy.
+    try { flushSync().catch(() => {}); } catch (_) {}
+  }
+}
+
+function getSyncUrl() {
+  return (safeGetItem(SYNC_OVERRIDE_KEY) || '').trim() || SYNC_URL;
 }
 function encodeUserKey(userId) {
   return encodeURIComponent(String(userId || '').trim());
@@ -762,38 +807,38 @@ function registerLocalProfile(profile) {
     experience: profile.experience || 'detrained',
     updated_at: new Date().toISOString(),
   });
-  localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(list));
+  safeSetItem(PROFILE_INDEX_KEY, JSON.stringify(list));
 }
 function getLocalProfiles() {
   try {
-    return JSON.parse(localStorage.getItem(PROFILE_INDEX_KEY) || '[]').map(({ has_pin: _retired, ...profile }) => profile);
+    return JSON.parse(safeGetItem(PROFILE_INDEX_KEY) || '[]').map(({ has_pin: _retired, ...profile }) => profile);
   } catch (_) { return []; }
 }
 function getActiveUser() {
-  return localStorage.getItem(ACTIVE_USER_KEY) || '';
+  return safeGetItem(ACTIVE_USER_KEY) || '';
 }
 function setActiveUser(userId) {
   activeUser = userId || '';
-  if (activeUser) localStorage.setItem(ACTIVE_USER_KEY, activeUser);
-  else localStorage.removeItem(ACTIVE_USER_KEY);
+  if (activeUser) safeSetItem(ACTIVE_USER_KEY, activeUser);
+  else safeRemoveItem(ACTIVE_USER_KEY);
 }
 function readLastRev(userId = settings.user_id) {
-  const raw = localStorage.getItem(lastRevKey(userId));
+  const raw = safeGetItem(lastRevKey(userId));
   return raw ? parseInt(raw, 10) : null;
 }
 function writeLastRev(rev, userId = settings.user_id) {
   if (!userId) return;
-  if (rev == null || Number.isNaN(Number(rev))) localStorage.removeItem(lastRevKey(userId));
-  else localStorage.setItem(lastRevKey(userId), String(rev));
+  if (rev == null || Number.isNaN(Number(rev))) safeRemoveItem(lastRevKey(userId));
+  else safeSetItem(lastRevKey(userId), String(rev));
 }
 function readDirtyMarker(userId = settings.user_id) {
-  return !!userId && localStorage.getItem(dirtyKey(userId)) === '1';
+  return !!userId && safeGetItem(dirtyKey(userId)) === '1';
 }
 function writeDirtyMarker(userId = settings.user_id) {
-  if (userId) localStorage.setItem(dirtyKey(userId), '1');
+  if (userId) safeSetItem(dirtyKey(userId), '1');
 }
 function clearDirtyMarker(userId = settings.user_id) {
-  if (userId) localStorage.removeItem(dirtyKey(userId));
+  if (userId) safeRemoveItem(dirtyKey(userId));
 }
 function backfillSessionUids() {
   let changed = false;
@@ -852,22 +897,22 @@ function migrationUserFromLegacy(legacySettings) {
   return urlUser || '';
 }
 function migrateLegacyStorage() {
-  const legacyStateRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
-  const legacySettingsRaw = localStorage.getItem(LEGACY_SETTINGS_KEY);
+  const legacyStateRaw = safeGetItem(LEGACY_STORAGE_KEY);
+  const legacySettingsRaw = safeGetItem(LEGACY_SETTINGS_KEY);
   if (!legacyStateRaw && !legacySettingsRaw) return;
   let legacySettings = {};
   try { legacySettings = JSON.parse(legacySettingsRaw || '{}'); } catch (_) {}
   const userId = migrationUserFromLegacy(legacySettings);
   if (!userId) return;
-  if (!localStorage.getItem(stateKey(userId)) && legacyStateRaw) localStorage.setItem(stateKey(userId), legacyStateRaw);
-  if (!localStorage.getItem(settingsKey(userId)) && legacySettingsRaw) localStorage.setItem(settingsKey(userId), legacySettingsRaw);
-  const lw = localStorage.getItem(LEGACY_LAST_WRITE_KEY);
-  if (lw && !localStorage.getItem(lastWriteKey(userId))) localStorage.setItem(lastWriteKey(userId), lw);
+  if (!safeGetItem(stateKey(userId)) && legacyStateRaw) safeSetItem(stateKey(userId), legacyStateRaw);
+  if (!safeGetItem(settingsKey(userId)) && legacySettingsRaw) safeSetItem(settingsKey(userId), legacySettingsRaw);
+  const lw = safeGetItem(LEGACY_LAST_WRITE_KEY);
+  if (lw && !safeGetItem(lastWriteKey(userId))) safeSetItem(lastWriteKey(userId), lw);
   setActiveUser(userId);
   registerLocalProfile({ user_id: userId, display_name: userId, experience: legacySettings.profile?.experience || 'returning' });
-  localStorage.removeItem(LEGACY_STORAGE_KEY);
-  localStorage.removeItem(LEGACY_SETTINGS_KEY);
-  localStorage.removeItem(LEGACY_LAST_WRITE_KEY);
+  safeRemoveItem(LEGACY_STORAGE_KEY);
+  safeRemoveItem(LEGACY_SETTINGS_KEY);
+  safeRemoveItem(LEGACY_LAST_WRITE_KEY);
 }
 
 /**
@@ -883,7 +928,7 @@ function exportProgrammeMigration(record, userId) {
     exported_at: record.created_at,
     state: record.state,
   };
-  if (userId) localStorage.setItem(programmeMigrationExportKey(userId), JSON.stringify(payload));
+  if (userId) safeSetItem(programmeMigrationExportKey(userId), JSON.stringify(payload));
   downloadJson(record.filename, payload);
 }
 function migrateProgrammeReferencesAtBoot(userId) {
@@ -908,7 +953,7 @@ function loadLocal() {
   settings = defaultSettings();
   if (activeUser) {
     let storedState = {};
-    try { storedState = JSON.parse(localStorage.getItem(stateKey(activeUser)) || '{}'); } catch (e) {}
+    try { storedState = JSON.parse(safeGetItem(stateKey(activeUser)) || '{}'); } catch (e) {}
     state = { ...defaultState(), ...storedState };
     // New profiles begin at version 1. A stored profile without this explicit
     // marker predates D6 and must take the export-first reference migration.
@@ -916,7 +961,7 @@ function loadLocal() {
       state.programme_reference_migration_version = 0;
     }
     try {
-      const storedSettings = JSON.parse(localStorage.getItem(settingsKey(activeUser)) || '{}');
+      const storedSettings = JSON.parse(safeGetItem(settingsKey(activeUser)) || '{}');
       settings = { ...defaultSettings(), ...retireLegacyCredentialFields(storedSettings) };
     } catch (e) {}
     // Existing profiles predate the Arabic-default requirement.  Preserve an
@@ -933,8 +978,8 @@ function loadLocal() {
     activeUser = settings.user_id;
     setActiveUser(activeUser);
   }
-  if (activeUser && !localStorage.getItem(lastWriteKey(activeUser)) && hasMeaningfulLocalData()) {
-    localStorage.setItem(lastWriteKey(activeUser), new Date().toISOString());
+  if (activeUser && !safeGetItem(lastWriteKey(activeUser)) && hasMeaningfulLocalData()) {
+    safeSetItem(lastWriteKey(activeUser), new Date().toISOString());
   }
   // D6 replaces the selectable v15 programme variants. Stored values are
   // deliberately retired rather than interpreted as new programme choices.
@@ -949,8 +994,8 @@ function loadLocal() {
     backfillSessionUids();
     syncDirty = readDirtyMarker(settings.user_id);
     registerLocalProfile({ user_id: settings.user_id, ...state.profile });
-    localStorage.setItem(settingsKey(settings.user_id), JSON.stringify(settings));
-    localStorage.setItem(stateKey(settings.user_id), JSON.stringify(state));
+    safeSetItem(settingsKey(settings.user_id), JSON.stringify(settings));
+    safeSetItem(stateKey(settings.user_id), JSON.stringify(state));
   } else {
     syncDirty = false;
   }
@@ -963,9 +1008,9 @@ function persistLocal() {
   settings.sync_key = SYNC_KEY;
   ensureProfile();
   backfillSessionUids();
-  localStorage.setItem(stateKey(settings.user_id), JSON.stringify(state));
-  localStorage.setItem(settingsKey(settings.user_id), JSON.stringify(settings));
-  localStorage.setItem(lastWriteKey(settings.user_id), now);
+  safeSetItem(stateKey(settings.user_id), JSON.stringify(state));
+  safeSetItem(settingsKey(settings.user_id), JSON.stringify(settings));
+  safeSetItem(lastWriteKey(settings.user_id), now);
   registerLocalProfile({ user_id: settings.user_id, ...state.profile });
 }
 function markDirty() {
@@ -1147,7 +1192,12 @@ async function flushSync(opts = {}) {
         setSyncStatus('err', syncFailureReason(err));
         if (!saveLocal._toastShown) {
           saveLocal._toastShown = true;
-          toast(t('cloud_sync_failed'), 3500);
+          // «حُفظت محلياً» is only true when the phone actually accepted the
+          // write. With storage failing too there is no copy anywhere, and
+          // saying "saved locally" would be the single most misleading sentence
+          // the app could show him. A probe caught this one overwriting the
+          // storage warning three seconds after it appeared.
+          toast(storageFailed ? t('nothing_saved_anywhere') : t('cloud_sync_failed'), storageFailed ? 8000 : 3500);
         }
         return false;
       } finally {
@@ -1749,18 +1799,42 @@ function editableWeightValue(value) {
   return hasWorkingWeight(value) ? Number(value) : '';
 }
 // Compound ramp, sourced: 50% x 6-10 then 70% x 4-6 (ML L11160/L11162, PPL L:1454/1457).
+//
+// Both percentages are rounded DOWN to the equipment step (clamp C3), and at
+// light loads that collapses them onto the same number: a 10 kg working weight
+// gave 50% → 5 and 70% → 5, so the card showed two ramp rows at 5 kg with
+// different rep counts. That is not a ramp, it is the same set twice, and it is
+// what actually renders on his chest press today.
+//
+// A ramp has to ascend. When rounding flattens it, the second set is lifted to
+// the next step — but never to or past the working weight, because a "warm-up"
+// at the working load is worse than no second ramp at all. If even that is
+// impossible (the working weight IS one step), the second set is dropped and
+// the caller gets a single ramp.
 function twoSetWarmupFrom(weight, step) {
+  const s = Number(step) > 0 ? Number(step) : 2.5;
+  const first = roundToGymIncrement(weight * 0.5, s);
+  let second = roundToGymIncrement(weight * 0.7, s);
+  if (second <= first) {
+    const lifted = first + s;
+    if (lifted < Number(weight)) second = lifted;
+    else return [{ weight: first, reps: 10 }];
+  }
   return [
-    { weight: roundToGymIncrement(weight * 0.5, step), reps: 10 },
-    { weight: roundToGymIncrement(weight * 0.7, step), reps: 6 },
+    { weight: first, reps: 10 },
+    { weight: second, reps: 6 },
   ];
 }
 function warmupText(planned, suggestedWeight) {
   if (!planned.warmup) return '';
   if (/^2\s+sets/i.test(planned.warmup)) {
     if (!hasWorkingWeight(suggestedWeight)) return '';
+    // twoSetWarmupFrom can now legitimately return ONE entry, when the load is
+    // too light for two distinct ramp weights. Indexing [1] blindly would throw
+    // here and take the whole card's render down with it.
     const warmups = twoSetWarmupFrom(suggestedWeight);
-    return `2 sets: ${fmtKgValue(warmups[0].weight)}kg×10, ${fmtKgValue(warmups[1].weight)}kg×6`;
+    const parts = warmups.map((w, i) => `${fmtKgValue(w.weight)}kg×${i === 0 ? 10 : 6}`);
+    return `${warmups.length} ${warmups.length === 1 ? 'set' : 'sets'}: ${parts.join(', ')}`;
   }
   return planned.warmup;
 }
@@ -1781,7 +1855,22 @@ function suggestNextWeight(exercise_id, planned) {
   // Find the heaviest working set
   const workingSets = (latest.sets || []).filter(isCountableWorkingSet);
   if (!workingSets.length) {
-    const historicWeight = (latest.sets || []).filter(isCountableWorkingSet).map((set) => set.weight).find(hasWorkingWeight);
+    // This branch re-ran the SAME `isCountableWorkingSet` filter that had just
+    // been proven empty one line above, so `historicWeight` was always
+    // undefined and the whole branch could only ever return «معايرة». The
+    // `why_last_logged` note it exists to show was unreachable.
+    //
+    // What it clearly meant to do is widen the net: the last session had no
+    // set that counts — every one skipped, or flagged invalid, or left
+    // unticked — but he may still have typed a real load into it. That number
+    // is a far better starting point than telling him to calibrate a movement
+    // he trained last week. Warm-ups stay excluded; they are not his working
+    // load. Heaviest wins, matching the working-set path below.
+    const loggedWeights = (latest.sets || [])
+      .filter((set) => !set.is_warmup)
+      .map((set) => Number(set.weight))
+      .filter(hasWorkingWeight);
+    const historicWeight = loggedWeights.length ? Math.max(...loggedWeights) : null;
     return hasWorkingWeight(historicWeight)
       ? { weight: Number(historicWeight), note: t('why_last_logged') }
       : { weight: null, note: t('why_calibrate') };
@@ -1955,8 +2044,22 @@ function renderWarmupPhase(activeSession) {
 
 // ---- Active session lifecycle ------------------------------
 function startSession(session) {
+  // Was a native confirm(): English on an Arabic-only screen, and the exact
+  // dialog endSession() already refuses to rely on because a standalone PWA
+  // shell can suppress it — in which case this returned false and the tap did
+  // nothing at all. confirmAction() is the app's own sheet, in Arabic, and it
+  // cannot be suppressed. Async, so the caller re-enters once he has answered.
   if (state.active_session) {
-    if (!confirm('You have an active session in progress. Discard it and start a new one?')) return;
+    confirmAction({
+      title: t('discard_session'),
+      body: t('start_over_active_body'),
+      confirmLabel: t('discard_session_confirm'),
+    }).then((yes) => {
+      if (!yes) return;
+      state.active_session = null;
+      startSession(session);
+    });
+    return;
   }
   const exercises = {};
   session.exercises.forEach(plan => {
@@ -2109,11 +2212,24 @@ function discardSession() {
     danger: true,
   }).then((yes) => {
     if (!yes) return;
+    // Finishing a session offers an undo; discarding one did not, and discard is
+    // the more dangerous of the two — it is a bare tap plus a confirm standing
+    // between him and an hour of work, with no record afterwards anywhere. The
+    // session is kept in memory and put back exactly as it was, the same way
+    // reopenSession restores a finished one.
+    const discarded = state.active_session;
     state.active_session = null;
     state.forced_next_session = null;
     focusExerciseIdx = null;
     saveLocal();
     render();
+    toast(t('session_discarded'), 9000, t('undo'), () => {
+      if (state.active_session) { toast(t('undo_unavailable')); return; }
+      state.active_session = discarded;
+      saveLocal();
+      render();
+      toast(t('session_restored'));
+    });
   });
 }
 
@@ -2453,30 +2569,77 @@ function prescribedRestSeconds(planned) {
   return Math.round(minutes * 60);
 }
 
+// The deadline is persisted, not just held in `restTimer`.
+//
+// The auto-update path reloads the page the moment the app is hidden while a
+// session is open — which is precisely the moment he pockets the phone to rest.
+// The countdown lived only in this module-level object, so the reload killed the
+// interval, hid the timer, and the alarm that was supposed to end his rest never
+// fired. He looks two minutes later at a phone showing nothing. Same for an iOS
+// tab eviction, which is routine with the screen off.
+//
+// Storing the deadline means any reload resumes the same countdown, and one that
+// expired while the page was gone fires immediately on return instead of
+// vanishing.
+function persistRestDeadline(endMs) {
+  if (!settings.user_id) return;
+  if (endMs) safeSetItem(nsKey(settings.user_id, 'restend'), String(endMs));
+  else safeRemoveItem(nsKey(settings.user_id, 'restend'));
+}
 function startRest(seconds) {
   if (restTimer.interval) clearInterval(restTimer.interval);
   restTimer.end = Date.now() + seconds * 1000;
-  const el = $('#rest-timer');
-  el.style.display = 'flex';
+  persistRestDeadline(restTimer.end);
   // Ask for notification permission once, on first rest start
   if (settings.notifications) requestNotifPermissionIfNeeded();
+  runRestCountdown();
+}
+function runRestCountdown() {
+  const el = $('#rest-timer');
+  if (!el) return;
+  el.style.display = 'flex';
   const tick = () => {
     const rem = Math.max(0, Math.round((restTimer.end - Date.now()) / 1000));
     $('#rest-timer-text').textContent = `${Math.floor(rem/60)}:${String(rem%60).padStart(2,'0')}`;
     if (rem === 0) {
       clearInterval(restTimer.interval);
+      restTimer.interval = null;
+      restTimer.end = 0;
+      persistRestDeadline(null);
       el.style.display = 'none';
       if (settings.vibrate && navigator.vibrate) navigator.vibrate([200,100,200]);
-      toast('Rest over — get back to it.');
+      toast(t('rest_done'));
       fireRestEndNotification();
     }
   };
   tick();
   restTimer.interval = setInterval(tick, 200);
 }
+// Called once at boot. A deadline still in the future resumes; one that passed
+// while the app was gone fires the alarm now rather than losing it.
+function restoreRestTimer() {
+  if (!settings.user_id) return;
+  const raw = safeGetItem(nsKey(settings.user_id, 'restend'));
+  const end = Number(raw);
+  if (!raw || !Number.isFinite(end) || end <= 0) return;
+  if (!state.active_session) { persistRestDeadline(null); return; }
+  restTimer.end = end;
+  if (end - Date.now() > 500) {
+    runRestCountdown();
+    return;
+  }
+  // It ran out while we were away. Say so once; do not start a dead countdown.
+  persistRestDeadline(null);
+  restTimer.end = 0;
+  toast(t('rest_done'));
+}
 function cancelRest() {
   if (restTimer.interval) clearInterval(restTimer.interval);
-  $('#rest-timer').style.display = 'none';
+  restTimer.interval = null;
+  restTimer.end = 0;
+  persistRestDeadline(null);
+  const el = $('#rest-timer');
+  if (el) el.style.display = 'none';
 }
 
 // ---- Renderers ---------------------------------------------
@@ -2542,14 +2705,24 @@ function moveRunnerExercise(delta) {
   render();
 }
 
-function updateRunnerSet(exerciseId, setIndex, property, value) {
-  const set = state.active_session?.exercises?.[exerciseId]?.sets?.[setIndex];
+// Every edit to a weight or a reps box goes through here.
+//
+// This rule used to live in `updateRunnerSet(exerciseId, setIndex, ...)`, which
+// was defined here and called by NOTHING — grep across the whole repo returned
+// its own definition and nothing else. The two <input> handlers on the card
+// assigned `set.weight` / `set.reps` directly and never cleared the flags, so
+// the documented behaviour — "editing is recovery, not a dead end" — had never
+// once run. A row he flagged invalid stayed invalid however he corrected it,
+// and stayed uncountable, so the volume ledger kept ignoring a set he had
+// fixed. Same shape as superset_group: the rule was written, the reader was
+// never connected.
+function applySetEdit(set, property, value) {
   if (!set) return;
   set[property] = value;
   if ((property === 'weight' || property === 'reps') && (set.invalid || set.invalid_prompted)) {
-    // Editing is recovery, not a dead end: a corrected row is eligible for a
-    // normal log again. The retained invalid record remains in already-ended
-    // sessions, while an active session stays editable.
+    // A corrected row is eligible for a normal log again. The retained invalid
+    // record remains in already-ended sessions; an active session stays
+    // editable.
     set.invalid = null;
     set.invalid_prompted = false;
   }
@@ -3673,8 +3846,10 @@ function renderHome() {
         render();
       });
 
-      // Prev / Next nav
-      root.appendChild(h('div', { style: 'display:flex; gap:8px; margin-top:12px;' },
+      // Prev / Next nav. Classed rather than inline-styled so the touch-target
+      // floor in styles.css can reach it — as an anonymous <div> these two were
+      // the only 40px controls left on the busiest screen in the app.
+      root.appendChild(h('div', { class: 'runner-nav' },
         // On the FIRST exercise, "previous" means the warm-up — there is nothing
         // else behind it, and it used to be a button that did nothing. Raed:
         // "أبغى لما أضغط السابق يرجع للإحماء".
@@ -4044,20 +4219,32 @@ function renderExerciseCard(ex_id, exState) {
         readOnly: Boolean(exState.machine_weight),
         value: editableWeightValue(set.weight),
         'data-runner-weight-input': 'true',
+        // A placeholder is not a label: it disappears the moment he types, and
+        // VoiceOver announced these two boxes as an unnamed pair of number
+        // fields. The set number is in the name because the row itself no longer
+        // shows one.
+        'aria-label': tf('a11y_weight_for_set', { n: idx + 1 }),
         disabled: Boolean(set.skipped),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
-        onInput: (e) => { set.weight = e.target.value === '' ? '' : parseFloat(e.target.value); saveLocal(); }
+        onInput: (e) => applySetEdit(set, 'weight', e.target.value === '' ? '' : parseFloat(e.target.value))
       }),
       h('input', {
         type: 'number', step: '1', inputmode: 'numeric',
         lang: 'en', dir: 'ltr',
         placeholder: String(planned.reps),
         value: set.reps ?? '',
+        'aria-label': tf('a11y_reps_for_set', { n: idx + 1 }),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
-        onInput: (e) => { set.reps = e.target.value === '' ? '' : parseInt(e.target.value, 10); saveLocal(); }
+        onInput: (e) => applySetEdit(set, 'reps', e.target.value === '' ? '' : parseInt(e.target.value, 10))
       }),
       h('button', {
         class: 'set-check' + (set.completed ? ' checked' : '') + (set.skipped ? ' skipped' : ''),
+        // This is THE control of the app — the one he taps after every set — and
+        // it had no accessible name at all. It is an icon-only toggle, so it
+        // needs both a name and a state; without aria-pressed a screen reader
+        // cannot tell a ticked set from an unticked one.
+        'aria-label': tf(isWarm ? 'a11y_complete_ramp_set' : 'a11y_complete_set', { n: idx + 1 }),
+        'aria-pressed': set.completed ? 'true' : 'false',
         disabled: Boolean(set.skipped),
         onClick: () => {
           if (!set.completed) {
@@ -4076,7 +4263,7 @@ function renderExerciseCard(ex_id, exState) {
               return;
             }
             if (!isWarm && exState.sets.some((prior, priorIndex) => priorIndex < idx && prior.is_warmup && !prior.completed)) {
-              toast('Finish this exercise’s ramp set first.');
+              toast(t('finish_ramp_first'));
               return;
             }
             // PR detection (silent)
@@ -4920,12 +5107,12 @@ function stashPreRestore(reason) {
     state: stripForSync(state, 'state'),
     settings: syncSettingsPayload(),
   };
-  localStorage.setItem(preRestoreKey(settings.user_id), JSON.stringify(snapshot));
+  safeSetItem(preRestoreKey(settings.user_id), JSON.stringify(snapshot));
 }
 async function undoPreRestore() {
   if (!settings.user_id) return;
   let snapshot;
-  try { snapshot = JSON.parse(localStorage.getItem(preRestoreKey(settings.user_id)) || 'null'); } catch (_) {}
+  try { snapshot = JSON.parse(safeGetItem(preRestoreKey(settings.user_id)) || 'null'); } catch (_) {}
   if (!snapshot) { toast('No restore snapshot found.'); return; }
   await quiesceSyncPipeline();
   const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
@@ -4969,7 +5156,11 @@ async function downloadCloudExport() {
   }
 }
 async function restoreRevision(rev) {
-  if (!confirm('Restore this cloud snapshot? Current data is saved locally first and the restore becomes a new cloud revision.')) return;
+  if (!await confirmAction({
+    title: t('restore_backup'),
+    body: t('restore_revision_body'),
+    confirmLabel: t('restore_backup'),
+  })) return;
   await quiesceSyncPipeline();
   stashPreRestore('revision ' + rev);
   const snap = await syncFetch('/revision?user=' + syncUserQuery(settings.user_id) + '&rev=' + encodeURIComponent(rev));
@@ -5338,19 +5529,25 @@ function renderSettings() {
       inp.onchange = async () => {
         const f = inp.files[0]; if (!f) return;
         try { await importJsonFile(f); }
-        catch (e) { alert('Import failed: ' + e.message); }
+        // alert() is a native dialog: English, unstyled, and suppressible by the
+        // PWA shell — an import could fail and say nothing at all.
+        catch (e) { toast(tf('import_failed', { reason: e.message }), 6000); }
       };
       inp.click();
     }}, 'Import JSON'),
-    h('button', { class: 'btn tiny danger', onClick: () => {
-      if (!confirm('Wipe this profile from this device only? Cloud data is untouched.')) return;
+    h('button', { class: 'btn tiny danger', onClick: async () => {
+      if (!await confirmAction({
+        title: t('wipe_local'),
+        body: t('wipe_local_body'),
+        confirmLabel: t('wipe_local'),
+      })) return;
       const uid = settings.user_id;
-      localStorage.removeItem(stateKey(uid));
-      localStorage.removeItem(settingsKey(uid));
-      localStorage.removeItem(lastWriteKey(uid));
-      localStorage.removeItem(lastRevKey(uid));
-      localStorage.removeItem(preRestoreKey(uid));
-      localStorage.removeItem(dirtyKey(uid));
+      safeRemoveItem(stateKey(uid));
+      safeRemoveItem(settingsKey(uid));
+      safeRemoveItem(lastWriteKey(uid));
+      safeRemoveItem(lastRevKey(uid));
+      safeRemoveItem(preRestoreKey(uid));
+      safeRemoveItem(dirtyKey(uid));
       setActiveUser('');
       state = defaultState();
       settings = defaultSettings();
@@ -5493,10 +5690,13 @@ function renderSettings() {
       h('div', { class: 'name' }, 'Clear PR history'),
       h('div', { class: 'desc' }, 'Wipe stored personal records. Cannot be undone.'),
     ),
-    h('button', { class: 'btn tiny danger', onClick: () => {
-      if (confirm('Clear all PRs? This cannot be undone.')) {
-        state.prs = {}; saveLocal(); toast('PRs cleared.');
-      }
+    h('button', { class: 'btn tiny danger', onClick: async () => {
+      if (!await confirmAction({
+        title: t('clear_prs'),
+        body: t('clear_prs_body'),
+        confirmLabel: t('clear_prs'),
+      })) return;
+      state.prs = {}; saveLocal(); toast('PRs cleared.');
     }}, 'Clear PRs'),
   ));
 
@@ -5766,12 +5966,21 @@ function init() {
     const applyUpdateWhenSafe = () => {
       if (_reloading) return;
       const doReload = () => { _reloading = true; window.location.reload(); };
-      // Mid-session + screen visible → wait until you switch away (state is already
-      // saved on every keystroke, so the reload never loses data).
-      if (state.active_session && !document.hidden) {
-        toast(t('update_ready'), 3000);
+      // "Wait until he switches away" used to mean "reload the instant he pockets
+      // the phone" — which is the same instant the rest timer starts running. The
+      // countdown is persisted now so a reload resumes it, but reloading in the
+      // middle of a rest is still the worst moment available, so a live rest
+      // holds the update off too. Nothing is lost by waiting: the next
+      // visibilitychange, focus, or hourly check comes back round.
+      const resting = Boolean(restTimer.interval) || restTimer.end > Date.now();
+      if (state.active_session && (resting || !document.hidden)) {
+        if (!document.hidden) toast(t('update_ready'), 3000);
         const onHide = () => {
-          if (document.hidden) { document.removeEventListener('visibilitychange', onHide); doReload(); }
+          const stillResting = Boolean(restTimer.interval) || restTimer.end > Date.now();
+          if (document.hidden && !stillResting) {
+            document.removeEventListener('visibilitychange', onHide);
+            doReload();
+          }
         };
         document.addEventListener('visibilitychange', onHide);
       } else {
@@ -5787,8 +5996,16 @@ function init() {
       // Re-check for updates when the app regains focus, and hourly.
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
       setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
-    }).catch(() => {});
+    }).catch((err) => {
+      // Swallowing this meant that when the worker failed to install — one shell
+      // URL 404 on a partial deploy is enough — the app silently lost offline
+      // support AND the rest alarm, with nothing anywhere to say so.
+      console.error('[raedworkouts] service worker registration failed', err);
+    });
   }
+
+  // A rest that was running when the app was last closed, reloaded, or evicted.
+  restoreRestTimer();
 
   // Auto-hide bottom nav on scroll-down, show on scroll-up
   initAutoHideNav();
@@ -5848,7 +6065,7 @@ async function fireRestEndNotification() {
   if (!settings.notifications) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const opts = {
-    body: 'Time to lift again. Don\'t scroll past it.',
+    body: t('rest_done_body'),
     icon: './img/body_chest.png',
     badge: './img/body_chest.png',
     tag: 'raedworkouts-rest',
@@ -5856,13 +6073,56 @@ async function fireRestEndNotification() {
     silent: false,
     vibrate: [200, 80, 200],
   };
+  const title = t('rest_done');
   try {
-    const reg = await navigator.serviceWorker?.ready;
+    // `serviceWorker.ready` is specified NEVER to reject: it waits forever until
+    // some registration has an active worker. If register() failed, or install
+    // threw because one shell URL 404'd on a partial deploy, this await simply
+    // never returned — so the `new Notification` fallback, which exists for
+    // exactly that failure, was unreachable in exactly that failure. The alarm
+    // went silent with nothing logged. Race it against a short timeout.
+    const reg = await Promise.race([
+      navigator.serviceWorker?.ready,
+      new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
     if (reg && reg.showNotification) {
-      reg.showNotification('Rest done 💪', opts);
+      reg.showNotification(title, opts);
     } else {
-      new Notification('Rest done 💪', opts);
+      new Notification(title, opts);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('[raedworkouts] rest notification failed', e);
+  }
 }
+// ---- Last resort ---------------------------------------------------------
+//
+// There was no window.onerror and no unhandledrejection handler in this file at
+// all. On a phone in a gym there is no console to open, so any thrown error —
+// a render that half-completed, a storage write that failed, a promise nobody
+// caught — left the app visibly fine and quietly broken, and he would only find
+// out when the workout was missing.
+//
+// This does not pretend to recover. It does two honest things: it tells him the
+// app hit a problem so he knows not to trust what is on screen, and it makes
+// sure the session that is still in memory gets pushed to the server, which is
+// the copy most likely to survive.
+let _lastErrorToastAt = 0;
+function reportFatal(source, err) {
+  try {
+    console.error('[raedworkouts]', source, err);
+    const now = Date.now();
+    // One message, not a cascade: a broken render can throw on every frame.
+    if (now - _lastErrorToastAt > 20000) {
+      _lastErrorToastAt = now;
+      toast(t('app_error'), 6000);
+    }
+    if (state?.active_session && settings?.user_id) {
+      syncDirty = true;
+      flushSync().catch(() => {});
+    }
+  } catch (_) { /* the handler itself must never throw */ }
+}
+window.addEventListener('error', (e) => reportFatal('uncaught error', e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => reportFatal('unhandled rejection', e.reason));
+
 window.addEventListener('DOMContentLoaded', init);

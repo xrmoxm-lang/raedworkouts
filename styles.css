@@ -2006,3 +2006,56 @@ body.session-active #page-home > .home-context { display: none; }
   color: var(--danger); background: none; border: 0;
 }
 .session-discard:active { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+/* ===== Touch targets ======================================================
+   Measured on a 390px viewport mid-session, not guessed. Every control below
+   was under the 44px minimum: the header button and the exercise gear at 38,
+   the session-progress days at 27 high, the runner's own action buttons at 40,
+   and «تجاهل الجلسة» at 32. In a gym, with one hand and a sweaty thumb, that is
+   the difference between a tap and a mis-tap.
+
+   Where the small size IS the design — the gear must not become a slab next to
+   the exercise name — the visual box is left exactly as it was and only the hit
+   area grows, through a transparent overlay centred on the control. Nothing
+   here changes how the app looks. */
+
+.header-btn,
+.ex-settings-btn,
+.session-discard,
+.sp-seg { position: relative; }
+
+.header-btn::before,
+.ex-settings-btn::before,
+.session-discard::before,
+.sp-seg::before {
+  content: '';
+  position: absolute;
+  /* 50% of the shortfall on each side, centred: 44px from a 38px box. */
+  inset: 50% auto auto 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* Invisible, and never on top of anything the user needs to see or press. */
+  background: none;
+  pointer-events: auto;
+}
+/* The overlay must not eat the sibling it overlaps on a tight row. */
+.sp-track { position: relative; z-index: 0; }
+/* Seven day segments across 390px measured 40px wide, so adjacent 44px hit
+   overlays stole each other's edges and each day was really 42px to the thumb.
+   Seven at 44 plus their gaps and the counter still fit the row, so the box
+   itself is widened rather than the overlay — the bars look identical and the
+   targets stop competing. */
+.sp-seg { min-width: 44px; }
+
+/* These are real buttons with real labels — grow the box itself. 44 is the
+   floor; the primary runner action stays visibly larger than the secondary. */
+.runner-bottom-actions .btn,
+.runner-nav .btn,
+.runner-rest,
+.runner-add-set,
+.runner-skip-exercise { min-height: 44px; }
+
+/* Was an inline style on an anonymous div. Same layout, now reachable by the
+   rule above and by anything else that needs to know what this row is. */
+.runner-nav { display: flex; gap: 8px; margin-top: 12px; }
