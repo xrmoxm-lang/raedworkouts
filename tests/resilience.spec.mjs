@@ -598,3 +598,43 @@ test('a deload session builds with reduced sets and no errors', async ({ page })
   expect(Math.max(...counts), 'no deload exercise may keep three working sets').toBeLessThanOrEqual(2);
   expect(pageErrors, 'a one-working-set exercise must not throw').toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// The programme states an effort for every set — Block B raises it, the week-12
+// deload lowers it — and `planned.rpe` was read NOWHERE in app.js. So none of it
+// reached him. Worst case: the deload became "one fewer set" while the source
+// (research/06 §7.4) prescribes the SAME weight with the effort taken off. A
+// deload trained at normal intensity is not a deload.
+test('the card states the effort the programme asks for, and says it differently in a deload', async ({ page }) => {
+  await boot(page);
+  await intoSession(page);
+
+  const normal = await page.evaluate(() =>
+    document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
+  expect(normal, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل/);
+  expect(normal, 'and it still explains what earns a load increase').toContain('ليرتفع الوزن');
+
+  // 44 completed sessions = week 12 = the deload block.
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.history = Array.from({ length: 44 }, (_, i) => ({
+      date: '2026-01-01', session_id: ['upper_a', 'lower_a', 'upper_b', 'lower_b'][i % 4],
+      started_at: '2026-01-01T09:00:00Z', ended_at: '2026-01-01T10:00:00Z', uid: `u${i}`,
+      exercises: {}, prs: [], stats: {},
+    }));
+    parsed.active_session = null;
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(1000);
+
+  const deload = await page.evaluate(() =>
+    document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
+  expect(deload, 'the deload must ask for less effort, in words').toContain('خفيف');
+  expect(deload, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
+});

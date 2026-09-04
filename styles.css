@@ -2078,3 +2078,8 @@ body.session-active #page-home > .home-context { display: none; }
 /* Was an inline style on an anonymous div. Same layout, now reachable by the
    rule above and by anything else that needs to know what this row is. */
 .runner-nav { display: flex; gap: 8px; margin-top: 12px; }
+
+/* The effort the programme asks for, beside the rep goal it belongs to.
+   Quieter than the rep target: the number is what he checks each row against,
+   the effort is the qualifier on it. */
+.reps-goal-effort { color: var(--text-muted); font-weight: 700; }

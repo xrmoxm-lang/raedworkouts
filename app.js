@@ -2223,6 +2223,32 @@ function estimateSessionMinutes(session) {
   return Math.max(10, Math.round((WARMUP_MINUTES + seconds / 60) / 5) * 5);
 }
 
+// The prescribed effort, in words rather than a number.
+//
+// Every programme row carries per-set RPE, Block B raises it, and the week-12
+// deload lowers it — and `planned.rpe` was read NOWHERE in this file. So Block
+// B's effort progression never reached him, and worse, the deload's effort cut
+// did not either: his deload week was "one fewer set" while the source
+// (research/06 §7.4) prescribes the SAME weight with the effort taken off. A
+// deload trained at normal intensity is not a deload.
+//
+// D16 replaced numeric RPE with coarse words on purpose, so this shows a word.
+// The bands are the standard reading of the scale: 6 leaves about four reps in
+// reserve, 7 about three, 8 about two, 9+ is one or none.
+function prescribedEffortKey(planned) {
+  const values = [planned?.rpe_set1, planned?.rpe_set2, planned?.rpe_set3]
+    .map(Number).filter(Number.isFinite);
+  // Fall back to the joined `rpe` string the programme row also carries.
+  const fromString = String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [];
+  const all = values.length ? values : fromString.map(Number).filter(Number.isFinite);
+  if (!all.length) return null;
+  const top = Math.max(...all);
+  if (top <= 6) return 'effort_target_easy';
+  if (top <= 7) return 'effort_target_moderate';
+  if (top <= 8) return 'effort_target_hard';
+  return 'effort_target_near_failure';
+}
+
 // ---- Session warm-up phase ---------------------------------
 function warmupTypeForSession(session) {
   // D12 is data-led: both Upper sessions use the merged push+pull warm-up;
@@ -4597,8 +4623,22 @@ function renderExerciseCard(ex_id, exState) {
   const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
   // Built here, appended after the sets: it is the target he checks each row
   // against, so it belongs beside the rows, not stacked on top of them.
+  const effortKey = prescribedEffortKey(planned);
+  // During a deload the goal is NOT to earn a load increase, so promising one
+  // next to «خفيف — بقصد» would contradict itself on the same line. The row
+  // carries the flag through from the deload overlay.
+  const goalText = planned.deload
+    ? tf('reps_goal_deload', { n: repTop })
+    : tf('reps_goal', { n: repTop });
   const repsGoalRow = repTop
-    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, tf('reps_goal', { n: repTop }))
+    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' },
+        goalText,
+        // The programme states an effort for these sets. Saying it turns the
+        // deload from "one fewer set" into the lighter week it is meant to be.
+        effortKey
+          ? h('span', { class: 'reps-goal-effort', 'data-prescribed-effort': 'true' },
+              ' · ', t(effortKey))
+          : null)
     : null;
 
   // A1/A2 run back to back. superset_group has been in data.js since the

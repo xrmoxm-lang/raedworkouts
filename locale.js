@@ -28,6 +28,19 @@ export const LOCALE = Object.freeze({
   // Shown in the weight box when there is no logged history to suggest from.
   calibrate: pair('calibrate', 'معايرة'),
   reps_goal: pair('Complete {n} on every set to earn a load increase', 'أكمل {n} في كل المجموعات ليرتفع الوزن'),
+  // The effort the PROGRAMME asks for, as a word. D16 replaced numeric RPE with
+  // coarse language, so these are bands, not numbers: 6 leaves about four reps
+  // in reserve, 7 three, 8 two, 9+ one or none.
+  // A deload is not chasing a load increase, so the goal line says what the week
+  // is actually for. Promising an increase beside «خفيف — بقصد» contradicts
+  // itself on one line.
+  reps_goal_deload: pair(
+    'Stop at {n} — this week is for moving well, not for adding load',
+    'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
+  effort_target_easy: pair('take it easy', 'خفيف — بقصد'),
+  effort_target_moderate: pair('moderate', 'متوسط'),
+  effort_target_hard: pair('hard', 'صعب'),
+  effort_target_near_failure: pair('close to failure', 'قريب من الفشل'),
   superset_with: pair('Superset — no rest before {name}', 'سوبرست — بلا راحة قبل {name}'),
   extra_set: pair('extra set', 'مجموعة زائدة'),
   // Appending is not swapping: it adds a movement at the END without replacing
