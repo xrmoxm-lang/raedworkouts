@@ -12,6 +12,19 @@
     "abdullah": {
       "display_name": "Abdullah",
       "experience": "beginner"
+    },
+    "raed-v16": {
+      "display_name": "Raed",
+      "experience": "detrained",
+      "bodyweight_kg": 82
+    },
+    "bassam-v16": {
+      "display_name": "Bassam",
+      "experience": "returning"
+    },
+    "abdullah-v16": {
+      "display_name": "Abdullah",
+      "experience": "beginner"
     }
   }
 }

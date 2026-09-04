@@ -1,0 +1,2 @@
+# Retrieval runs locally on the HP CPU. No API client belongs in this file.
+fastembed==0.8.0

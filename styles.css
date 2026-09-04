@@ -2,140 +2,102 @@
    Raedworkouts — styles.css  (v8 redesign)
    Mobile-first PWA. Light + dark via CSS variables.
    System font stack only (no webfonts) for fast load + offline.
-   Identity preserved: teal accent, 🏋️ mark, accent-color picker.
+   Identity: three adopted skins, with mode independent from skin.
+
+   Token-selector constraint: every :root token scope is deliberately an
+   ungrouped selector. scripts/lint-contrast.mjs does not expand comma-grouped
+   selectors, so do not combine token scopes into a selector list.
    ============================================================ */
 
-/* ===== Design tokens ====================================== */
+/* ===== Design tokens — حديد is the bare default ================= */
 :root {
-  /* Light theme — teal identity (Raed's pick) */
-  --bg: #f5f7f8;            /* page: cool near-white, not cream */
-  --bg-elev: #eaeef0;       /* recessed: inputs, chips, thumbs */
-  --bg-card: #ffffff;       /* elevated panels */
-  --border: #e2e7e9;
-  --border-strong: #ccd4d7;
-  --text: #0d1417;
-  --text-muted: #515c64;    /* ~6.5:1 on card, ~6:1 on bg */
-  --text-dim: #79838b;
-  --accent: #0f766e;        /* teal-700 */
-  --accent-strong: #0a574f; /* gradient end / pressed */
-  --accent-fg: #ffffff;
-  --accent-soft: #d3f0eb;
-  --accent-glow: rgba(15, 118, 110, 0.22);
-  --warning: #b45309;
-  --warning-soft: #fbe6cf;
-  --danger: #be123c;
-  --danger-soft: #fbdde4;
-  --good: #15803d;
-  --good-soft: #d4f0dc;
-
-  --shadow-sm: 0 1px 2px rgba(14, 30, 38, 0.06);
-  --shadow-md: 0 2px 6px rgba(14, 30, 38, 0.06), 0 6px 16px -8px rgba(14, 30, 38, 0.14);
-  --shadow-lg: 0 18px 40px -16px rgba(14, 30, 38, 0.28), 0 4px 12px -6px rgba(14, 30, 38, 0.12);
-  --shadow-accent: 0 8px 20px -8px var(--accent-glow);
-
-  --radius-lg: 20px;
-  --radius: 15px;
-  --radius-sm: 11px;
-  --radius-xs: 8px;
-  --tap: 46px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
-  --maxw: 720px;
-
-  /* Motion */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);          /* ease-out-expo-ish */
-  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-  --dur-fast: 130ms;
-  --dur: 200ms;
-  --dur-slow: 300ms;
-
-  /* Z-index scale */
-  --z-nav: 20;
-  --z-rest: 40;
-  --z-header: 50;
-  --z-modal-backdrop: 100;
-  --z-modal: 110;
-  --z-toast: 200;
-
-  color-scheme: light;
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --bg:#f7f1e8; --bg-card:#fff; --bg-elev:#f4ece0; --border:#e6dccd; --border-strong:#cbbcac;
+  --text:#1c1510; --text-muted:#75685a; --accent:#b8451a; --accent-label:#b8451a; --accent-strong:#973815; --accent-fg:#fff; --accent-soft:#eddcd2;
+  --warning:#823c07; --warning-soft:#f6e4d4; --danger:#d11442; --danger-soft:#f8d9e0; --good:#147a3a; --good-soft:#d9eadf;
+  --focus-ring:rgba(28,21,16,.20); --shadow-sm:0 1px 2px rgba(28,21,16,.08); --shadow-md:0 2px 6px rgba(28,21,16,.08),0 6px 16px -8px rgba(28,21,16,.18); --shadow-lg:0 18px 40px -16px rgba(28,21,16,.30),0 4px 12px -6px rgba(28,21,16,.14); --shadow-accent:0 8px 20px -8px rgba(28,21,16,.20);
+  --radius-lg:20px; --radius:15px; --radius-sm:11px; --radius-xs:8px; --tap:46px; --safe-bottom:env(safe-area-inset-bottom,0px); --safe-top:env(safe-area-inset-top,0px); --maxw:720px;
+  --ease-out:cubic-bezier(.16,1,.3,1); --ease-out-quart:cubic-bezier(.25,1,.5,1); --dur-fast:130ms; --dur:200ms; --dur-slow:300ms;
+  --z-nav:20; --z-rest:40; --z-header:50; --z-modal-backdrop:100; --z-modal:110; --z-toast:200;
+  color-scheme:light;
 }
-
-[data-theme="dark"] {
-  --bg: #0a0d10;
-  --bg-elev: #1b2228;       /* inputs/chips — filled, lighter than card */
-  --bg-card: #141a1f;       /* elevated panel */
-  --border: #262e35;
-  --border-strong: #353f47;
-  --text: #eef2f4;
-  --text-muted: #9aa4ad;    /* ~6:1 on card */
-  --text-dim: #6a747d;
-  --accent: #19c2b0;        /* teal-400, a touch brighter for dark */
-  --accent-strong: #0f8d7f;
-  --accent-fg: #032420;
-  --accent-soft: #11433d;
-  --accent-glow: rgba(25, 194, 176, 0.30);
-  --warning: #f59e0b;
-  --warning-soft: #3d2c0a;
-  --danger: #fb7185;
-  --danger-soft: #401320;
-  --good: #34d399;
-  --good-soft: #103a2a;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 8px 20px -10px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 24px 50px -18px rgba(0, 0, 0, 0.7), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
-  --shadow-accent: 0 10px 26px -10px var(--accent-glow);
-
-  color-scheme: dark;
-}
-
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0a0d10;
-    --bg-elev: #1b2228;
-    --bg-card: #141a1f;
-    --border: #262e35;
-    --border-strong: #353f47;
-    --text: #eef2f4;
-    --text-muted: #9aa4ad;
-    --text-dim: #6a747d;
-    --accent: #19c2b0;
-    --accent-strong: #0f8d7f;
-    --accent-fg: #032420;
-    --accent-soft: #11433d;
-    --accent-glow: rgba(25, 194, 176, 0.30);
-    --warning: #f59e0b;
-    --warning-soft: #3d2c0a;
-    --danger: #fb7185;
-    --danger-soft: #401320;
-    --good: #34d399;
-    --good-soft: #103a2a;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.45), 0 8px 20px -10px rgba(0, 0, 0, 0.6);
-    --shadow-lg: 0 24px 50px -18px rgba(0, 0, 0, 0.7), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
-    --shadow-accent: 0 10px 26px -10px var(--accent-glow);
-    color-scheme: dark;
+    --bg:#17130f; --bg-card:#211a14; --bg-elev:#2b211a; --border:#33281f; --border-strong:#4a3a2f;
+    --text:#f4ece3; --text-muted:#9d8773; --accent:#e8622d; --accent-label:#e8622d; --accent-strong:#ed855b; --accent-fg:#180d06; --accent-soft:#3b2920;
+    --warning:#f09a0a; --warning-soft:#352b1c; --danger:#fa4862; --danger-soft:#3a2025; --good:#229e71; --good-soft:#1a352b;
+    --focus-ring:rgba(0,0,0,.42); --shadow-sm:0 1px 2px rgba(0,0,0,.48); --shadow-md:0 2px 6px rgba(0,0,0,.46),0 8px 20px -10px rgba(0,0,0,.62); --shadow-lg:0 24px 50px -18px rgba(0,0,0,.72),0 6px 16px -8px rgba(0,0,0,.54); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.52);
+    color-scheme:dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg:#17130f; --bg-card:#211a14; --bg-elev:#2b211a; --border:#33281f; --border-strong:#4a3a2f;
+  --text:#f4ece3; --text-muted:#9d8773; --accent:#e8622d; --accent-label:#e8622d; --accent-strong:#ed855b; --accent-fg:#180d06; --accent-soft:#3b2920;
+  --warning:#f09a0a; --warning-soft:#352b1c; --danger:#fa4862; --danger-soft:#3a2025; --good:#229e71; --good-soft:#1a352b;
+  --focus-ring:rgba(0,0,0,.42); --shadow-sm:0 1px 2px rgba(0,0,0,.48); --shadow-md:0 2px 6px rgba(0,0,0,.46),0 8px 20px -10px rgba(0,0,0,.62); --shadow-lg:0 24px 50px -18px rgba(0,0,0,.72),0 6px 16px -8px rgba(0,0,0,.54); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.52);
+  color-scheme:dark;
+}
 
-/* ===== Accent color picker — overrides accent vars only ===== */
-:root[data-color="orange"] { --accent:#ea580c; --accent-strong:#b8430a; --accent-fg:#fff; --accent-soft:#fde4d3; --accent-glow:rgba(234,88,12,0.24); }
-:root[data-color="green"]  { --accent:#16a34a; --accent-strong:#107a38; --accent-fg:#fff; --accent-soft:#d6f1de; --accent-glow:rgba(22,163,74,0.24); }
-:root[data-color="red"]    { --accent:#dc2626; --accent-strong:#a81b1b; --accent-fg:#fff; --accent-soft:#fcdcdc; --accent-glow:rgba(220,38,38,0.24); }
-:root[data-color="amber"]  { --accent:#d97706; --accent-strong:#a85c05; --accent-fg:#fff; --accent-soft:#fbecca; --accent-glow:rgba(217,119,6,0.24); }
-[data-theme="dark"][data-color="orange"] { --accent:#ff7a45; --accent-strong:#cc5a2c; --accent-fg:#1f0c03; --accent-soft:#43200f; --accent-glow:rgba(255,122,69,0.3); }
-[data-theme="dark"][data-color="green"]  { --accent:#2bd46c; --accent-strong:#1d9a4e; --accent-fg:#04200d; --accent-soft:#123a1f; --accent-glow:rgba(43,212,108,0.3); }
-[data-theme="dark"][data-color="red"]    { --accent:#fb6868; --accent-strong:#cc4040; --accent-fg:#220404; --accent-soft:#401616; --accent-glow:rgba(251,104,104,0.3); }
-[data-theme="dark"][data-color="amber"]  { --accent:#fbb43c; --accent-strong:#cc8a1f; --accent-fg:#211400; --accent-soft:#42300a; --accent-glow:rgba(251,180,60,0.3); }
+/* ===== حديد ================================================ */
+:root[data-skin="hadid"] {
+  --bg:#f7f1e8; --bg-card:#fff; --bg-elev:#f4ece0; --border:#e6dccd; --border-strong:#cbbcac;
+  --text:#1c1510; --text-muted:#75685a; --accent:#b8451a; --accent-label:#b8451a; --accent-strong:#973815; --accent-fg:#fff; --accent-soft:#eddcd2;
+  --warning:#823c07; --warning-soft:#f6e4d4; --danger:#d11442; --danger-soft:#f8d9e0; --good:#147a3a; --good-soft:#d9eadf; --focus-ring:rgba(28,21,16,.20); --shadow-accent:0 8px 20px -8px rgba(28,21,16,.20); color-scheme:light;
+}
 @media (prefers-color-scheme: dark) {
-  :root[data-color="orange"]:not([data-theme="light"]) { --accent:#ff7a45; --accent-strong:#cc5a2c; --accent-fg:#1f0c03; --accent-soft:#43200f; --accent-glow:rgba(255,122,69,0.3); }
-  :root[data-color="green"]:not([data-theme="light"])  { --accent:#2bd46c; --accent-strong:#1d9a4e; --accent-fg:#04200d; --accent-soft:#123a1f; --accent-glow:rgba(43,212,108,0.3); }
-  :root[data-color="red"]:not([data-theme="light"])    { --accent:#fb6868; --accent-strong:#cc4040; --accent-fg:#220404; --accent-soft:#401616; --accent-glow:rgba(251,104,104,0.3); }
-  :root[data-color="amber"]:not([data-theme="light"])  { --accent:#fbb43c; --accent-strong:#cc8a1f; --accent-fg:#211400; --accent-soft:#42300a; --accent-glow:rgba(251,180,60,0.3); }
+  :root[data-skin="hadid"]:not([data-theme="light"]) {
+    --bg:#17130f; --bg-card:#211a14; --bg-elev:#2b211a; --border:#33281f; --border-strong:#4a3a2f;
+    --text:#f4ece3; --text-muted:#9d8773; --accent:#e8622d; --accent-label:#e8622d; --accent-strong:#ed855b; --accent-fg:#180d06; --accent-soft:#3b2920;
+    --warning:#f09a0a; --warning-soft:#352b1c; --danger:#fa4862; --danger-soft:#3a2025; --good:#229e71; --good-soft:#1a352b; --focus-ring:rgba(0,0,0,.42); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.52); color-scheme:dark;
+  }
+}
+:root[data-skin="hadid"][data-theme="dark"] {
+  --bg:#17130f; --bg-card:#211a14; --bg-elev:#2b211a; --border:#33281f; --border-strong:#4a3a2f;
+  --text:#f4ece3; --text-muted:#9d8773; --accent:#e8622d; --accent-label:#e8622d; --accent-strong:#ed855b; --accent-fg:#180d06; --accent-soft:#3b2920;
+  --warning:#f09a0a; --warning-soft:#352b1c; --danger:#fa4862; --danger-soft:#3a2025; --good:#229e71; --good-soft:#1a352b; --focus-ring:rgba(0,0,0,.42); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.52); color-scheme:dark;
+}
+
+/* ===== ورق ================================================= */
+:root[data-skin="waraq"] {
+  --bg:#faf7f1; --bg-card:#fff; --bg-elev:#f4efe6; --border:#e3dcd0; --border-strong:#c9c0b2;
+  --text:#191512; --text-muted:#736a60; --accent:#7c1f2e; --accent-label:#7c1f2e; --accent-strong:#5b1722; --accent-fg:#fff; --accent-soft:#efe0e2;
+  --warning:#ae5009; --warning-soft:#f7e5d4; --danger:#d41443; --danger-soft:#f9d9e0; --good:#147c3b; --good-soft:#d9ebe0; --focus-ring:rgba(25,21,18,.20); --shadow-accent:0 8px 20px -8px rgba(25,21,18,.20); color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="waraq"]:not([data-theme="light"]) {
+    --bg:#121110; --bg-card:#1b1a18; --bg-elev:#232120; --border:#2a2825; --border-strong:#423e39;
+    --text:#f2ece4; --text-muted:#9c968e; --accent:#743d4a; --accent-label:#b87887; --accent-strong:#582e38; --accent-fg:#fff; --accent-soft:#35262b;
+    --warning:#bf7b08; --warning-soft:#342b1d; --danger:#fa435d; --danger-soft:#3b2027; --good:#229c6f; --good-soft:#1a342a; --focus-ring:rgba(0,0,0,.44); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.54); color-scheme:dark;
+  }
+}
+:root[data-skin="waraq"][data-theme="dark"] {
+  --bg:#121110; --bg-card:#1b1a18; --bg-elev:#232120; --border:#2a2825; --border-strong:#423e39;
+  --text:#f2ece4; --text-muted:#9c968e; --accent:#743d4a; --accent-label:#b87887; --accent-strong:#582e38; --accent-fg:#fff; --accent-soft:#35262b;
+  --warning:#bf7b08; --warning-soft:#342b1d; --danger:#fa435d; --danger-soft:#3b2027; --good:#229c6f; --good-soft:#1a342a; --focus-ring:rgba(0,0,0,.44); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.54); color-scheme:dark;
+}
+
+/* ===== رخام ================================================ */
+:root[data-skin="rukham"] {
+  --bg:#eceeea; --bg-card:#fff; --bg-elev:#e5e8e3; --border:#d5d9d3; --border-strong:#b8bdb6;
+  --text:#191c19; --text-muted:#636862; --accent:#2f4858; --accent-label:#2f4858; --accent-strong:#233541; --accent-fg:#fff; --accent-soft:#dbe3e6;
+  --warning:#a64d08; --warning-soft:#f1dfd2; --danger:#ca1340; --danger-soft:#f5d7df; --good:#137638; --good-soft:#d7e8dc; --focus-ring:rgba(25,28,25,.20); --shadow-accent:0 8px 20px -8px rgba(25,28,25,.20); color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="rukham"]:not([data-theme="light"]) {
+    --bg:#121618; --bg-card:#1a2023; --bg-elev:#212a2e; --border:#283036; --border-strong:#3b474e;
+    --text:#e8eef1; --text-muted:#87949c; --accent:#a8b8c0; --accent-label:#a8b8c0; --accent-strong:#8ea3ad; --accent-fg:#101619; --accent-soft:#29343a;
+    --warning:#c98108; --warning-soft:#382e1b; --danger:#fa566e; --danger-soft:#3e222a; --good:#24a475; --good-soft:#1b382f; --focus-ring:rgba(0,0,0,.44); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.54); color-scheme:dark;
+  }
+}
+:root[data-skin="rukham"][data-theme="dark"] {
+  --bg:#121618; --bg-card:#1a2023; --bg-elev:#212a2e; --border:#283036; --border-strong:#3b474e;
+  --text:#e8eef1; --text-muted:#87949c; --accent:#a8b8c0; --accent-label:#a8b8c0; --accent-strong:#8ea3ad; --accent-fg:#101619; --accent-soft:#29343a;
+  --warning:#c98108; --warning-soft:#382e1b; --danger:#fa566e; --danger-soft:#3e222a; --good:#24a475; --good-soft:#1b382f; --focus-ring:rgba(0,0,0,.44); --shadow-accent:0 10px 26px -10px rgba(0,0,0,.54); color-scheme:dark;
 }
 
 /* ===== Base ============================================== */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.ltr-run { direction: ltr; unicode-bidi: isolate; }
 html, body {
   margin: 0; padding: 0;
   background: var(--bg); color: var(--text);
@@ -181,11 +143,8 @@ input, button, textarea, select { font-family: inherit; }
   font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
   display: flex; align-items: center; gap: 9px;
 }
-.app-title .dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-glow);
-}
+.brand-mark { width: 32px; height: 16px; color: var(--accent); flex: 0 0 auto; }
+.app-title.big .brand-mark { width: 44px; height: 22px; }
 .header-actions { display: flex; gap: 8px; align-items: center; }
 .header-btn, .theme-toggle {
   background: var(--bg-card); color: var(--text);
@@ -196,7 +155,10 @@ input, button, textarea, select { font-family: inherit; }
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast), border-color var(--dur-fast);
 }
-.theme-toggle { padding: 0 13px; height: 38px; font-weight: 600; }
+/* The theme control is now icon-only (Raed asked for the word to go), so it is
+   the same 38x38 square as the gym button beside it. One shape for both header
+   controls instead of a pill and a square sharing a row. */
+.theme-toggle { width: 38px; height: 38px; padding: 0; }
 .header-btn { width: 38px; height: 38px; padding: 0; font-size: 16px; line-height: 1; }
 .header-btn svg, .theme-toggle svg { width: 18px; height: 18px; display: block; flex-shrink: 0; }
 .header-btn:active, .theme-toggle:active { transform: scale(0.93); }
@@ -213,8 +175,116 @@ main { padding: 16px 16px 28px; }
 .page-header h1 { font-size: 25px; margin: 2px 0; letter-spacing: -0.025em; font-weight: 750; }
 .page-header .sub { color: var(--text-muted); font-size: 14px; }
 
+/* ===== Session runner — inset card; only the set list may scroll ===== */
+body.runner-mode {
+  /* The app body normally reserves tab-bar space and establishes document
+     height.  The runner owns the viewport instead, so take it out of that
+     flow; otherwise a descendant can add document scroll outside its zones. */
+  position: fixed; inset: 0;
+  width: 100%; max-width: none; margin: 0;
+  padding: 0;
+  min-height: 0;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+body.runner-mode > .app-header,
+body.runner-mode > .tab-bar { display: none; }
+body.runner-mode main { padding: 0; height: 100%; min-height: 0; }
+body.runner-mode .page-runner.active {
+  position: fixed; inset: 0; display: block; width: 100%; height: 100dvh; animation: none;
+}
+.runner-shell {
+  width: 100%; max-width: var(--maxw); height: 100dvh; margin: 0 auto;
+  display: grid; grid-template-rows: calc(52px + var(--safe-top)) minmax(0, 1fr) 52px calc(86px + var(--safe-bottom));
+  overflow: hidden; background: var(--bg); color: var(--text);
+}
+/* Warm-up has no secondary Rest/Add-set row: reserve that space for its
+   inset card and place its primary completion action in the actual thumb bar. */
+.runner-shell-warmup { grid-template-rows: calc(52px + var(--safe-top)) minmax(0, 1fr) calc(86px + var(--safe-bottom)); }
+.runner-topbar {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center;
+  padding: var(--safe-top) 16px 0; background: var(--bg);
+}
+.runner-icon-button {
+  width: 40px; height: 40px; border: 0; border-radius: 999px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--text); font: inherit; font-size: 20px;
+}
+.runner-icon-button:active { background: var(--accent-soft); }
+.runner-icon-button:last-child { justify-self: end; }
+.runner-active-status { color: var(--text-muted); font-size: 12px; font-weight: 750; text-align: center; }
+.runner-main { min-height: 0; overflow: hidden; padding: 12px 16px; display: flex; touch-action: pan-y; }
+.runner-card {
+  display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+  padding: 10px 12px 8px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-card); box-shadow: var(--shadow-md);
+}
+.runner-exercise-title { min-height: 56px; flex: 0 0 auto; user-select: none; }
+.runner-exercise-title h1 { margin: 0; font-size: 25px; line-height: 1.14; letter-spacing: -0.035em; font-weight: 780; }
+.runner-exercise-title p { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runner-overline { margin-bottom: 3px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.runner-video { height: 44px; flex: 0 0 auto; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); transition: height var(--dur) var(--ease-out); }
+.runner-video.expanded { height: 158px; }
+.runner-video-toggle { width: 100%; height: 42px; padding: 0 13px; border: 0; background: transparent; color: var(--text); cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; text-align: right; }
+.runner-chevron { float: left; color: var(--text-muted); font-size: 17px; }
+.runner-video-expanded { height: 114px; padding: 0 12px 10px; display: flex; align-items: center; }
+.runner-video-expanded .video-thumb { width: 176px; height: 100px; margin: 0; }
+.runner-set-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; min-height: 0; margin-top: 8px; }
+.runner-current-set-label { display: block; flex: 0 0 auto; margin-bottom: 5px; color: var(--accent-label); font-size: 10px; font-weight: 850; line-height: 16px; letter-spacing: .09em; }
+.runner-set-columns { display: grid; flex: 0 0 auto; grid-template-columns: 28px minmax(54px, 1fr) 21px minmax(48px, .8fr) 52px; gap: 6px; min-height: 15px; align-items: end; color: var(--text-muted); font-size: 9px; font-weight: 700; }
+.runner-set-columns span { overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.runner-set-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.runner-set-row { display: grid; grid-template-columns: 28px minmax(54px, 1fr) 21px minmax(48px, .8fr) 52px; gap: 6px; min-height: 52px; align-items: center; margin-top: 2px; border-radius: var(--radius-xs); }
+.runner-set-row.current { padding: 3px 5px; margin-right: -5px; margin-left: -5px; background: var(--accent-soft); }
+.runner-set-row.done { opacity: .58; }
+.runner-set-row.invalid { opacity: .78; }
+.runner-set-row.invalid .runner-set-check { border-color: var(--warning); color: var(--warning); }
+.runner-set-row.skipped { opacity: .52; }
+.runner-set-row.skipped .runner-set-check { border-color: var(--text-muted); color: var(--text-muted); }
+.runner-set-number { color: var(--text-muted); font-size: 12px; font-weight: 800; text-align: center; }
+.runner-set-row.current .runner-set-number { color: var(--accent); }
+.runner-set-row input { width: 100%; min-width: 0; height: 52px; padding: 4px 7px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 17px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.runner-set-row input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.runner-unit { color: var(--text-muted); font-size: 11px; font-weight: 750; direction: ltr; }
+.runner-set-check { width: 52px; height: 52px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); background: var(--bg-card); color: var(--text-muted); cursor: pointer; font-size: 22px; }
+.runner-set-row.done .runner-set-check { background: var(--good); border-color: var(--good); color: #fff; }
+.runner-effort { grid-column: 1 / -1; padding: 4px 0 1px; }
+.runner-effort .effort-picker { grid-template-columns: repeat(3, 1fr); }
+.runner-effort .effort-picker button { min-height: 31px; font-size: 11px; }
+.runner-cue { flex: 0 0 auto; min-height: 38px; margin: 0; padding: 5px 2px; overflow: hidden; color: var(--text-muted); font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.runner-last-time { flex: 0 0 auto; min-height: 34px; padding: 7px 9px; border-radius: var(--radius-xs); background: var(--bg-elev); color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runner-playlist-handoff { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 5px 7px; min-height: 36px; margin-top: 5px; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--bg-elev); }
+.runner-playlist-kicker { flex: 1 1 100%; color: var(--text-muted); font-size: 10px; font-weight: 700; line-height: 1.15; }
+.runner-playlist-links { display: flex; flex: 1 1 100%; gap: 6px; min-width: 0; }
+.runner-playlist-links a { min-width: 0; flex: 1 1 auto; padding: 5px 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 999px; color: var(--accent); font-size: 11px; font-weight: 800; text-align: center; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.runner-bottom-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px; }
+.runner-rest, .runner-add-set, .runner-skip-exercise { min-height: 40px; padding: 5px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; white-space: nowrap; }
+.runner-add-set { color: var(--accent); }
+.runner-skip-exercise { color: var(--text-muted); }
+.runner-rest:active, .runner-add-set:active, .runner-skip-exercise:active { background: var(--accent-soft); }
+.runner-bottom-bar { min-height: 0; padding: 8px 16px calc(10px + var(--safe-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; background: var(--bg); }
+.runner-log-button { min-height: 54px; font-size: 16px; }
+.runner-warmup { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; }
+.runner-warmup-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); }
+.runner-warmup-head { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 12px; }
+.runner-warmup-head strong { color: var(--text); }
+.runner-minute-picker { display: flex; gap: 7px; margin-top: 9px; }
+.runner-minute-picker button { flex: 1; min-height: 34px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+.runner-minute-picker button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.runner-drills { display: grid; gap: 5px; }
+.runner-drill { min-height: 34px; padding: 0 11px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.runner-drill.done { color: var(--good); border-color: var(--good); }
+.runner-drill:disabled { opacity: .45; }
+.runner-warmup-actions { display: flex; justify-content: flex-start; margin-top: auto; }
+.runner-warmup-actions .btn { min-height: 44px; }
+.runner-settings-sheet h3 { margin: 0 0 10px; }
+.runner-setting-row { display: flex; justify-content: space-between; align-items: center; min-height: 50px; border-top: 1px solid var(--border); font-size: 14px; font-weight: 700; }
+.runner-settings-sheet .btn.full { margin-top: 8px; }
+.runner-empty { margin: auto; color: var(--text-muted); text-align: center; }
+
 .section-label {
-  font-size: 12px; font-weight: 700; color: var(--text-dim);
+  font-size: 12px; font-weight: 700; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.08em;
   margin: 22px 2px 10px;
 }
@@ -243,6 +313,12 @@ main { padding: 16px 16px 28px; }
   margin-bottom: 14px;
   box-shadow: var(--shadow-sm);
 }
+/* A masthead rule on the TOP edge, not a side tab. Used on exactly two cards in
+   the whole app — today's session and a new PR — so it is a signature spent
+   twice, not scaffolding repeated on everything. The design linter reads any
+   3px accent bar as the side-tab tell; this one is a deliberate exception and
+   stays flagged rather than silenced, because silencing the rule for this file
+   would also hide a real side stripe later. */
 .today-banner::before {            /* thin accent top rule */
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
   background: var(--accent);
@@ -252,7 +328,7 @@ main { padding: 16px 16px 28px; }
   font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--accent); margin: 2px 0 7px;
 }
-.today-banner.rest .tb-kicker { color: var(--text-dim); }
+.today-banner.rest .tb-kicker { color: var(--text-muted); }
 .today-banner h2 { margin: 0 0 5px; font-size: 21px; letter-spacing: -0.02em; font-weight: 760; color: var(--text); }
 .today-banner p { margin: 0; color: var(--text-muted); font-size: 14.5px; line-height: 1.45; }
 .today-banner .tb-meta {
@@ -270,6 +346,11 @@ main { padding: 16px 16px 28px; }
   height: 9px; border-radius: 999px; background: var(--bg-elev);
   overflow: hidden; border: 1px solid var(--border);
 }
+/* width, deliberately, and the design linter will keep flagging it.
+   transform: scaleX() is the cheaper property, but it SCALES the gradient
+   instead of revealing more of it — the bar would change colour as it fills.
+   A progress bar getting wider is the one place width is the honest property,
+   and it animates once per completed set, not per frame. */
 .progress-fill {
   height: 100%; border-radius: 999px;
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 75%, var(--accent-strong)));
@@ -301,7 +382,7 @@ main { padding: 16px 16px 28px; }
   letter-spacing: -0.02em;
 }
 .stat-tile .stat-cap {
-  font-size: 10.5px; font-weight: 700; color: var(--text-dim);
+  font-size: 10.5px; font-weight: 700; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.07em;
   margin-top: 5px;
 }
@@ -350,7 +431,7 @@ main { padding: 16px 16px 28px; }
 .ex-status {
   width: 28px; height: 28px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px; color: var(--text-dim);
+  font-size: 15px; color: var(--text-muted);
   border-radius: 50%;
   transition: transform var(--dur) var(--ease-out), color var(--dur), background var(--dur);
 }
@@ -361,9 +442,8 @@ main { padding: 16px 16px 28px; }
 .ex.expanded .ex-body { display: block; animation: exReveal var(--dur) var(--ease-out); }
 @keyframes exReveal { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
 
-/* ===== Info rows — differentiated by ROLE (no side-stripe) ===
-   last-time = quiet data · today-target = the one highlight · cue = subtle tip */
-.cue, .last-time, .today-target, .warmup-block {
+/* ===== Info rows — differentiated by role (no side-stripe) === */
+.cue, .last-time, .warmup-block {
   position: relative;
   line-height: 1.45;
   border-radius: var(--radius-sm);
@@ -377,14 +457,6 @@ main { padding: 16px 16px 28px; }
   color: var(--text-muted); font-size: 12.5px;
 }
 .last-time strong { color: var(--text); font-weight: 650; }
-/* today's target → THE highlight */
-.today-target {
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  color: color-mix(in srgb, var(--accent) 58%, var(--text));
-  font-size: 13.5px; font-weight: 500;
-}
-.today-target strong { color: color-mix(in srgb, var(--accent) 80%, var(--text)); font-weight: 700; }
 /* cue → subtle tip */
 .cue {
   background: var(--bg-elev);
@@ -394,7 +466,8 @@ main { padding: 16px 16px 28px; }
 .cue strong { color: var(--text); font-weight: 650; }
 /* warmup → warning-tinted */
 .warmup-block {
-  background: var(--warning-soft); border: 1px solid transparent;
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, transparent);
   color: color-mix(in srgb, var(--warning) 62%, var(--text)); font-size: 13px;
 }
 .warmup-block strong { color: var(--warning); font-weight: 650; }
@@ -402,18 +475,25 @@ main { padding: 16px 16px 28px; }
 /* ===== Set grid ========================================== */
 .set-grid-headers, .set-grid {
   display: grid;
-  grid-template-columns: 30px 1fr 1fr 58px 46px;
+  grid-template-columns: 30px minmax(72px, 1fr) minmax(64px, 0.8fr) 48px;
   gap: 8px;
 }
 .set-grid-headers {
-  margin: 4px 0 6px;
-  font-size: 10px; color: var(--text-dim);
+  /* 12px top, absorbing the empty spacer div that used to be appended above it
+     in app.js. One rule owning the gap instead of a element pretending to be a
+     margin. */
+  margin: 12px 0 6px;
+  font-size: 10px; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
   text-align: center;
 }
+.set-current-label {
+  color: var(--accent-label); font-size: 10px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 5px;
+}
 .set-grid { align-items: center; margin-bottom: 7px; transition: opacity var(--dur); }
 .set-grid .set-num {
-  font-weight: 700; color: var(--text-dim);
+  font-weight: 700; color: var(--text-muted);
   text-align: center; font-size: 13px; font-variant-numeric: tabular-nums;
 }
 .set-grid input {
@@ -430,12 +510,18 @@ main { padding: 16px 16px 28px; }
 }
 .set-grid input::-webkit-outer-spin-button,
 .set-grid input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.set-grid input::placeholder { color: var(--text-dim); font-weight: 500; }
+.set-grid input::placeholder { color: var(--text-muted); font-weight: 500; }
+/* `outline: none` here overrides the global :where() focus ring — zero
+   specificity loses to anything — and replaced it with a --focus-ring glow.
+   That token is rgba(0,0,0,.42) in all three dark skins: a BLACK halo on a dark
+   ground, i.e. no focus indicator at all on the screen he actually works on.
+   The ring is now drawn from the accent, so it is visible on both grounds and
+   speaks the same focus language as the rest of the app. */
 .set-grid input:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--bg-card);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 /* completed set row → tints green (stays editable) */
 .set-grid.done input {
@@ -444,23 +530,114 @@ main { padding: 16px 16px 28px; }
   color: color-mix(in srgb, var(--good) 72%, var(--text));
 }
 .set-grid.done .set-num { color: var(--good); }
+/* The "set done" control. Raed rejected the circle I shipped ("الدائرة نفسها مو
+   زينة") and said the square before it was excellent — so this is a square
+   again, rebuilt rather than reverted: crisper corner radius, a real filled
+   state, and a press that reads. Tapped ~35 times a session, one-handed,
+   standing at a machine, so the whole 48px box is the target. */
 .set-check {
   width: var(--tap); height: var(--tap);
   border: 2px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: 11px;
+  background: var(--bg-card);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 19px; line-height: 1;
-  color: var(--text-dim);
-  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+  cursor: pointer; font-size: 23px; font-weight: 800; line-height: 1;
+  color: transparent;
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast),
+              border-color var(--dur-fast), color var(--dur-fast);
 }
+@media (hover: hover) {
+  .set-check:hover { border-color: var(--accent); }
+}
+
+/* A ramp set is a warm-up, not a result. It stays fully legible and tappable —
+   the row is still real work — but it must not compete with the sets that
+   count. The old treatment faded the entire row with an inline opacity, which
+   dimmed the number and the inputs equally and made the ramp look disabled. */
+.set-grid.warm .set-check { border-width: 2px; border-color: var(--border); }
+.set-grid.warm .set-num { font-weight: 600; opacity: 0.75; font-size: 0.92em; }
+/* Not `background: transparent` — tried it, and stripping the fill turned the
+   ramp inputs into outlined boxes that stood out MORE than the filled working
+   rows. The de-emphasis has to come from the number and the ring, not from
+   removing the fill that groups the row together. */
+.set-grid.warm input { opacity: 0.82; }
 .set-check:active { transform: scale(0.9); }
+/* A circle inside the square — Raed asked for this shape back by name:
+   "المربع الصح، كان فيه مربع جواه دائرة، رجّعه". It reads better than either
+   half alone: the square is the 48px target his thumb aims at while standing at
+   a machine, and the ring inside is the state, small enough that filling it is
+   unmistakable at a glance down a column of eight rows. The empty square he has
+   now gives the eye nothing to check against until it is filled. */
+.set-check::before {
+  content: ''; display: block;
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  transition: background var(--dur-fast), border-color var(--dur-fast),
+              transform var(--dur-fast) var(--ease-out);
+}
+.set-grid.warm .set-check::before { border-color: var(--border); }
+@media (hover: hover) {
+  .set-check:hover::before { border-color: var(--accent); }
+}
 .set-check.checked {
   background: var(--accent); color: var(--accent-fg);
   border-color: var(--accent);
   box-shadow: var(--shadow-accent);
   animation: checkPop var(--dur) var(--ease-out);
 }
+/* Done and skipped already draw their own glyph — ✓ and ↷ — so the ring stands
+   down rather than sitting behind them. The ring IS the resting state, which is
+   the one he looks at eight times an exercise deciding what is left. */
+.set-check.checked::before,
+.set-check.skipped::before { display: none; }
+
+/* A set row fits a narrow phone without horizontal scrolling. A history-based
+   load is a placeholder, not a fabricated prefilled prescription. */
+.set-grid, .set-grid-headers { max-width: 100%; min-width: 0; }
+.set-grid input { min-width: 0; font-size: max(16px, 1em); }
+.set-check { touch-action: manipulation; }
+.set-grid.skipped { opacity: 0.64; }
+.set-grid.skipped .set-check { color: var(--text-muted); border-style: dashed; }
+.final-effort-row {
+  display: grid; grid-template-columns: 1fr; gap: 7px;
+  margin: 3px 0 12px; padding: 10px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-muted); font-weight: 650;
+}
+.effort-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.effort-picker button {
+  min-height: 46px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--text); font: inherit; font-weight: 700;
+  cursor: pointer; touch-action: manipulation;
+  /* Face over word. 46px is the one-thumb target and holds both without growing. */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+}
+/* Emoji carry their own colour, so they must not inherit .active's accent-fg. */
+.effort-picker .effort-emoji { font-size: 17px; line-height: 1; }
+.effort-picker .effort-word { font-size: 11px; font-weight: 700; }
+.effort-picker button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
+/* General warm-up is a real, ordered session phase. */
+.warmup-phase {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 52%, var(--border));
+}
+.phase-kicker { color: var(--warning); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.warmup-phase h3 { margin: 6px 0; }
+.warmup-step { display: grid; gap: 9px; padding: 13px 0; border-top: 1px solid var(--border); }
+.warmup-minute-picker { display: flex; flex-wrap: wrap; gap: 7px; }
+/* One drill per line now that each row carries its own clip; a wrapping row
+   would put two drills side by side and break the pairing again. */
+.warmup-drill-list { display: flex; flex-direction: column; gap: 7px; }
+.warmup-drill {
+  width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center;
+  padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  touch-action: manipulation;
+}
+.warmup-drill.done { border-color: var(--good); color: var(--good); }
+.warmup-drill:disabled { opacity: .45; cursor: not-allowed; }
 @keyframes checkPop { 0% { transform: scale(0.82); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
 
 /* ===== RPE picker ======================================== */
@@ -534,7 +711,337 @@ main { padding: 16px 16px 28px; }
   background: var(--accent); color: var(--accent-fg);
 }
 
+/* "Discard session" sits immediately under "Finish and save" at the same full
+   width. Both are reachable by the same thumb, mid-session, on a wet phone, and
+   one of them throws the workout away. A confirm() catches the slip, but the
+   layout should not invite it: give the destructive action real separation so
+   it is a deliberate reach rather than the next thing down. */
+.btn.danger.ghost.full { margin-top: 22px; }
+
+/* Segmented control for the light/dark mode in Settings. One shape, three
+   states, current one filled — the standard affordance, so it needs no
+   explaining. */
+/* The effort picker announcing itself on the second-to-last set. A quiet ring,
+   not a colour change — it is a prompt, not an error. */
+.effort-trigger.prompting { border-color: var(--accent); color: var(--accent); }
+.effort-strip.prompting { animation: effortIn var(--dur) var(--ease-out); }
+@keyframes effortIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .effort-strip.prompting { animation: none; }
+}
+
+/* A warm-up drill and its clip on one row: tick on one side, thumbnail on the
+   other, two separate targets so watching never marks the drill done. */
+.warmup-drill-row { display: flex; align-items: stretch; gap: 8px; }
+.warmup-drill-row .warmup-drill {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
+  text-align: start;
+}
+/* The movement name takes the slack and wraps inside its own cell; the rep
+   count and the tick keep fixed cells. Inline siblings let a long English name
+   push the count onto its own line, which in RTL stranded "10 ·" above the
+   name it belonged to. */
+.warmup-drill .drill-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.warmup-drill .drill-reps { flex: 0 0 auto; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.warmup-drill .drill-tick { flex: 0 0 auto; font-size: 17px; }
+.warmup-drill-clips { display: flex; gap: 6px; flex: 0 0 auto; align-items: stretch; }
+/* Same specificity as `.video-thumb.regular { width: 104px }` further down the
+   file, so that rule was winning on order and the 104px thumb squeezed the
+   movement name onto two lines. The row's own class settles it. */
+.warmup-drill-row .video-thumb.drill-clip {
+  width: 66px; height: auto; align-self: stretch;
+  border-radius: var(--radius-sm);
+}
+.video-thumb.drill-clip::after { font-size: 14px; }
+
+/* The session-plan rows carry English exercise names, so they read
+   left-to-right: thumbnail first, then "1. Chest Press Machine". Scoped to
+   .plan-row so the live session card keeps the RTL orientation of the screen
+   Raed actually logs sets on. The Arabic muscle tag inside stays isolated and
+   renders correctly either way. */
+.plan-row .ex-head { direction: ltr; }
+.plan-row .ex-info { text-align: left; }
+/* .meta is a flex row, so text-align does nothing to it — the children are laid
+   out by the flex axis. It needs justify-content, and direction:rtl so the
+   Arabic muscle tag still reads correctly inside an LTR row. */
+.plan-row .ex-info .meta { direction: rtl; justify-content: flex-end; }
+
+/* ===== Per-exercise settings sheet =======================================
+   Three sections in the order the content actually has: what the movement is
+   performed on (configuration), what he has lifted on it (evidence), and what
+   he can do right now (verbs). The table is the signature — the only place in
+   the app showing one movement across different machines. */
+
+.ex-settings-btn {
+  appearance: none; border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-muted); line-height: 1;
+  width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast), color var(--dur-fast);
+}
+.ex-settings-btn:active { transform: scale(0.93); }
+/* The button holds an emoji again, so it needs a size and a line box rather
+   than an SVG sizing rule. Emoji ignore `color`, which is why .done below sets
+   the border alone — its glyph carries its own colour. */
+.ex-settings-btn { font-size: 18px; }
+.ex-settings-btn svg { width: 18px; height: 18px; display: block; }
+.ex-settings-btn.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+@media (hover: hover) { .ex-settings-btn:hover { border-color: var(--accent); color: var(--accent); } }
+
+/* The coach's session context. A band, not a card: it is a statement about
+   where he is, and it should not compete with the question box below it. */
+.coach-context {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px;
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px;
+}
+.coach-context-text { font-size: 13px; font-weight: 700; color: var(--text); }
+.coach-context-label { color: var(--text-muted); font-weight: 600; }
+.coach-context-toggle {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--text-muted); cursor: pointer; min-height: 32px;
+}
+.coach-context-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* Adding a clip. The thumbnail is the point: it is proof the link resolves to a
+   real video before he commits it, which is the cheapest check there is against
+   a mistyped id becoming a permanent dead tile. */
+.vid-preview { display: flex; align-items: center; gap: 10px; margin-top: 10px; min-height: 0; }
+.vid-preview img { width: 104px; height: 59px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.vid-existing { display: flex; flex-direction: column; gap: 8px; }
+.vid-row { display: flex; align-items: center; gap: 10px; }
+.vid-row-thumb { width: 74px; height: 42px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); flex: 0 0 auto; }
+.vid-row-link { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.danger-text { color: var(--danger); }
+
+/* Session progress. One row, because vertical space here is what pushes the set
+   grid off the screen — but each segment is a real tap target now (24px of
+   padded height around a 7px bar) instead of a 6px sliver, and the count is a
+   number rather than something to count. */
+.sess-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sp-track { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.sp-seg {
+  appearance: none; border: 0; padding: 8px 0; background: none;
+  flex: 1 1 auto; min-width: 0; cursor: pointer; position: relative;
+}
+/* height, deliberately. The current segment grows 7px to 11px; scaleY() would
+   stretch its 999px radius into an oval. Four pixels on a handful of pills,
+   once per set — the linter is right about the property and wrong about the
+   cost here. */
+.sp-seg::after {
+  content: ''; display: block; height: 7px; border-radius: 999px;
+  background: var(--border);
+  transition: background var(--dur-fast), height var(--dur-fast) var(--ease-out);
+}
+.sp-seg.done::after { background: var(--good); }
+.sp-seg.current::after { background: var(--accent); height: 11px; }
+.sp-seg.current { flex-grow: 1.6; }
+.sp-count {
+  flex: 0 0 auto; font-size: 12px; font-weight: 750;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+
+/* The running-session header, one centred line. */
+.today-banner.running-line {
+  display: flex; align-items: baseline; justify-content: center;
+  flex-wrap: wrap; gap: 8px; text-align: center;
+}
+.today-banner.running-line .rl-name { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.today-banner.running-line .rl-dot { opacity: 0.4; }
+.today-banner.running-line .rl-since { font-size: 12.5px; color: var(--text-muted); }
+
+/* Ramp rows keep a small mark where the number used to be: "this is a warm-up"
+   is the only thing that distinguishes them from a working set. */
+.set-num.warm-mark { font-size: 10px; font-weight: 800; letter-spacing: .04em; opacity: .6; }
+
+/* The inline "?" — the size of a copyright mark, opening one plain sentence. */
+.explain-wrap { position: relative; display: inline-flex; align-items: center; }
+.explain-mark {
+  appearance: none; border: 1px solid var(--border-strong); background: var(--bg-card);
+  color: var(--text-muted); width: 18px; height: 18px; border-radius: 50%;
+  font-size: 11px; font-weight: 800; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-inline-end: 6px; flex: 0 0 auto; padding: 0;
+}
+@media (hover: hover) { .explain-mark:hover { border-color: var(--accent); color: var(--accent); } }
+.explain-bubble {
+  display: block; margin-top: 6px; padding: 9px 11px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.5;
+  color: var(--text);
+}
+.explain-bubble[hidden] { display: none; }
+
+/* In-app confirm. Native confirm() is not dependable in an installed PWA, and a
+   destructive action must not depend on a dialog the shell may suppress. */
+.confirm-body { font-size: 13.5px; line-height: 1.55; color: var(--text-muted); margin: 6px 0 4px; }
+.confirm-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.confirm-actions .btn { min-height: 48px; }
+
+/* A clip borrowed from the same movement on other equipment. Visibly borrowed:
+   dimmer, captioned with where it came from, and never sitting in the same row
+   as the exercise's own tiles. */
+.related-clips { margin-top: 10px; }
+.related-clips-note { color: var(--text-muted); margin-bottom: 8px; }
+.related-clip-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 104px; }
+.related-clip-from { font-size: 10.5px; color: var(--text-muted); overflow-wrap: anywhere; line-height: 1.3; }
+.video-thumb.related { opacity: 0.82; border-style: dashed; }
+
+.xs-head { margin: 0 0 4px; }
+.xs-head h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.xs-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+
+.xs-section { padding: 16px 0; border-top: 1px solid var(--border); }
+.xs-section:first-of-type { border-top: 0; padding-top: 10px; }
+/* The section label is the quietest thing on screen on purpose: it names the
+   group, then gets out of the way of the controls it names. */
+.xs-label {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
+}
+.xs-field select { min-height: 46px; font-size: 14px; font-weight: 600; }
+.xs-add-device { display: flex; gap: 8px; margin-top: 10px; }
+.xs-add-device .search-input { flex: 1 1 auto; min-width: 0; }
+.xs-add-device .btn { flex: 0 0 auto; }
+
+.device-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+  appearance: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 8px 12px; min-height: 40px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text);
+}
+.chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* A fact about the equipment, not an action — so a checkbox, not a button row. */
+.xs-toggle {
+  display: flex; align-items: center; gap: 10px; margin-top: 14px;
+  font-size: 13px; font-weight: 600; cursor: pointer; min-height: 44px;
+}
+.xs-toggle input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--accent); }
+
+/* The log. Tabular numerals so the loads line up as a column without a grid,
+   and the load is the only thing set in a heavy weight — it is what he opens
+   the sheet to read. */
+/* border-collapse with zero cell padding let the columns touch: the load ran
+   straight into the set count and three headers read as one word. Columns need
+   both a gap and a declared share of the width — otherwise the browser sizes
+   them from content and the longest date takes whatever it wants. */
+.xs-log { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+.xs-log th, .xs-log td { padding-inline-end: 10px; }
+.xs-log th:last-child, .xs-log td:last-child { padding-inline-end: 0; }
+.xs-log th {
+  text-align: start; font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-muted);
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.xs-log td { padding-top: 11px; padding-bottom: 11px; border-bottom: 1px solid var(--border); vertical-align: baseline; }
+.xs-log tr:last-child td { border-bottom: 0; }
+.xs-log th:nth-child(1), .xs-log-date   { width: 22%; }
+.xs-log th:nth-child(2), .xs-log-load   { width: 30%; }
+.xs-log th:nth-child(3), .xs-log-sets   { width: 12%; }
+.xs-log th:nth-child(4), .xs-log-device { width: 36%; }
+.xs-log th:nth-child(4) { text-align: end; }
+.xs-log-date { color: var(--text-muted); white-space: nowrap; }
+.xs-log-load { font-weight: 800; font-size: 14.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.xs-log-sets { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.xs-log-device { color: var(--text-muted); text-align: end; overflow-wrap: anywhere; }
+.xs-empty { font-size: 12.5px; color: var(--text-muted); }
+
+/* One grid, one box, six actions. The sheet used to stack three different
+   shapes — a full-width primary slab, a 2x2 of outlines, and a bare red text
+   link — so the eye had to re-learn what a control looked like twice on the way
+   down. Everything is the same box now; only the fill carries the meaning. */
+.xs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.xs-action {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; min-height: 46px; padding: 8px 10px;
+  font-size: 12.5px; font-weight: 650; line-height: 1.2; text-align: center;
+}
+/* Spans both columns: the two actions that are not peers of the other four —
+   the one he reaches for most, and the one that ends the exercise. */
+.xs-action.xs-wide { grid-column: 1 / -1; }
+/* The rest value, under its verb. Inline it made the button look like a readout
+   that happened to be tappable. */
+.xs-action-sub {
+  font-size: 11px; font-weight: 700; opacity: 0.72;
+  font-variant-numeric: tabular-nums; direction: ltr;
+}
+.xs-action.is-static { opacity: 0.7; cursor: default; }
+/* Tinted, not shouted. Skipping is something he sometimes wants; a red text
+   link made it the loudest thing in the sheet while also being the least
+   button-shaped. */
+.xs-skip {
+  margin-top: 4px;
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+  color: var(--danger);
+}
+.xs-skip:active { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.xs-done { margin-top: 18px; min-height: 48px; }
+
+
+
+.sheet-head { margin-bottom: 4px; }
+.sheet-head h3 { margin: 0 0 2px; }
+.sheet-section { padding: 14px 0; border-top: 1px solid var(--border); }
+.sheet-section:first-of-type { border-top: 0; }
+.sheet-label { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.seg-wrap { flex-wrap: wrap; border-radius: 10px; }
+.device-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  appearance: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 8px 12px; min-height: 40px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text);
+}
+.chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.seg-btn {
+  appearance: none; border: 0; background: var(--bg-card); color: var(--text-muted);
+  font: inherit; font-size: 12.5px; font-weight: 650;
+  padding: 9px 14px; min-height: 40px; cursor: pointer;
+  border-inline-end: 1px solid var(--border);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.seg-btn:last-child { border-inline-end: 0; }
+.seg-btn.active { background: var(--accent); color: var(--accent-fg); }
+@media (hover: hover) { .seg-btn:not(.active):hover { background: var(--bg-elev); color: var(--text); } }
+
 .ex-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+/* These are tapped mid-set, one-handed, standing at a machine. The shared
+   .btn.tiny is 32px high, which is fine in a settings panel and too small here;
+   44px is the floor for a thumb and this context deserves the floor, not the
+   shared default. Scoped to the session card so quiet tiny buttons elsewhere
+   keep their density. */
+.ex-actions .btn.tiny { min-height: 44px; padding: 8px 14px; font-size: 12.5px; }
+/* The rest timer is the one control here that runs every single set. It read
+   identically to "+ exercise", which he taps almost never. Frequency should be
+   visible. */
+.ex-actions [data-rest-button] {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  /* NOT var(--accent) on this tint: measured 1.71:1 in ورق dark and ~4.05:1 in
+     both حديد themes — three of six skins below the 4.5 floor, and the contrast
+     linter passed the whole time because it does not know this pairing. The
+     tint carries the emphasis; the ink stays readable. */
+  color: var(--text);
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .ex-actions [data-rest-button]:hover { border-color: var(--accent); }
+}
+.scope-picker { display: flex; gap: 7px; flex-wrap: wrap; margin: 12px 0; }
+.substitution-status { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin: 10px 0; }
+.substitution-status.clean { border-color: color-mix(in srgb, var(--good) 55%, var(--border)); color: var(--good); }
+.substitution-status.warn {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 72%, var(--border));
+  color: var(--warning);
+}
+.substitution-status.block-with-override { border-color: color-mix(in srgb, var(--danger) 60%, var(--border)); color: var(--danger); }
+.substitution-status .tiny { margin-top: 4px; color: var(--text-muted); }
 
 /* ===== Video thumbs ====================================== */
 .video-row {
@@ -543,8 +1050,18 @@ main { padding: 16px 16px 28px; }
   -webkit-overflow-scrolling: touch; padding-bottom: 2px;
 }
 .video-row::-webkit-scrollbar { display: none; }
+/* Height cut from 96px to 64px on 2026-09-04 (96 -> 76 -> 64; he left the final
+   figure to me). Measured, because Raed said the
+   box on the exercise card is «كبيرة مرة» and the previous session could not
+   work out which box he meant: the clip strip is 98px tall plus a 10px margin,
+   and 223px of the card sits above the first set row on a 390px screen. The
+   WIDTH is untouched, so the same three-and-a-peek still fit and the "every
+   clip the same size" rule he asked for is intact. 104x64 is 1.63:1, near
+   enough to 16:9 that a normal YouTube thumbnail is barely cropped at all —
+   the old 104x96 box was cutting the sides off every one of them. The play
+   glyph and the JN chip both still have room; below about 56px they would not. */
 .video-thumb {
-  position: relative; width: 170px; height: 96px;
+  position: relative; width: 170px; height: 64px;
   border-radius: var(--radius-sm);
   background-color: var(--bg-elev);
   border: 1px solid var(--border);
@@ -553,8 +1070,14 @@ main { padding: 16px 16px 28px; }
   text-decoration: none;
   display: block;
 }
-.video-thumb.shorts { width: 54px; }
-.video-thumb.regular { width: 170px; }
+/* One size for every clip. Width used to depend on whether the URL was a
+   /shorts/ link (54px) or a watch?v= link (170px), so a Jeff Nippard demo
+   rendered three times wider than Mohannad's beside it -- Raed: "حق جيفري بارد
+   لا يكون كذا بهالكبر". Provenance is not a reason to be bigger; the JN chip
+   already says which one it is. object-fit: cover on the img handles the 9:16
+   vs 16:9 difference without changing the box. */
+.video-thumb.shorts,
+.video-thumb.regular { width: 104px; }
 .video-thumb img {
   position: absolute; inset: 0; z-index: 0;
   width: 100%; height: 100%; object-fit: cover; display: block;
@@ -623,8 +1146,8 @@ main { padding: 16px 16px 28px; }
   font-size: 15px; color: var(--text);
   transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
-.search-input::placeholder { color: var(--text-dim); }
-.search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.search-input::placeholder { color: var(--text-muted); }
+.search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent); }
 .lib-grid { display: grid; gap: 10px; }
 
 .lib-group {
@@ -641,7 +1164,7 @@ main { padding: 16px 16px 28px; }
 .lib-group > summary::-webkit-details-marker { display: none; }
 .lib-group > summary::before {
   content: '▸'; display: inline-block; transition: transform var(--dur) var(--ease-out);
-  width: 14px; color: var(--text-dim);
+  width: 14px; color: var(--text-muted);
 }
 .lib-group[open] > summary::before { transform: rotate(90deg); }
 .lib-group-summary .icon { font-size: 18px; }
@@ -729,7 +1252,7 @@ main { padding: 16px 16px 28px; }
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; padding: 7px 0; cursor: pointer;
-  color: var(--text-dim); font-size: 10px; user-select: none;
+  color: var(--text-muted); font-size: 10px; user-select: none;
   background: none; border: none; min-height: 54px;
   transition: color var(--dur) var(--ease-out);
 }
@@ -743,7 +1266,7 @@ main { padding: 16px 16px 28px; }
   width: 26px; height: 3px; border-radius: 0 0 3px 3px;
   background: var(--accent);
   transform: translateX(-50%);
-  box-shadow: 0 0 10px var(--accent-glow);
+  box-shadow: 0 0 10px var(--focus-ring);
 }
 
 /* ===== Settings ========================================== */
@@ -760,7 +1283,7 @@ main { padding: 16px 16px 28px; }
   background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 8px 12px; color: var(--text); font-size: 14px;
 }
-.setting-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.setting-row input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent); }
 
 .sync-status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .sync-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -779,15 +1302,18 @@ main { padding: 16px 16px 28px; }
 .platform-picker .opt.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .platform-picker .opt .icon { font-size: 19px; display: block; margin-bottom: 3px; }
 
-.color-picker { display: flex; gap: 10px; align-items: center; }
-.color-swatch {
+.skin-picker { display: flex; gap: 10px; align-items: center; }
+.skin-swatch {
   width: 34px; height: 34px; border-radius: 50%;
   border: 2px solid var(--border-strong); cursor: pointer; padding: 0;
   background-clip: padding-box;
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast);
 }
-.color-swatch:active { transform: scale(0.9); }
-.color-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+.skin-swatch:active { transform: scale(0.9); }
+.skin-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+.block-skin-config { display: grid; gap: 8px; padding: 12px 0 2px; }
+.block-skin-select { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, .55fr); gap: 10px; align-items: center; font-size: 13px; font-weight: 650; }
+.block-skin-select select { min-height: 40px; }
 
 .advanced-settings { margin-top: 26px; border-top: 1px dashed var(--border-strong); padding-top: 16px; }
 .advanced-settings summary { cursor: pointer; padding: 8px 0; font-size: 13px; color: var(--text-muted); user-select: none; list-style: none; font-weight: 600; }
@@ -795,18 +1321,10 @@ main { padding: 16px 16px 28px; }
 .advanced-settings[open] summary::before { content: '▾ '; }
 @media (hover: hover) { .advanced-settings summary:hover { color: var(--text); } }
 
-.notes-input {
-  width: 100%; min-height: 64px;
-  background: var(--bg-elev); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 10px 12px; font-size: 14px; line-height: 1.5; resize: vertical;
-}
-.notes-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-
 /* ===== Onboarding / Help ================================= */
 .onboard h2 { font-size: 18px; margin: 18px 0 5px; letter-spacing: -0.01em; }
 .onboard p { color: var(--text-muted); font-size: 14px; }
-.onboard ol, .onboard ul { color: var(--text-muted); font-size: 14px; padding-left: 20px; }
+.onboard ol, .onboard ul { color: var(--text-muted); font-size: 14px; padding-inline-start: 20px; }
 .onboard li { margin: 7px 0; }
 .onboard code { background: var(--bg-elev); padding: 2px 6px; border-radius: 5px; font-size: 13px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
@@ -820,6 +1338,8 @@ main { padding: 16px 16px 28px; }
 .session-end .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 8px; box-shadow: var(--shadow-sm); }
 .session-end .stat .num { font-size: 24px; font-weight: 770; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .session-end .stat .lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight: 600; }
+/* The second and last use of the top masthead rule — see .today-banner::before
+   for why it stays flagged rather than silenced. */
 .session-end .pr-card {
   position: relative; overflow: hidden;
   background: var(--bg-card); border: 1px solid var(--border);
@@ -905,7 +1425,7 @@ main { padding: 16px 16px 28px; }
   border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); width: 100%;
 }
 .modal input:focus,
-.modal select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.modal select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent); }
 
 /* ===== Toast ============================================= */
 .toast {
@@ -919,6 +1439,13 @@ main { padding: 16px 16px 28px; }
   max-width: calc(100% - 32px); text-align: center;
 }
 .toast.show { opacity: 0.97; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.toast.skin-suggestion {
+  width: min(360px, calc(100% - 32px)); border-radius: var(--radius-sm);
+  padding: 13px; text-align: left;
+}
+.skin-suggestion-copy { line-height: 1.35; }
+.skin-suggestion-actions { display: flex; gap: 8px; margin-top: 10px; }
+.skin-suggestion .btn { flex: 1; margin: 0; white-space: nowrap; }
 
 /* ===== Empty state ======================================= */
 .empty { text-align: center; padding: 40px 16px; color: var(--text-muted); }
@@ -981,7 +1508,6 @@ body.welcome-mode main {
 }
 .profile-name { font-weight: 750; font-size: 17px; }
 .profile-meta { color: var(--text-muted); font-size: 12px; }
-.pin-panel,
 .register-panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -989,38 +1515,7 @@ body.welcome-mode main {
   padding: 16px;
   box-shadow: var(--shadow-sm);
 }
-.pin-panel h2,
 .register-panel h2 { margin: 10px 0 12px; font-size: 23px; }
-.pin-dots { display: flex; justify-content: center; gap: 10px; margin: 10px 0; }
-.pin-dots span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--border-strong);
-}
-.pin-dots span.filled { background: var(--accent); border-color: var(--accent); }
-.pin-dots.shake { animation: pinShake 280ms ease-out; }
-@keyframes pinShake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-8px); }
-  75% { transform: translateX(8px); }
-}
-.pin-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
-  margin-top: 12px;
-}
-.pin-key {
-  min-height: 54px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  color: var(--text);
-  font-size: 20px;
-  font-weight: 760;
-}
-.pin-key.ok { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-size: 14px; }
 .register-panel label {
   display: grid;
   gap: 5px;
@@ -1059,7 +1554,6 @@ body.welcome-mode main {
   padding: 10px;
   text-align: left;
 }
-.pin-nudge .setting-row { border-bottom: 0; padding: 0; }
 .toast button {
   margin-left: 10px;
   border: 0;
@@ -1098,6 +1592,80 @@ body.welcome-mode main {
   .modal-overlay.show, .modal-overlay.show .modal, .rest-timer, .rpe-popover.open { animation: none !important; }
 }
 
+/* ===== Phase 6 — exact v15 workout-card composition ======
+   Raed chose the familiar v15 card, segmented strip, anatomy thumbnail and
+   M1/M2/M3/JN row. These overrides intentionally remove the Phase 4
+   full-viewport runner geometry without changing its guarded data helpers. */
+.session-preview { margin-bottom: 14px; }
+.session-preview-start { margin-bottom: 24px; }
+.home-v15-spotify { margin-top: 14px; }
+.v15-runner {
+  width: 100%; max-width: var(--maxw); height: auto; min-height: 0;
+  display: block; overflow: visible; margin: 0 auto; padding: 0 16px 28px;
+  background: transparent;
+}
+.v15-segmented-progress {
+  display: flex; gap: 4px; margin: 4px 0 12px;
+}
+.v15-progress-segment {
+  flex: 1 1 0; height: 6px; padding: 0; border: 0; border-radius: 999px;
+  background: var(--border); cursor: pointer;
+}
+.v15-progress-segment.current { background: var(--accent); }
+.v15-progress-segment.done { background: var(--good); }
+.v15-runner-main {
+  display: block; min-height: 0; overflow: visible; padding: 0; touch-action: pan-y;
+}
+.v15-workout-card { min-height: 0; overflow: visible; padding: 14px; }
+.v15-workout-card .ex-body { overflow: visible; }
+.v15-video-strip { margin-top: 10px; }
+.v15-set-panel { display: block; margin-top: 0; min-height: 0; overflow: visible; }
+.v15-set-list { display: grid; gap: 7px; }
+.v15-set-list .set-grid-headers,
+.v15-set-list .set-grid { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px 40px; }
+.v15-workout-card > .ex-body > .set-grid-headers {
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 48px;
+}
+.v15-set-list .runner-set-row {
+  display: grid; min-height: 48px; margin: 0; padding: 0; background: transparent;
+}
+.v15-set-list .runner-set-row input { height: 48px; min-height: 48px; }
+.v15-set-list .runner-set-row .runner-set-check { width: 48px; height: 48px; }
+.v15-set-list .runner-set-row.done .runner-set-check { color: #fff; }
+.v15-effort-row { grid-column: 1 / -1; }
+.v15-workout-card .runner-bottom-actions { justify-content: flex-start; padding: 0; }
+.v15-workout-card .runner-last-time { min-height: 0; margin-top: 14px; white-space: normal; }
+.settings-disclosure { margin-bottom: 12px; }
+.settings-disclosure > summary {
+  list-style: none; cursor: pointer; min-height: 52px; display: flex; align-items: center;
+  padding: 0 16px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); color: var(--text); font-weight: 750;
+}
+.settings-disclosure > summary::-webkit-details-marker { display: none; }
+.settings-disclosure > summary { display: flex; align-items: center; }
+/* '‹' (U+2039) is a bidi-MIRRORED character: in this RTL layout it rendered as
+   '›', pointing away from the content it opens, and [open] rotated it to point
+   up. Closed-sideways/open-up is not an accordion in any direction.
+   A down chevron that flips to up is direction-neutral — nothing to mirror, and
+   it reads the same to anyone: "more below" / "collapse". */
+.settings-disclosure > summary::before {
+  /* Raed: "الأرو اللي up وdown ما هو على محاذاة الكلمة بشكل ممتاز". A text glyph
+     carries its own font metrics, so its optical centre never lines up with the
+     label baseline — nudging it is guesswork that breaks at another font size.
+     An SVG chevron has no metrics of its own: it is centred by the flex row that
+     holds it, so it lines up by construction rather than by fiddling. */
+  content: '';
+  width: 18px; height: 18px; flex: 0 0 18px;
+  margin-inline-end: 10px;
+  background: currentColor; opacity: 0.55;
+  -webkit-mask: var(--chev) center / 18px 18px no-repeat;
+  mask: var(--chev) center / 18px 18px no-repeat;
+  transition: transform var(--dur) var(--ease-out);
+}
+.settings-disclosure[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.settings-disclosure[open] > summary::before { transform: rotate(180deg); }
+.settings-disclosure > .card { margin: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+
 /* ============================================================
    BOLDER PASS (v10) — product-bolder: confident athletic type,
    stronger hierarchy + weight contrast, sharper accent, more
@@ -1108,9 +1676,13 @@ body.welcome-mode main {
 /* Heavier, tighter display type — numbers & titles become the heroes */
 .app-title { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; }
 .page-header h1 { font-size: 30px; font-weight: 820; letter-spacing: -0.035em; }
-.section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--text-dim); }
+.section-label { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: var(--text-muted); }
 
 /* Today header — command-center presence */
+/* Ranged to the start, as it was. I centred this after "حطها بالنص" and he
+   looked at it and said put it back: "ما عجبني، رجّعها نفس مكان". His screen,
+   his call — and the reason is visible once you see it, since every other card
+   on the page starts at the same edge and the centred one broke that line. */
 .today-banner { padding: 20px 18px 18px; }
 .today-banner::before { height: 4px; }
 .today-banner .tb-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; }
@@ -1126,6 +1698,14 @@ body.welcome-mode main {
 /* Stat tiles — bigger, heavier numerals, smaller quieter caps (weight contrast) */
 .stat-tile { padding: 16px 8px 13px; }
 .stat-tile .stat-num { font-size: 31px; font-weight: 830; letter-spacing: -0.045em; }
+/* Tonnage grows forever. 31px held five digits with nothing to spare in a tile
+   ~104px wide inside its padding; six pushed past the edge. Each step is set so
+   the widest string at that digit count still clears the padding, checked at
+   390px — the narrowest phone this ships to. Below 5 digits nothing changes,
+   so the common case keeps the size he already approved. */
+.stat-tile .stat-num.s5 { font-size: 27px; letter-spacing: -0.05em; }
+.stat-tile .stat-num.s6 { font-size: 23px; letter-spacing: -0.05em; }
+.stat-tile .stat-num.s7 { font-size: 19px; letter-spacing: -0.045em; }
 .stat-tile .stat-cap { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; }
 .stat-tile .stat-sub { font-size: 10.5px; }
 
@@ -1134,8 +1714,6 @@ body.welcome-mode main {
 .set-grid input { font-size: 20px; font-weight: 720; min-height: 48px; }
 .set-grid .set-num { font-size: 14px; font-weight: 800; }
 .set-check { width: 48px; height: 48px; font-size: 21px; border-width: 2px; }
-.today-target { font-size: 14.5px; }
-.today-target strong { font-weight: 800; }
 
 /* Primary CTA — punchier */
 .btn { font-weight: 650; }
@@ -1151,15 +1729,352 @@ body.welcome-mode main {
 .tab.active::before { width: 30px; height: 3.5px; }
 .tab.active .icon { transform: translateY(-1px) scale(1.1); }
 
-/* More dramatic DARK "gym" mode — deeper bg, teal that glows on state */
-[data-theme="dark"] { --bg: #07090b; --bg-card: #11161b; --bg-elev: #1a2127; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --bg: #07090b; --bg-card: #11161b; --bg-elev: #1a2127; }
-}
+/* Dark mode keeps the skin token surfaces; state depth stays neutral. */
 [data-theme="dark"] .set-check.checked,
-[data-theme="dark"] .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--accent-glow); }
-[data-theme="dark"] .btn.primary { box-shadow: 0 8px 22px -8px var(--accent-glow); }
+[data-theme="dark"] .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--focus-ring); }
+[data-theme="dark"] .btn.primary { box-shadow: 0 8px 22px -8px var(--focus-ring); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .set-check.checked,
-  :root:not([data-theme="light"]) .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--accent-glow); }
+  :root:not([data-theme="light"]) .today-banner .progress-fill { box-shadow: 0 0 18px -2px var(--focus-ring); }
 }
+
+/* ---- Coach: retrieval from Raed's own library ------------------------ */
+.coach-row { display: flex; gap: 6px; align-items: stretch; }
+.coach-input {
+  flex: 1 1 auto; min-width: 0; padding: 10px 12px; font: inherit;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+}
+.coach-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.coach-row .btn { flex: 0 0 auto; }
+.coach-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.coach-source { display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
+/* No side stripe. The passage used to wear a 3px accent edge to say "this is a
+   quotation", and now every passage carries a leading number instead — the same
+   number the answer cites. The number does that job better, because it also
+   says WHICH passage, so the stripe was decoration sitting on top of a real
+   signal. Cited and uncited are told apart by that number's weight below. */
+.coach-text {
+  margin: 0; font-size: 13px; line-height: 1.7; color: var(--text);
+  /* Passages arrive Arabic (translated) or English (original). The direction is
+     set per passage in the markup — forcing ltr here made every Arabic passage
+     render with its full stop on the wrong side. */
+  text-align: start; unicode-bidi: isolate;
+  /* PDF extraction leaves long unbroken runs; never let one widen the page. */
+  overflow-wrap: anywhere;
+}
+/* English original: LTR inside the RTL page, with a slightly tighter measure so
+   it reads as a quotation rather than as the app talking. */
+.coach-text.ltr-run { direction: ltr; font-size: 12.5px; }
+/* A passage is a 900-character window cut out of a book, and some of them are
+   transcribed programme tables — a solid block of "3-5 min DB Bench Press~ 3-4
+   1 3-5". Shown in full they bury the answer above them, which is the opposite
+   of the "less scrolling" he asked for. Five lines is enough to recognise the
+   passage and find the sentence; the rest is one tap away. The fade says there
+   is more without needing a word for it. */
+.coach-text.clipped {
+  max-height: 8.5em; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+}
+.coach-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.coach-tag {
+  margin-inline-start: auto; font-size: 10.5px; font-weight: 700;
+  color: var(--text-muted); letter-spacing: .01em;
+}
+.coach-lang, .coach-more-text {
+  padding: 3px 9px; font-size: 11px;
+  color: var(--text-muted); background: none; border: 1px solid var(--border);
+}
+.coach-lang:hover, .coach-more-text:hover { color: var(--text); border-color: var(--accent-soft); }
+
+/* ---- The written answer --------------------------------------------- */
+/* This is the one thing on the page Raed reads first, so it gets the app's
+   primary surface, the space, and the type size — and everything under it
+   recedes to evidence. On --bg-elev it sat only two shades off the page and
+   read as another muted note rather than as the answer. */
+.coach-answer {
+  margin: 4px 0 14px; padding: 18px 18px 20px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+}
+/* --accent-label, never --accent. In ورق dark the accent is #743d4a and lands
+   at 1.7:1 on an elevated surface; the label variant is lightened for exactly
+   this and measures 4.64:1. The linter tracks which selectors use it. */
+.coach-answer-label {
+  font-size: 11px; font-weight: 800; color: var(--accent-label);
+  margin-bottom: 6px;
+}
+.coach-answer-text {
+  margin: 0; font-size: 15px; line-height: 1.9; color: var(--text);
+  text-align: start; text-wrap: pretty;
+}
+.coach-answer.from-web .coach-answer-text > * { margin: 0; min-width: 0; }
+.coach-answer.from-web .coach-answer-text > * + * { margin-top: 8px; }
+.coach-answer.from-web .coach-answer-text :is(ul, ol) { padding-inline-start: 1.5em; }
+.coach-answer.from-web .coach-answer-text li { padding-inline-start: .18em; }
+.coach-answer.from-web .coach-answer-text li + li { margin-top: 4px; }
+.coach-answer.from-web .coach-answer-text li::marker {
+  color: var(--text-muted); font-weight: 700;
+}
+.coach-answer.from-web .web-answer-heading { font-size: 1.02em; }
+.coach-answer.from-web .coach-answer-text code {
+  padding: .08em .34em; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); background: var(--bg-card); color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: .9em; overflow-wrap: anywhere;
+}
+/* "Not in your books" is an answer, not a warning, so it does not get the
+   warning colour — only a quieter label. */
+.coach-answer.unanswered .coach-answer-text { font-size: 14px; }
+.coach-answer.unanswered strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.coach-section { margin: 10px 0 6px; font-weight: 700; }
+.coach-more { margin-top: 8px; }
+.coach-more > summary {
+  cursor: pointer; font-size: 12px; color: var(--text-muted);
+  padding: 6px 2px; list-style: none;
+  display: flex; align-items: center; gap: 7px;
+}
+.coach-more > summary::-webkit-details-marker { display: none; }
+/* Drawn, not typed. The ▾ glyph is bidi-neutral, so in an RTL line it landed
+   next to the count's closing bracket and read as another digit. A rotated
+   border has no direction to resolve. */
+.coach-more > summary::after {
+  content: ''; width: 0; height: 0;
+  border-inline: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform .18s ease-out;
+}
+.coach-more[open] > summary::after { transform: rotate(180deg); }
+.coach-more > summary:hover { color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .coach-more > summary::after { transition: none; }
+}
+
+/* The citation marker, in the answer and on the passage it points at. It is the
+   verification path — "[3]" up there and "3" down here are the same passage —
+   so it is also what tells a cited passage from one that merely turned up. */
+.coach-cite {
+  display: inline-block; min-width: 17px; padding: 0 4px;
+  margin-inline: 3px; border-radius: var(--radius-xs);
+  background: var(--accent-soft); color: var(--text);
+  font-size: 11px; font-weight: 800; line-height: 17px; text-align: center;
+  /* A bare digit next to Arabic would join the surrounding number run. */
+  unicode-bidi: isolate;
+}
+.coach-cite.num {
+  margin-inline-start: 0; margin-inline-end: 6px;
+  /* Uncited: outlined and quiet. It still needs a number so he can find it,
+     but it is not evidence for anything he just read. */
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  line-height: 15px;
+}
+.coach-passage.cited .coach-cite.num {
+  background: var(--accent-soft); border-color: transparent; color: var(--text);
+  line-height: 17px;
+}
+
+/* The two lines that tell Raed what the plan actually wants from him. */
+/* A standing rule, not news. It shows on every exercise of every session, and
+   it was the loudest thing on the card: accent-tinted and bold, out-shouting
+   the calibration note above it, which is the one that only appears when
+   something is actually unusual. Reference information should recede once it
+   has been read the first twenty times. */
+.reps-goal {
+  margin-top: 8px; padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text-muted);
+  font-weight: 600; font-size: 12.5px;
+}
+.superset-note {
+  margin-top: 6px; padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); border: 1px dashed var(--accent);
+  color: var(--accent-label, var(--text)); font-weight: 700;
+}
+/* A set added with + is beyond the written plan; shade it so it never reads as
+   part of the prescription. */
+.set-grid.extra { background: var(--bg-elev); }
+.set-grid.extra .set-num::after { content: '+'; opacity: 0.55; font-size: 10px; }
+
+/* ---- Week strip: facts only, no invented calendar -------------------- */
+.week-card { padding: 10px 12px; }
+.week-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.week-day {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0; border-radius: var(--radius-sm);
+  border: 1px solid transparent; background: var(--bg-elev);
+}
+.week-day .wd-name { font-size: 10px; font-weight: 700; color: var(--text-muted, var(--text)); }
+.week-day .wd-mark { font-size: 13px; line-height: 1; color: var(--border); }
+/* A day he actually trained. Fact, from history. */
+.week-day.trained { background: var(--accent-soft); }
+.week-day.trained .wd-mark { color: var(--accent); }
+/* Today is outlined rather than filled, so it never looks like a logged session. */
+.week-day.today { border-color: var(--accent); }
+/* Days that have not happened carry no mark at all — the app does not know
+   whether he will train, and a hollow dot would imply a plan he never made. */
+.week-day.future { opacity: 0.55; }
+
+/* Why the suggested weight is what it is. Deliberately quieter than the rep
+   goal: the goal is an instruction, this is an explanation. */
+.why-weight {
+  margin-top: 8px; padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+  border-inline-start: 2px solid var(--border);
+}
+
+/* ---- During a session, the workout leads --------------------------- */
+/* The week strip, the stat tiles and the music card are all pre-workout
+   context. While a session is running they belong BELOW the exercise: the
+   first set row measured y=952 on an 844px screen, so logging the opening set
+   of every exercise started with a scroll. Ordering rather than moving nodes
+   keeps one render path for both states. */
+/* .active, or this beats `.page { display: none }` on specificity and leaves
+   Home rendered underneath every other tab — which is exactly what happened:
+   opening the coach showed the whole home screen stacked above it. */
+#page-home.active { display: flex; flex-direction: column; }
+#page-home > * { order: 1; }
+/* While a set is being logged, the pre-workout context is not "below the fold",
+   it is noise: the week strip, the streak tiles, the music card and a button
+   whose only job is to scroll back up to the session you are already in.
+   Raed: "هذي شيلها، هذي المفروض بس تكون موجودة لو ما بديت التمرين".
+   Ordering it below was the half-measure; it is hidden outright now, and comes
+   back the moment the session ends. Nothing is deleted — only not shown while
+   it cannot be acted on. */
+body.session-active #page-home > .home-context { display: none; }
+
+
+/* ---- Effort, on the final set's own row ----------------------------- */
+/* It used to be a full-width block under the sets — Raed called it crowding.
+   One face on the row, tap to reveal the three, tap one to collapse. */
+.effort-slot { display: block; }
+.effort-trigger {
+  min-height: 34px; width: 100%; padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); font-size: 17px; line-height: 1;
+  cursor: pointer; touch-action: manipulation;
+}
+.effort-trigger.chosen { background: var(--accent-soft); border-color: var(--accent); }
+.effort-strip { grid-column: 1 / -1; margin: 2px 0 6px; }
+.effort-strip[hidden] { display: none; }
+
+/* Shown once every exercise is resolved: what it cost him, and the way out. */
+.session-done { text-align: center; padding: 20px 16px; }
+.session-done h2 { margin: 0 0 6px; font-size: 20px; }
+.session-done-time { margin: 0 0 8px; font-size: 32px; font-weight: 800; color: var(--accent); }
+.session-done-stats { display: block; }
+
+/* ===== Coach: an answer off the internet ================= */
+/* Deliberately not the same card as a book answer. He asked for the answer AND
+   for it to say where it came from, and a badge on an identical card is the
+   version of that which stops being noticed by the third time. */
+.coach-answer.from-web {
+  background: var(--bg-elev);
+  border: 1px dashed var(--border-strong);
+}
+/* A web answer can contain a URL or a long Latin run; neither may widen the
+   page. The citation chips below break on their own. */
+.coach-answer.from-web .coach-answer-text { overflow-wrap: anywhere; }
+.coach-cite-link { max-width: 100%; overflow-wrap: anywhere; }
+.coach-answer-label.web { color: var(--text-muted); }
+.coach-cites { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.coach-cite-link {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text-muted); font-size: 11px; text-decoration: none;
+}
+.coach-cite-link:hover { color: var(--text); border-color: var(--accent-soft); }
+.coach-retry { margin-top: 8px; }
+
+/* ===== Coach settings: what it has cost =================== */
+.spend-row { display: flex; gap: 8px; margin: 4px 0 10px; }
+.spend-tile {
+  flex: 1; min-width: 0; padding: 12px 8px 10px; text-align: center;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.spend-cap { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+.spend-num {
+  margin-top: 4px; font-size: 19px; font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.spend-sub { margin-top: 2px; font-size: 10.5px; color: var(--text-muted); }
+.spend-alert {
+  padding: 8px 11px; border-radius: var(--radius-sm); font-size: 12px;
+  background: var(--bg-elev); color: var(--text-muted); border: 1px solid var(--border);
+}
+/* Only this state earns the warning colour: he is past a number he chose. */
+.spend-alert.over {
+  background: var(--warning-soft); color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 38%, transparent); font-weight: 700;
+}
+.coach-model-select {
+  width: 100%; margin-top: 5px; padding: 10px 12px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text);
+}
+
+/* Spotify: a row, not a card. */
+.home-v15-spotify {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 6px 10px; margin: 10px 2px 4px;
+}
+
+/* Ending the session: the deliberate action is the button, and deleting is a
+   quiet link under it rather than a second full-width danger slab. */
+.session-close { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.session-discard {
+  align-self: center; padding: 4px 10px; font-size: 12px;
+  color: var(--danger); background: none; border: 0;
+}
+.session-discard:active { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+/* ===== Touch targets ======================================================
+   Measured on a 390px viewport mid-session, not guessed. Every control below
+   was under the 44px minimum: the header button and the exercise gear at 38,
+   the session-progress days at 27 high, the runner's own action buttons at 40,
+   and «تجاهل الجلسة» at 32. In a gym, with one hand and a sweaty thumb, that is
+   the difference between a tap and a mis-tap.
+
+   Where the small size IS the design — the gear must not become a slab next to
+   the exercise name — the visual box is left exactly as it was and only the hit
+   area grows, through a transparent overlay centred on the control. Nothing
+   here changes how the app looks. */
+
+.header-btn,
+.ex-settings-btn,
+.session-discard,
+.sp-seg { position: relative; }
+
+.header-btn::before,
+.ex-settings-btn::before,
+.session-discard::before,
+.sp-seg::before {
+  content: '';
+  position: absolute;
+  /* 50% of the shortfall on each side, centred: 44px from a 38px box. */
+  inset: 50% auto auto 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* Invisible, and never on top of anything the user needs to see or press. */
+  background: none;
+  pointer-events: auto;
+}
+/* The overlay must not eat the sibling it overlaps on a tight row. */
+.sp-track { position: relative; z-index: 0; }
+/* Seven day segments across 390px measured 40px wide, so adjacent 44px hit
+   overlays stole each other's edges and each day was really 42px to the thumb.
+   Seven at 44 plus their gaps and the counter still fit the row, so the box
+   itself is widened rather than the overlay — the bars look identical and the
+   targets stop competing. */
+.sp-seg { min-width: 44px; }
+
+/* These are real buttons with real labels — grow the box itself. 44 is the
+   floor; the primary runner action stays visibly larger than the secondary. */
+.runner-bottom-actions .btn,
+.runner-nav .btn,
+.runner-rest,
+.runner-add-set,
+.runner-skip-exercise { min-height: 44px; }
+
+/* Was an inline style on an anonymous div. Same layout, now reachable by the
+   rule above and by anything else that needs to know what this row is. */
+.runner-nav { display: flex; gap: 8px; margin-top: 12px; }

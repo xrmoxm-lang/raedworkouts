@@ -27,7 +27,7 @@ Both roles share the same source of truth: this skill + the files in the `raedwo
 ### Identity
 - **Name:** Raed
 - **Country:** Saudi Arabia
-- **Language:** Arabic primary, English fluent. Mix is fine. The app UI is English-primary with Arabic exercise names underneath.
+- **Language:** Arabic primary, English fluent. Mix is fine in conversation. **The v16 app UI is Arabic-only** — exercise names stay in English by his own decision, and every other English string on screen is a bug.
 
 ### Goals
 - **Primary:** Body recomposition — build muscle, lose body fat. Specifically: regain muscle mass and shape after a 2-year layoff. The aesthetic outcome is part of why he's doing this.
@@ -335,90 +335,137 @@ End of Block 3 → next phase:
 
 ---
 
-## Section 6 — App architecture
+## Section 6 — App architecture (v16 «Raedworkouts Go»)
 
-### File layout (must exist)
+> Rewritten 2026-09-04. Everything in this section before that date described
+> **v15** — Supabase, `raedworkouts.v1` keys, full-body/PPL variants, `rpePicker`,
+> `attemptVariantChange`. All of it was retired months ago, and this file calls
+> itself the source of truth, so it was actively misleading. If you find a claim
+> here that the code does not support, the CODE wins and this file is wrong.
+
+### Where it lives
+
+- Repo `~/RaedWorkoutsV2/worktree-v16`, branch **`v16-foundation`**.
+  **`main` is deliberately pinned at v15** until Raed approves a merge.
+- Live: **https://raedworkouts-v16.vercel.app**
+- Deploy: `vercel deploy --prod --yes --name raedworkouts-v16 --scope wasfat --token $(cat ~/.vercel_token)`
+- Sync backend: `raedsync.py` on the HP server, namespaced to user id **`raed-v16`**,
+  reached over Tailscale Funnel on `:8443`. v15's data is unreachable by construction.
+- Coach: `~/raedworkouts-ai/service.py` on the HP, public at
+  `https://raed-hp.tail53bd35.ts.net/coach` behind `X-Coach-Key`.
+
+### File layout
 
 ```
-raedworkouts/
-├── index.html              # PWA shell + 6 page sections + bottom tab bar
-├── styles.css              # Mobile-first, light/dark via CSS vars, 5 accent colors via data-color
-├── data.js                 # SOURCE OF TRUTH: muscles, exercises, both programmes, athlete, motivational messages
-├── app.js                  # All logic, render loop, sync, focus mode, suggestions, PR detection
-├── manifest.webmanifest    # PWA install metadata
-├── sw.js                   # Service worker (offline cache + Supabase passthrough)
-├── img/                    # Body anatomy illustrations (chest, back, biceps, quads, glutes, calves)
-├── HOW_TO_USE.md           # User guide
-├── SKILL.md                # This file
-├── README.md               # Old deployment guide
-└── DEPLOY_FROM_ZERO.md     # Hand-holding deploy guide
+worktree-v16/
+├── index.html              # shell: header, 9 <section class="page">, tab bar, rest timer, modal, toast
+├── styles.css              # ~2060 lines. THREE skins (حديد / ورق / رخام), light+dark each
+├── data.js                 # SOURCE OF TRUTH for exercises + programme (window.RW)
+├── app.js                  # ~6000 lines: render, runner, coach client, sync, settings
+├── locale.js               # ALL user-facing copy as { en, ar } pairs
+├── sw.js                   # service worker; bump VERSION on every deploy touching app/styles/index
+├── manifest.webmanifest    # PNG icons (SVG alone breaks the iOS home screen)
+├── icon-180.png            # apple-touch-icon: opaque, full-bleed, no rounded corners
+├── domain/*.js             # pure modules — progression, clamps, volume, substitutions, programme,
+│                           #   catalogue, events, migrations, runner-session, sync-identity
+├── server/                 # raedsync.py, coach_index.py, coach_qa.py, admin.py, backup.sh
+├── tests/                  # 48 node:test units + ~26 playwright specs
+└── scripts/                # verify-arabic-ui, verify-phase3-identity, verify-coach-ai, lint-contrast
 ```
 
-### data.js exports
+### The programme
 
-`window.RW = { MUSCLES, EXERCISES, PROGRAMME, PROGRAMME_PPL, ATHLETE, MOTIVATIONAL_MESSAGES, yt, ytShort, thumb, bodyImg, BODY_IMG }`
+**Jeff Nippard's 4-day Upper/Lower hypertrophy block**, transcribed from
+`research/20-programme-decision.md` §8.4. Sessions: `upper_a`, `lower_a`,
+`upper_b`, `lower_b`. There are **no selectable variants any more** — the v15
+full-body/PPL switch is gone, and `programme_variant` / `pending_variant` are
+deleted from settings at boot.
 
-- `MUSCLES`: 15 muscle keys, each with `{ en, ar, region }`
-- `EXERCISES`: 33 entries — `{ id, name, name_ar, primary[], secondary[], pattern, mohannad[], jeff_nippard, alternatives[], cue }`
-- `PROGRAMME`: full-body 2× — 2 sessions
-- `PROGRAMME_PPL`: 3-day Push/Pull/Legs alternative — 3 sessions
-- `ATHLETE`: profile object
-- `MOTIVATIONAL_MESSAGES`: 20 Arabic strings, rotated per session
-- `bodyImg(primary_muscles_arr)`: returns relative path to body anatomy illustration for that muscle
+data.js holds **two row shapes**, and both are still consumed:
+- **new** rows via `rawProgrammeRow(order, exercise, ramp_sets, work_sets, rep_lo, rep_hi, rpe, rest_min, superset_group, sub1, sub2)`
+- **legacy** rows with a `warmup:` STRING like `'2 sets: 12.5kg×10, 17.5kg×6'`
 
-### state (localStorage `raedworkouts.v1`)
+`startSession` reads `plan.ramp_sets` first and only falls back to parsing
+`plan.warmup`. Reading `plan.warmup` alone is the bug that once deleted every
+ramp set in the app.
 
-```js
-{
-  schema_version: 2,
-  current_week: 1,
-  current_block: 1,
-  active_session: { date, session_id, started_at, exercises: { exercise_id: { swapped_to?, sets: [{is_warmup, weight, reps, rpe, completed}] } } } | null,
-  history: [ { date, session_id, started_at, ended_at, exercises, prs, stats } ],
-  bodyweight_log: [ { date, kg } ],
-  custom_videos: { exercise_id: [ url, ... ] },
-  custom_jn_urls: { exercise_id: 'https://...' },
-  programme_overrides: null,
-  prs: { exercise_id: { kg, reps, date, score } },
-  msg_index: 0,
-  last_sync: ISO,
-}
+### State and settings
+
+localStorage is **namespaced per user**: `raedworkouts.<user>.<suffix>.v1`, built by
+`nsKey()`. Suffixes: `state`, `settings`, `lastwrite`, `lastrev`, `prerestore`,
+`dirty`, `restend`, `programme-migration-export`. Plus two globals,
+`raedworkouts.active_user` and `raedworkouts.profiles.v1`.
+
+**Never call `localStorage.setItem` directly.** Use `safeSetItem` /
+`safeRemoveItem` / `safeGetItem`. They return a boolean and they are the only
+reason a full phone no longer loses the session in silence.
+
+### Key app behaviours
+
+- `getTodayPlannedSession()` — picks from **completed-session history**, never the weekday.
+- `suggestNextWeight(id, planned)` — returns `{ weight, note }`. The `note` is the
+  reason, and it must always be rendered; a number without its reason is the
+  complaint Raed raised by name.
+- `twoSetWarmupFrom(weight, step)` — the ramp. Ascends, never reaches the working
+  weight, returns ONE entry when the load is too light for two.
+- `applySetEdit(set, property, value)` — every weight/reps edit. Clears the
+  `invalid` flag, because editing is recovery.
+- `startRest(seconds)` / `restoreRestTimer()` — the deadline is **persisted**, so a
+  reload resumes the countdown instead of silently killing the alarm.
+- `prescribedRestSeconds(planned)` — per-exercise `rest_min`; a prescribed 0 means
+  go straight into the superset partner.
+- `confirmAction({title, body, confirmLabel})` — the ONLY confirmation dialog.
+  Never `confirm()` or `alert()`: they are English, and a standalone PWA shell can
+  suppress them, which turns the tap into a no-op.
+- `toast(msg)` — goes through the locale layer, so an English literal renders
+  Arabic **if that exact string exists as an `.en` value in locale.js**.
+- `detectPR()` — silent, Epley `kg * (1 + reps/30)`.
+- `reportFatal()` — the `window.error` / `unhandledrejection` net. It tells him the
+  app broke and pushes the in-memory session to the server.
+
+### Verifying — all of it, in one session
+
+`npm run verify` (48 units + 4 gates + every browser test) **now exits 0**; before
+2026-09-04 it always exited 1 because the deploy gate ran without its URL, which
+trained everyone to ignore the exit code. The deploy gate is now separate:
+
+```
+npm run verify                                         # must be green before committing
+PWA_DEPLOY_URL=https://raedworkouts-v16.vercel.app npm run verify:deploy   # after deploying
 ```
 
-### settings (localStorage `raedworkouts.settings.v1`)
+`tests/resilience.spec.mjs` holds the invariants a green suite has historically
+missed: the storage-failure path, accessible names, measured tap targets,
+ascending ramps, rest surviving a reload.
 
-```js
-{
-  theme: 'auto' | 'light' | 'dark',
-  color_theme: 'teal' | 'orange' | 'green' | 'red' | 'amber',
-  weight_unit: 'kg' | 'lb',
-  rest_seconds: 120,
-  vibrate: true,
-  notifications: true,
-  focus_mode: true,
-  music_platform: 'spotify' | 'youtube_music' | 'apple_music' | 'none',
-  programme_variant: 'fullbody_2x' | 'ppl_3x',
-  pending_variant: null | 'fullbody_2x' | 'ppl_3x',
-  show_pr_summary: true,
-  supabase_url, supabase_key, user_id,
-}
-```
+### Six rules this app is built on
 
-### Key app behaviors
+1. **D8 — never a guessed video.** Source-linked from a PDF he owns, or hand-entered. A blank beats a wrong clip.
+2. **The coach never answers without passages.** D8 applied to prose.
+3. **No paid API** except the coach's answer layer, which he explicitly ordered.
+4. **Arabic-only UI.** Exercise names stay English by his decision.
+5. **Never silently lose data**, and never say «حُفظت محلياً» unless it actually was.
+6. **Never delete a feature or a clip without asking.**
 
-- **`getActiveProgramme()`** — returns full-body or PPL based on settings.
-- **`getTodayPlannedSession()`** — for full-body: matches Tue/Sat to session A/B. For PPL: cycles next session based on history.
-- **`suggestNextWeight()`** — runs the progression rule (5.2).
-- **`detectPR()`** — silently when a set is checked. Uses Epley-ish score `kg * (1 + reps/30)` to compare against current best.
-- **`startRest()`** — kicks off timer, schedules notification, vibrates.
-- **`fireRestEndNotification()`** — uses `serviceWorker.showNotification` so it works while app is backgrounded.
-- **`showSessionEnd()`** — routes to `#end` page with stats, PRs, motivational message, next-up preview.
-- **`initAutoHideNav()`** — scroll-direction detection; hides bottom tab bar on scroll-down, shows on scroll-up.
-- **`rpePicker(set, onChange)`** — single button with default 💪. Tap opens 3-emoji popover.
-- **`editJNUrlPrompt(exerciseId)`** — prompt to override Jeff Nippard URL per exercise.
-- **`attemptVariantChange(newVariant)`** — switches programme variant only at block boundaries; otherwise queues.
+### What keeps going wrong here — check these first
+
+Every one of these shipped green and was found by measuring, not by reading:
+
+- A field in data.js that **nothing reads** (`superset_group`, `rest_min`).
+- A rule written in a function **nothing calls** (`updateRunnerSet`).
+- A branch that **re-tests a condition already proven false** above it, so it can
+  only return the fallback (`suggestNextWeight`).
+- A guard whose condition is **narrower than its comment** (the end-session guard
+  fired only when NOTHING was recorded).
+- A gate that **asserts the broken state** and so certifies it (the manifest icon
+  list).
+- A `return` **above** a block, silently removing a screen, with the suite green.
+
+So: grep every field name before trusting it, and prove a fix by breaking it
+deliberately and watching a test fail.
 
 ---
+
 
 ## Section 7 — How to respond by situation
 
@@ -579,40 +626,27 @@ In `data.js`, change all `sets: 3` to `sets: 4` for compound lifts. This is the 
 
 ---
 
-## Section 9 — Supabase cloud sync (optional)
+## Section 9 — Cloud sync (self-hosted; Supabase is GONE)
 
-### Why
-LocalStorage = single browser, single device. If the user clears Safari cache or switches phones, data is gone. Cloud sync survives.
+Supabase was dropped in **June 2026**: the free project auto-paused every 7 days
+and resolved to NXDOMAIN, which is a sync backend that deletes itself. The
+setup guide that used to fill this section has been removed rather than left to
+be followed by mistake.
 
-### One-time setup
+Sync is now **`~/raedsync/raedsync.py`** on the HP server — stdlib SQLite over
+HTTP, systemd unit `raedsync.service`, listening on `127.0.0.1:8790` and exposed
+publicly by **Tailscale Funnel on `:8443`**. v16 writes to the row `raed-v16`.
 
-1. **Create Supabase account:** https://supabase.com/dashboard/sign-up
-2. **Create project:** Name `raedworkouts`. Pick a region near KSA (Bahrain or Frankfurt).
-3. **Run SQL:**
-```sql
-create table raedworkouts (
-  user_id text primary key,
-  state_json jsonb not null,
-  settings_json jsonb,
-  updated_at timestamptz default now()
-);
+- `GET /health`, `GET /state?user=`, `POST /state`, `GET /revision?user=&rev=`, `GET /export`
+- Bearer token is a shared secret in public client JS. Raed accepted that trust model.
+- Server-authoritative merge: every POST appends a revision (200 per user / 90 days);
+  a stale or absent `base_rev` makes the server merge rather than clobber.
+- Backups: `backup.sh` hourly via systemd timer, 48 hourly / 30 daily / 8 weekly.
+- No DELETE endpoint. Manage rows with sqlite3 on `~/raedsync/data.db`.
+- `server/admin.py` on the HP: list-users, reset-pin, delete-row, revisions, restore-rev.
 
-alter table raedworkouts enable row level security;
-
-create policy "anon read-write own row"
-  on raedworkouts
-  for all
-  using (true)
-  with check (true);
-```
-4. **Get keys:** Project Settings → API → copy Project URL + anon (public) key.
-5. **In app:** Settings → Cloud sync (Supabase) → paste URL, key, set User ID = `raed`. Tap Push now.
-
-### Security note
-The "anon read-write own row" policy is open. Anyone with the anon key can read/write any row. Fine for single-user where he keeps the key private. If he ever shares the URL or screenshots Settings → regenerate anon key.
-
-### What syncs
-Both `state` (history, PRs, custom videos, custom JN URLs, bodyweight) AND `settings`. Pushes after every save (debounced). Pulls on app load.
+**Chrome blocks a public HTTPS page from fetching a local address** (Local Network
+Access); Safari does not. Verify sync and coach work in **WebKit**, not Chromium.
 
 ---
 
@@ -698,7 +732,16 @@ When something material changes:
 3. Bump the date below.
 4. Tell Raed what changed in a single line — no ceremony.
 
-**Last updated:** 2026-05-09 — v7: Supabase hardcoded (no user setup needed), first-launch name screen, shareable ?user= links, block-based auto-color (Block 1=teal/Block 2=amber/Block 3=red), Arabic/English language toggle (RTL + exercise names), sync errors now visible, Force next session override in Settings, session end shows block context, SW cache v7.
+**Last updated:** 2026-09-04 — full-app audit. Section 6 rewritten from v15 to
+v16 (it had been describing a retired app while calling itself the source of
+truth), Section 9's Supabase guide replaced with the self-hosted backend that
+actually runs. Fixed in the app: two silent data-loss paths (an unguarded
+localStorage write, and a captive portal poisoning the offline shell), a rest
+alarm that never fired after an auto-update, dead ramp/progression branches,
+English native dialogs, missing accessible names, sub-44px tap targets, and the
+iOS home-screen icon. `npm run verify` exits 0 for the first time.
+
+**Older:** 2026-05-09 — v7:
 
 **2026-05-30 (doc only, no app/code change):** Added Appendix A — deferred Impeccable design pass (approved direction, spec'd, not yet applied).
 
@@ -707,7 +750,7 @@ When something material changes:
 ## Section 15 — Files this skill must read before answering
 
 - **`data.js`** — exercises and current programme (always)
-- **`state.history`** in localStorage / Supabase — actual logged weights
+- **`state.history`** in localStorage (namespaced `raedworkouts.<user>.state.v1`) or the `raed-v16` row on the HP — actual logged weights
 - **`HOW_TO_USE.md`** — only if Raed asks how the app works
 - **`DEPLOY_FROM_ZERO.md`** — only if he asks how to deploy or update
 

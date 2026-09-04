@@ -1,0 +1,21 @@
+{
+  "name": "raedworkouts-v16-foundation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs && node scripts/lint-contrast.mjs",
+    "test:phase1": "node --test tests/phase1.test.mjs",
+    "test:runner": "playwright test tests/phase4-runner.spec.mjs",
+    "test:arabic-dom": "playwright test tests/phase4-arabic-dom.spec.mjs",
+    "test:deploy-safe": "playwright test tests/deploy-safe.spec.mjs",
+    "test:pwa-deploy": "playwright test tests/pwa-deploy.spec.mjs",
+    "test:unit": "node --test tests/*.test.mjs && node scripts/lint-contrast.mjs",
+    "test:browser": "playwright test",
+    "verify": "node --test tests/*.test.mjs && node scripts/lint-contrast.mjs && node scripts/verify-arabic-ui.mjs && node scripts/verify-phase3-identity.mjs && node scripts/verify-coach-ai.mjs && playwright test --grep-invert \"Deploy PWA\"",
+    "verify:deploy": "playwright test tests/pwa-deploy.spec.mjs",
+    "verify:all": "npm run verify && npm run verify:deploy"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1"
+  }
+}

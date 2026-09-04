@@ -1,33 +1,38 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="color-scheme" content="light dark" />
-  <title>Raedworkouts</title>
-  <meta name="description" content="Family training PWA — Raed, Bassam, Abdullah. Progressive overload, offline-first, self-hosted sync." />
-  <meta id="theme-color-light" name="theme-color" content="#0f766e" media="(prefers-color-scheme: light)" />
-  <meta id="theme-color-dark" name="theme-color" content="#0a0d10" media="(prefers-color-scheme: dark)" />
+  <title>Raedworkouts Go</title>
+  <meta name="description" content="تطبيق رائد للتمارين: تقدّم تدريجي، يعمل دون اتصال، ومزامنة ذاتية." />
+  <meta id="theme-color-light" name="theme-color" content="#7c1f2e" media="(prefers-color-scheme: light)" />
+  <meta id="theme-color-dark" name="theme-color" content="#121110" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Raedworkouts" />
+  <meta name="apple-mobile-web-app-title" content="Raedworkouts Go" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Ctext x='50%25' y='58%25' font-size='38' text-anchor='middle' fill='white' font-family='-apple-system,system-ui,sans-serif' font-weight='700'%3E%F0%9F%8F%8B%EF%B8%8F%3C/text%3E%3C/svg%3E" />
-  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230f766e'/%3E%3Ctext x='50%25' y='62%25' font-size='110' text-anchor='middle' fill='white' font-family='-apple-system,system-ui,sans-serif'%3E%F0%9F%8F%8B%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="./icon-192.svg" type="image/svg+xml" />
+  <!-- iOS does not accept SVG for apple-touch-icon, and it does not read the
+       manifest's icons for the home screen either. This app is installed on
+       exactly one iPhone, and until now that home-screen tile was iOS's
+       fallback: a downscaled screenshot of the first paint. The PNG is
+       full-bleed and opaque on purpose — iOS applies its own corner mask, and
+       renders any transparency as black. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
 
   <header class="app-header">
     <div class="app-title">
-      <span class="dot"></span>
-      <span>Raedworkouts</span>
+      <svg class="brand-mark" viewBox="0 0 200 130" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M29 50V74M35 42V82M165 42V82M171 50V74M36 62H164"/></svg>
+      <span data-i18n="app_name">Raedworkouts Go</span>
     </div>
     <div class="header-actions">
-      <button id="gym-launch" class="header-btn" title="Open IN2 Fitness" aria-label="Open IN2 Fitness">
+      <button id="gym-launch" class="header-btn" data-i18n-title="open_gym" data-i18n-aria-label="open_gym" title="افتح النادي" aria-label="افتح النادي">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"/><path d="M21 21l-1-1"/><path d="M3 3l1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/></svg>
       </button>
-      <button id="theme-toggle" class="theme-toggle">Auto</button>
     </div>
   </header>
 
@@ -36,23 +41,27 @@
     <section class="page" id="page-library"></section>
     <section class="page" id="page-history"></section>
     <section class="page" id="page-settings"></section>
+    <section class="page" id="page-preview"></section>
+    <section class="page" id="page-coach"></section>
     <section class="page" id="page-help"></section>
     <section class="page" id="page-end"></section>
+    <section class="page" id="page-runner"></section>
   </main>
 
   <nav class="tab-bar">
-    <button class="tab" data-route="home" aria-label="Home"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9.3V20h13V9.3"/><path d="M9.5 20v-5.5h5V20"/></svg></span><span class="label">Home</span></button>
-    <button class="tab" data-route="library" aria-label="Library"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.2A2.2 2.2 0 0 1 6.2 17H20"/><path d="M6.2 2H20v20H6.2A2.2 2.2 0 0 1 4 19.8V4.2A2.2 2.2 0 0 1 6.2 2z"/></svg></span><span class="label">Library</span></button>
-    <button class="tab" data-route="history" aria-label="History"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/></svg></span><span class="label">History</span></button>
-    <button class="tab" data-route="settings" aria-label="Settings"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label">Settings</span></button>
-    <button class="tab" data-route="help" aria-label="Help"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span><span class="label">Help</span></button>
+    <button class="tab" data-route="home" data-i18n-aria-label="home" aria-label="الرئيسية"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.2 12 3l9 7.2"/><path d="M5.5 9.3V20h13V9.3"/><path d="M9.5 20v-5.5h5V20"/></svg></span><span class="label" data-i18n="home">الرئيسية</span></button>
+    <button class="tab" data-route="library" data-i18n-aria-label="library" aria-label="المكتبة"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.2A2.2 2.2 0 0 1 6.2 17H20"/><path d="M6.2 2H20v20H6.2A2.2 2.2 0 0 1 4 19.8V4.2A2.2 2.2 0 0 1 6.2 2z"/></svg></span><span class="label" data-i18n="library">المكتبة</span></button>
+    <button class="tab" data-route="history" data-i18n-aria-label="history" aria-label="السجل"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/></svg></span><span class="label" data-i18n="history">السجل</span></button>
+    <button class="tab" data-route="coach" aria-label="المدرب الذكي"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a5 5 0 0 0-5 5v1a4 4 0 0 0-2 3.5V16a2 2 0 0 0 2 2h2v-6H7a2 2 0 0 1 2-2V8a3 3 0 1 1 6 0v2a2 2 0 0 1 2 2h-2v6h2a2 2 0 0 0 2-2v-3.5A4 4 0 0 0 17 9V8a5 5 0 0 0-5-5Z"/><path d="M9 21h6"/></svg></span><span class="label">المدرب</span></button>
+    <button class="tab" data-route="settings" data-i18n-aria-label="settings" aria-label="الإعدادات"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label" data-i18n="settings">الإعدادات</span></button>
   </nav>
 
-  <!-- Floating rest timer -->
+  <!-- Floating rest timer. aria-live is off: it reprints every 200ms, and a
+       polite region would read the countdown aloud continuously. -->
   <div id="rest-timer" class="rest-timer" style="display:none;">
-    <span class="rt-ico">⏱</span>
-    <span id="rest-timer-text" class="rt-time">2:00</span>
-    <button id="rest-cancel" class="rt-cancel" aria-label="Cancel rest">✕</button>
+    <span class="rt-ico" aria-hidden="true">⏱</span>
+    <span id="rest-timer-text" class="rt-time" aria-live="off">2:00</span>
+    <button id="rest-cancel" class="rt-cancel" data-i18n-aria-label="cancel_rest" aria-label="ألغِ الراحة">✕</button>
   </div>
 
   <!-- Modal -->
@@ -60,10 +69,13 @@
     <div id="modal" class="modal"></div>
   </div>
 
-  <!-- Toast -->
-  <div id="toast" class="toast"></div>
+  <!-- Toast. This is the app's only channel for "your set was not saved" and
+       "nothing was saved anywhere", so it has to be announced, not just drawn.
+       assertive rather than polite: by the time a save has failed, interrupting
+       is the point. -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
   <script src="./data.js"></script>
-  <script src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
