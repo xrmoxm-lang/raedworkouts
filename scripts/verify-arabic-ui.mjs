@@ -77,6 +77,8 @@ const requiredProgrammeTerms = {
   programme_lower_b: 'سفلي ب',
   programme_block_a: 'علوي/سفلي — الكتلة أ (أسابيع 1–4)',
   programme_block_b: 'علوي/سفلي — الكتلة ب (أسابيع 5–8)',
+  programme_block_c: 'علوي/سفلي — الكتلة ج (أسابيع 9–11)',
+  programme_block_deload: 'أسبوع التفريغ (الأسبوع 12)',
   programme_note_history_rotation: 'الجلسة التالية تُختار من سجلّ ما أكملته، لا من يوم الأسبوع.',
   programme_note_block_b: 'الكتلة ب تُبقي المركّبات الأساسية كما هي، ولا تبدّل إلا تمارين العزل المذكورة.',
   programme_note_history_seed: 'ابدأ كل وزن عمل أول من سجلّك حين يوجد؛ والتدرّج الاستكشافي بديل عند غيابه لا الأصل.',

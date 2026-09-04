@@ -1698,10 +1698,31 @@ function showSkinSuggestion(suggestion) {
 function completedSessionCount() {
   return (state.history || []).length;
 }
+// The mesocycle REPEATS. It used to stop.
+//
+// This was `Math.min(lastWeek, ...)`, so once he had trained past the end of the
+// programme the week froze there permanently: Block B on a loop, for ever, with
+// no deload and no end. He asked whether the programme advances by itself —
+// it did not, it ran out.
+//
+// Now the weeks wrap. A cycle is A(1-4) B(5-8) C(9-11) deload(12), and week 13
+// is week 1 of the next cycle with his logged loads carried forward — which is
+// what makes the next twelve months take care of themselves. `research/06` §7.2
+// is the authority for what week 12 is; standard periodisation is the authority
+// for starting again after it, and every source here agrees a deload is followed
+// by a return to work, never by more deload.
+function programmeCycleLength(programme = state.programme_overrides || RW.PROGRAMME) {
+  return Math.max(...(programme.blocks || []).map((block) => block.week_end || 0), 1);
+}
+function weeksElapsed() {
+  return Math.floor(completedSessionCount() / 4);
+}
+// 1-based: his first twelve weeks are cycle 1.
+function derivedCycle() {
+  return 1 + Math.floor(weeksElapsed() / programmeCycleLength());
+}
 function derivedWeek() {
-  const programme = state.programme_overrides || RW.PROGRAMME;
-  const lastWeek = Math.max(...(programme.blocks || []).map((block) => block.week_end || 0), 1);
-  return Math.min(lastWeek, 1 + Math.floor(completedSessionCount() / 4));
+  return 1 + (weeksElapsed() % programmeCycleLength());
 }
 function derivedBlock() {
   const programme = state.programme_overrides || RW.PROGRAMME;
@@ -2329,9 +2350,20 @@ function startSession(session) {
       // Reaching a new block is a milestone, and it was announced in English on
       // an Arabic-only screen. A template literal is joined before it reaches
       // toast(), so it could never match a locale entry however it was worded.
-      const blockKeys = { 1: 'block_name_foundation', 2: 'block_name_strength', 3: 'block_name_peak' };
+      const blockKeys = {
+        1: 'block_name_foundation', 2: 'block_name_strength',
+        3: 'block_name_peak', 4: 'block_name_deload',
+      };
       const blockName = t(blockKeys[curBlock] || 'block_name_new');
-      setTimeout(() => toast(tf('block_begins', { block: curBlock, name: blockName }), 4000), 800);
+      // The deload week has to explain itself. It is the one block where the
+      // app deliberately asks for LESS, and a lifter who is not told why reads
+      // fewer sets and a lower effort target as the app breaking, or sandbags
+      // it, or ignores it — [LADDER] L9844 warns about exactly that. So it gets
+      // its own sentence rather than the generic "block N begins".
+      const message = curBlock === 4
+        ? t('deload_week_begins')
+        : tf('block_begins', { block: curBlock, name: blockName });
+      setTimeout(() => toast(message, curBlock === 4 ? 9000 : 4000), 800);
     }
   }
 }
@@ -6323,6 +6355,14 @@ function init() {
     });
   }
 
+  // A completed mesocycle is the natural moment to look up from the week.
+  //
+  // He asked for the programme to carry itself for twelve months and for a
+  // review "every six months or so". A cycle is twelve weeks, so two cycles is
+  // almost exactly six months at four sessions a week — the review prompt rides
+  // on that rather than on a calendar date the app would have to track.
+  announceCycleIfNew();
+
   // A rest that was running when the app was last closed, reloaded, or evicted.
   restoreRestTimer();
 
@@ -6337,6 +6377,21 @@ function init() {
 
   // Optional: ask for notification permission on first interaction (deferred)
   initNotifications();
+}
+
+// Fires once per mesocycle, at boot, and never twice for the same one.
+function announceCycleIfNew() {
+  if (!settings.user_id || !state.history?.length) return;
+  const cycle = derivedCycle();
+  if (cycle <= (state.cycle_announced || 1)) return;
+  state.cycle_announced = cycle;
+  saveLocal();
+  // Every second cycle lands near the six-month mark.
+  const dueForReview = (cycle - 1) % 2 === 0;
+  setTimeout(() => toast(
+    dueForReview ? tf('cycle_review_due', { n: cycle }) : tf('cycle_begins', { n: cycle }),
+    dueForReview ? 12000 : 7000,
+  ), 1200);
 }
 
 // ---- Modal keyboard + screen-reader behaviour ----------------

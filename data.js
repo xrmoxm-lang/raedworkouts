@@ -924,6 +924,39 @@ const programmeSessionsFrom = (rowsBySession) => UPPER_LOWER_SESSION_ORDER.map((
   exercises: rowsBySession[id].map(programmeRow),
 }));
 
+// The week-12 backstop deload, and it is not optional.
+//
+// `research/06-beginner-protocol.md` §7.2 ruled on this explicitly:
+//
+//   "No scheduled deload in the first block. Deload on trigger, with a week-12
+//    backstop."
+//   "if no deload has fired by week 12, take one anyway. That is [LADDER]'s own
+//    stated maximum interval and it prevents a purely trigger-based rule from
+//    running indefinitely."
+//
+// The programme stopped at week 8, and derivedWeek() clamped there, so week 12
+// was unreachable and that backstop could never fire. Raed would have trained
+// indefinitely with no deload at all — repeating Block B for ever.
+//
+// Contents are the sourced numbers, §7.4, all from [LADDER] L9821-9829:
+//   volume  3 sets -> 2, 2 sets -> 1   ("cutting one or two sets per exercise")
+//   effort  about two RPE points off   (compounds 8/9/9 -> 6/7/7,
+//                                       isolation 9/9/10 -> 7/7/8)
+//   load    unchanged — "keep the same weight, take the RPE cut instead"
+// Same exercises, per L9842. It is a technique week, not a week off.
+const DELOAD_RPE_FLOOR = 6;
+const deloadOverlay = (row) => {
+  const cut = (value) => (value == null ? null : Math.max(DELOAD_RPE_FLOOR, value - 2));
+  return {
+    ...row,
+    work_sets: Math.max(1, (row.work_sets || 1) - 1),
+    rpe_set1: cut(row.rpe_set1),
+    rpe_set2: cut(row.rpe_set2),
+    rpe_set3: null,          // the third working set is the one that goes
+    deload: true,
+  };
+};
+
 const UPPER_LOWER_BLOCK_A_SESSIONS = programmeSessionsFrom(UPPER_LOWER_BLOCK_A_ROWS);
 const UPPER_LOWER_BLOCK_B_SESSIONS = programmeSessionsFrom(Object.fromEntries(
   UPPER_LOWER_SESSION_ORDER.map((sessionId) => [sessionId, UPPER_LOWER_BLOCK_A_ROWS[sessionId].map((row) =>
@@ -931,11 +964,24 @@ const UPPER_LOWER_BLOCK_B_SESSIONS = programmeSessionsFrom(Object.fromEntries(
   )]),
 ));
 
+const UPPER_LOWER_BLOCK_B_ROWS = Object.fromEntries(
+  UPPER_LOWER_SESSION_ORDER.map((sessionId) => [sessionId, UPPER_LOWER_BLOCK_A_ROWS[sessionId].map((row) =>
+    UPPER_LOWER_BLOCK_B_OVERRIDES[sessionId]?.[row.order] || blockBEffortOverlay(row)
+  )]),
+);
+// Weeks 9-11 keep Block B's prescription: [LADDER] L9842 says a deload uses the
+// SAME exercises, and nothing in the sources calls for a fourth exercise
+// rotation before the deload. What changes in week 12 is volume and effort.
+const UPPER_LOWER_BLOCK_C_SESSIONS = programmeSessionsFrom(UPPER_LOWER_BLOCK_B_ROWS);
+const UPPER_LOWER_DELOAD_SESSIONS = programmeSessionsFrom(Object.fromEntries(
+  UPPER_LOWER_SESSION_ORDER.map((sessionId) => [sessionId, UPPER_LOWER_BLOCK_B_ROWS[sessionId].map(deloadOverlay)]),
+));
+
 const PROGRAMME = {
   id: 'upper_lower',
   block: 1,
   block_name: 'Upper/Lower — Block A (Weeks 1–4)',
-  weeks: 8,
+  weeks: 12,   // a full mesocycle: A(1-4) B(5-8) C(9-11) deload(12)
   rotation_order: UPPER_LOWER_SESSION_ORDER,
   weekly_layout: ['upper_a', 'lower_a', 'rest', 'upper_b', 'lower_b', 'rest', 'rest'],
   three_day_fallback: {
@@ -956,6 +1002,8 @@ const PROGRAMME = {
   blocks: [
     { id: 'A', block: 1, week_start: 1, week_end: 4, block_name: 'Upper/Lower — Block A (Weeks 1–4)', sessions: UPPER_LOWER_BLOCK_A_SESSIONS },
     { id: 'B', block: 2, week_start: 5, week_end: 8, block_name: 'Upper/Lower — Block B (Weeks 5–8)', sessions: UPPER_LOWER_BLOCK_B_SESSIONS },
+    { id: 'C', block: 3, week_start: 9, week_end: 11, block_name: 'Upper/Lower — Block C (Weeks 9–11)', sessions: UPPER_LOWER_BLOCK_C_SESSIONS },
+    { id: 'DELOAD', block: 4, week_start: 12, week_end: 12, block_name: 'Deload Week (Week 12)', deload: true, sessions: UPPER_LOWER_DELOAD_SESSIONS },
   ],
 };
 
