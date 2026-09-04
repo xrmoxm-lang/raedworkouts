@@ -20,6 +20,7 @@ import sqlite3
 import sys
 import threading
 import time
+import urllib.request
 import uuid
 from datetime import datetime, timezone, timedelta
 from http import HTTPStatus
@@ -36,6 +37,11 @@ TOKEN_FILE = Path(os.environ.get("RAEDSYNC_TOKEN_FILE", str(ROOT / "token"))).ex
 ALLOWLIST_PATH = Path(os.environ.get("RAEDSYNC_ALLOWLIST", str(ROOT / "allowlist.json"))).expanduser()
 LEGACY_GRACE = timedelta(days=14)
 MAX_USERS = 15
+P180_INGEST_URL = os.environ.get(
+    "P180_INGEST_URL",
+    "https://raed-hp.tail53bd35.ts.net:10000/ingest/workout",
+)
+P180_INGEST_TIMEOUT = float(os.environ.get("P180_INGEST_TIMEOUT", "1.5"))
 
 STATE_DENY = {"last_sync"}
 SETTINGS_DENY = {
@@ -151,6 +157,18 @@ def init_db() -> None:
               pin_hash text,
               pin_set_at text,
               created_at text not null
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists p180_ingest_log (
+              session_key text primary key,
+              user_id text not null,
+              session_ref text,
+              status text not null,
+              posted_at text not null,
+              error text
             )
             """
         )
@@ -601,6 +619,94 @@ def prune_revisions(con: sqlite3.Connection, user_id: str) -> None:
         con.executemany("delete from revisions where id=?", [(i,) for i in delete_ids])
 
 
+def p180_session_ref(sess: dict) -> str:
+    return str(
+        sess.get("uid")
+        or "|".join(str(sess.get(k) or "") for k in ("started_at", "date", "session_id", "session_name"))
+    ).strip()
+
+
+def p180_session_date(sess: dict) -> str | None:
+    for key in ("date", "ended_at", "started_at"):
+        raw = str(sess.get(key) or "")
+        if re.match(r"^\d{4}-\d{2}-\d{2}", raw):
+            return raw[:10]
+    return None
+
+
+def p180_session_done(sess: dict) -> bool:
+    return bool(sess.get("ended_at") or completed_sets(sess) > 0)
+
+
+def post_p180_gym_session(payload: dict) -> None:
+    token = os.environ.get("P180_INGEST_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("P180_INGEST_TOKEN missing")
+    data = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        P180_INGEST_URL,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "raedworkouts-live/1",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=P180_INGEST_TIMEOUT) as resp:
+        if resp.status < 200 or resp.status >= 300:
+            raise RuntimeError(f"p180 ingest http {resp.status}")
+
+
+def notify_p180_sessions(con: sqlite3.Connection, user_id: str, state_obj: dict) -> None:
+    if user_id.lower() != "raed":
+        return
+    for sess in state_obj.get("history") or []:
+        if not isinstance(sess, dict) or not p180_session_done(sess):
+            continue
+        ref = p180_session_ref(sess)
+        if not ref:
+            continue
+        key = hashlib.sha256(f"{user_id.lower()}|{ref}".encode()).hexdigest()
+        try:
+            con.execute(
+                """
+                insert into p180_ingest_log(session_key,user_id,session_ref,status,posted_at,error)
+                values(?,?,?,?,?,?)
+                """,
+                (key, user_id, ref[:200], "attempting", now_iso(), None),
+            )
+            con.commit()
+        except sqlite3.IntegrityError:
+            continue
+        name = str(sess.get("session_name") or "gym_session")[:80]
+        payload = {
+            "name": name,
+            "session_id": str(sess.get("session_id") or ""),
+            "session_uid": str(sess.get("uid") or ""),
+            "date": p180_session_date(sess),
+            "started_at": sess.get("started_at"),
+            "ended_at": sess.get("ended_at"),
+            "duration_min": (sess.get("stats") or {}).get("duration_min"),
+            "volume_kg": (sess.get("stats") or {}).get("volume_kg"),
+            "source": "raedworkouts",
+        }
+        try:
+            post_p180_gym_session(payload)
+            con.execute(
+                "update p180_ingest_log set status=?, posted_at=?, error=? where session_key=?",
+                ("ok", now_iso(), None, key),
+            )
+            con.commit()
+        except Exception as exc:
+            con.execute(
+                "update p180_ingest_log set status=?, posted_at=?, error=? where session_key=?",
+                ("error", now_iso(), str(exc)[:240], key),
+            )
+            con.commit()
+            sys.stderr.write(f"p180 live ingest failed for {ref[:80]}: {exc!r}\n")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "RaedSync/2"
 
@@ -609,6 +715,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "authorization,content-type,x-user-key")
         self.send_header("Access-Control-Expose-Headers", "Content-Disposition")
+        # Chrome's Private Network Access. The page is a PUBLIC https origin
+        # (Vercel) and this host resolves to a CGNAT 100.x address, so Chrome
+        # refuses the request unless the server opts in on the preflight —
+        # every sync call failed with net::ERR_FAILED while Safari, which does
+        # not implement PNA, worked perfectly. That asymmetry is why the app
+        # said "فشلت المزامنة السحابية" on one browser and nothing on another.
+        #
+        # The retrieval service on 8444 already sends this; the sync server
+        # never got it, so the two behaved differently on the same phone.
+        if self.headers.get("Access-Control-Request-Private-Network"):
+            self.send_header("Access-Control-Allow-Private-Network", "true")
         super().end_headers()
 
     def log_message(self, fmt, *args):
@@ -758,7 +875,31 @@ class Handler(BaseHTTPRequestHandler):
                 if mode not in {"merge", "replace"}:
                     raise ValueError("mode must be merge or replace")
                 replace_mode = mode == "replace"
-                fast_path = replace_mode or head is None or (base_rev is not None and int(base_rev) == int(current_rev or 0))
+                # A matching base_rev is taken to mean "this client already has
+                # everything", so the incoming state is written verbatim with no
+                # merge. That is true of the real app and false of anything that
+                # posts before it has finished loading.
+                #
+                # Proved the hard way on 2026-09-02: a 122-byte body carrying only
+                # {schema_version, custom_videos} with a matching base_rev replaced
+                # the head and took 3 logged sessions and 21 PRs with it. Restored
+                # from revision 354.
+                #
+                # The guard is deliberately narrow. A real client always SENDS the
+                # history key, even when it is empty — that is what deleting the
+                # last session looks like, and it must keep working. A body that
+                # omits the key entirely is not a client with no history; it is a
+                # client that has not loaded one. Those get merged, never replace.
+                looks_partial = (
+                    isinstance(incoming_state, dict)
+                    and "history" not in incoming_state
+                    and bool((sanitize_state(head["state_json"]).get("history") if head else None))
+                )
+                fast_path = replace_mode or head is None or (
+                    base_rev is not None and int(base_rev) == int(current_rev or 0) and not looks_partial
+                )
+                if looks_partial and not replace_mode:
+                    print(f"partial_state_guard user={canonical} bytes={len(json_dumps(incoming_state))} — merging instead of replacing", flush=True)
                 merged = False
                 if head and not fast_path:
                     head_state = sanitize_state(head["state_json"])
@@ -787,6 +928,11 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 rev = int(con.execute("select last_insert_rowid() as id").fetchone()["id"])
                 prune_revisions(con, canonical)
+                con.commit()
+                try:
+                    notify_p180_sessions(con, canonical, incoming_state)
+                except Exception as exc:
+                    sys.stderr.write(f"p180 live ingest hook error: {exc!r}\n")
                 self.send_json(
                     200,
                     {
