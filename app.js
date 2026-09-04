@@ -1935,21 +1935,32 @@ function editableWeightValue(value) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : '';
 }
-// Compound ramp, sourced: 50% x 6-10 then 70% x 4-6 (ML L11160/L11162, PPL L:1454/1457).
+// Ramp loads, straight from his own sourced protocol.
 //
-// Both percentages are rounded DOWN to the equipment step (clamp C3), and at
-// light loads that collapses them onto the same number: a 10 kg working weight
-// gave 50% → 5 and 70% → 5, so the card showed two ramp rows at 5 kg with
-// different rep counts. That is not a ramp, it is the same set twice, and it is
-// what actually renders on his chest press today.
+// research/07-warmup-protocol.md §2.2 — the first-set percentage MOVES with how
+// many ramp sets there are, and the app was using the 2-set number for both:
 //
-// A ramp has to ascend. When rounding flattens it, the second set is lifted to
-// the next step — but never to or past the working weight, because a "warm-up"
-// at the working load is worse than no second ramp at all. If even that is
-// impossible (the working weight IS one step), the second set is dropped and
-// the caller gets a single ramp.
-function twoSetWarmupFrom(weight, step) {
+//     1 set   ~60%                  [ML L804-858, verbatim: "about 60% of your
+//                                    planned working weight for 6 to 10 reps"]
+//     2 sets  ~50%, then ~70%       [ML L11160/L11162, PPL L:1454/1457]
+//
+// Sixteen of the twenty-six rows in his programme prescribe ONE ramp set, and
+// every one of them was being warmed up at 50% instead of 60% — the app took
+// `ramps[0]` from the two-set pair. The reasoning in the old comment ("groove
+// the movement, not pre-fatigue it") is sensible and is also not what his
+// sources say. SKILL.md §5.4 compounded it by claiming 75% for the second set;
+// the code's 70% was right and the skill file was wrong.
+//
+// Both percentages round DOWN to the equipment step (clamp C3), and at light
+// loads that used to collapse the two-set ramp onto one number — a 10 kg working
+// weight gave 5 kg twice. A ramp has to ascend, so the second set is lifted to
+// the next step, never to or past the working weight, and drops to a single set
+// when even that is impossible.
+function rampLoadsFor(weight, count, step) {
   const s = Number(step) > 0 ? Number(step) : 2.5;
+  if (count <= 1) {
+    return [{ weight: roundToGymIncrement(weight * 0.6, s), reps: 8 }];
+  }
   const first = roundToGymIncrement(weight * 0.5, s);
   let second = roundToGymIncrement(weight * 0.7, s);
   if (second <= first) {
@@ -1966,10 +1977,10 @@ function warmupText(planned, suggestedWeight) {
   if (!planned.warmup) return '';
   if (/^2\s+sets/i.test(planned.warmup)) {
     if (!hasWorkingWeight(suggestedWeight)) return '';
-    // twoSetWarmupFrom can now legitimately return ONE entry, when the load is
+    // rampLoadsFor can legitimately return ONE entry, when the load is
     // too light for two distinct ramp weights. Indexing [1] blindly would throw
     // here and take the whole card's render down with it.
-    const warmups = twoSetWarmupFrom(suggestedWeight);
+    const warmups = rampLoadsFor(suggestedWeight, 2);
     const parts = warmups.map((w, i) => `${fmtKgValue(w.weight)}kg×${i === 0 ? 10 : 6}`);
     return `${warmups.length} ${warmups.length === 1 ? 'set' : 'sets'}: ${parts.join(', ')}`;
   }
@@ -2264,8 +2275,12 @@ function startSession(session) {
       // suggestion they carry a blank weight and read «معايرة», like the working
       // sets on a first exposure.
       const canSuggest = hasWorkingWeight(sug.weight);
-      const ramps = canSuggest ? twoSetWarmupFrom(sug.weight) : [{ weight: '', reps: 10 }, { weight: '', reps: 6 }];
-      (rampSets >= 2 ? ramps : [ramps[0]]).forEach((warm) =>
+      // The COUNT is passed in, so a one-ramp exercise gets its own 60% load
+      // rather than the first half of a two-set pair.
+      const ramps = canSuggest
+        ? rampLoadsFor(sug.weight, rampSets)
+        : (rampSets >= 2 ? [{ weight: '', reps: 10 }, { weight: '', reps: 6 }] : [{ weight: '', reps: 8 }]);
+      ramps.forEach((warm) =>
         sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
       );
     }
