@@ -80,6 +80,12 @@ export const LOCALE = Object.freeze({
   why_probe_floor: pair(
     'First time here. Start at the lightest setting and climb one step each ramp set — the working weight comes from whichever one feels easy.',
     'أول مرة على هذا التمرين. ابدأ بأخف وزن وارفع درجة وحدة كل مجموعة إحماء — وزن العمل بيطلع من اللي تحسّها سهلة.'),
+  warmup_felt_light: pair(
+    'Warm-up felt light — working sets nudged up to {kg} kg.',
+    'الإحماء طلع سهل — رفعت مجموعات العمل إلى {kg} كغ.'),
+  warmup_felt_heavy: pair(
+    'Warm-up felt heavy — easing into the first set at {kg} kg. Hit the target and it counts.',
+    'الإحماء طلع ثقيل — نبدأ أول مجموعة بـ {kg} كغ. لو وصلت الهدف فهي محسوبة.'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),

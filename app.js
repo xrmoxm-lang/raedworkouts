@@ -2303,6 +2303,69 @@ function editableWeightValue(value) {
 // comes back at RPE 4–5, and divides by the pct for the PLANNED count. The app's
 // own effort scale already maps RPE ≤ 6 to «سهل» (see prescribedEffortKey), so
 // «easy» is the trigger and no new scale is invented for it.
+// research/07 §2.7 — «the warm-up as a live load-calibration signal», which that
+// file marks as «build this — it is sourced and it is the highest-value app
+// behaviour here». It was never built.
+//
+//   [ML L8530] «If the warm-up sets feel light, you can be a little more
+//               assertive with the loads you select for your working sets.»
+//   [ML L8534] «If the warm-up sets feel heavy, ease into your first working set
+//               with a lighter load than usual.»
+//
+// ±5–10% are the source's own in-session correction magnitudes [ML L8540-8550];
+// 7.5% is the middle of that band. The asymmetry is the source's, not a
+// simplification: light is about «the loads you select for your working sets»,
+// plural, and heavy is about «your first working set».
+//
+// Only ever applied to a load the APP suggested. A number he typed is his.
+// Calibration first: it establishes the load, and the feel rule declines on an
+// exercise that has just been calibrated rather than adjusting the number it
+// derived from the same ramp.
+function runRampRules(exState, exerciseId) {
+  const derived = applyCalibrationProbe(exState, exerciseId);
+  if (derived) { toast(tf('calibrated_from_ramp', { kg: fmtKgValue(derived) })); return; }
+  const feel = applyWarmupFeel(exState, exerciseId);
+  if (feel) {
+    toast(feel.effort === 'very_hard'
+      ? tf('warmup_felt_heavy', { kg: fmtKgValue(feel.weight) })
+      : tf('warmup_felt_light', { kg: fmtKgValue(feel.weight) }));
+  }
+}
+
+const WARMUP_FEEL_DELTA = 0.075;
+function applyWarmupFeel(exState, exerciseId) {
+  if (!exState || exState.warmup_feel_applied) return null;
+  // A calibrated exercise already took its number FROM the ramp; adjusting it by
+  // the feel of that same ramp would count the signal twice.
+  if (exState.calibrated_from) return null;
+  const sets = exState.sets || [];
+  const ramps = sets.filter((set) => set.is_warmup);
+  const last = ramps[ramps.length - 1];
+  if (!last || !last.completed || !last.effort || last.effort === 'medium') return null;
+  const working = sets.filter((set) => !set.is_warmup && !set.completed);
+  if (!working.length) return null;
+  const step = equipmentStepKg(exerciseId);
+  const lighter = last.effort === 'very_hard';
+  // «your first working set» for heavy; «your working sets» for light.
+  const targets = lighter ? working.slice(0, 1) : working;
+  let changed = 0;
+  for (const set of targets) {
+    const current = Number(set.weight);
+    if (!(current > 0)) continue;
+    const scaled = current * (lighter ? 1 - WARMUP_FEEL_DELTA : 1 + WARMUP_FEEL_DELTA);
+    let next = roundToGymIncrement(scaled, step);
+    // Rounding to the equipment step can swallow the whole adjustment on a light
+    // load — 10 kg ±7.5% is 9.25/10.75, both of which round back to 10 on a
+    // 2.5 kg step. A suggestion that changes nothing is worse than none: it
+    // claims to have listened. Move by one real step instead.
+    if (next === current) next = lighter ? current - step : current + step;
+    if (next > 0 && next !== current) { set.weight = next; changed += 1; }
+  }
+  if (!changed) return null;
+  exState.warmup_feel_applied = last.effort;
+  return { effort: last.effort, weight: targets[0].weight };
+}
+
 function terminalRampPct(rampSets) {
   const n = Number(rampSets) || 0;
   if (n <= 0) return 0;
@@ -5437,10 +5500,7 @@ function renderExerciseCard(ex_id, exState) {
           // A ramp set that came back easy is the load probe of research/06
           // §6.3. Run it before the re-render so the working rows below already
           // carry the derived weight when he looks down at them.
-          if (set.completed && isWarm) {
-            const derived = applyCalibrationProbe(exState, actualId);
-            if (derived) toast(tf('calibrated_from_ramp', { kg: fmtKgValue(derived) }));
-          }
+          if (set.completed && isWarm) runRampRules(exState, actualId);
           saveLocal();
           render();
           if (set.completed && !isWarm) {
@@ -5456,14 +5516,25 @@ function renderExerciseCard(ex_id, exState) {
     // working set had a picker, so there was nowhere to log it.
     const probing = isWarm && !exState.calibrated_from
       && !(exState.sets || []).some((item) => !item.is_warmup && (hasWorkingWeight(item.weight) || item.completed));
-    if (probing) {
+    // research/07 §2.7 puts a light/normal/heavy tap AFTER the last ramp set, on
+    // every exercise and not only a first exposure. The app's three efforts are
+    // already those three words.
+    //
+    // «After» is load-bearing, and so is §2.8 on the very next line of that same
+    // file — «Warm-up sets are not building muscle. No need to overdo or
+    // over-think them», which it says to put in the UI rather than the docs. A
+    // permanent second three-face strip inside a card he is working in is
+    // exactly the clutter he has complained about. So it appears only once that
+    // ramp set is ticked, and it leaves the moment it has been answered.
+    const rampList = (exState.sets || []).filter((item) => item.is_warmup);
+    const isLastRamp = isWarm && rampList.length > 0 && set === rampList[rampList.length - 1];
+    const askFeel = isLastRamp && set.completed && !exState.warmup_feel_applied
+      && !exState.calibrated_from && !(exState.sets || []).some((item) => !item.is_warmup && item.completed);
+    if (probing || askFeel) {
       const strip = h('div', { class: 'effort-strip prompting', 'data-ramp-effort': 'true' });
       row.appendChild(h('span', { class: 'effort-slot' }));
       strip.appendChild(effortPicker(set, () => {
-        if (set.completed) {
-          const derived = applyCalibrationProbe(exState, actualId);
-          if (derived) toast(tf('calibrated_from_ramp', { kg: fmtKgValue(derived) }));
-        }
+        if (set.completed) runRampRules(exState, actualId);
         saveLocal(); render();
       }));
       body.appendChild(row);

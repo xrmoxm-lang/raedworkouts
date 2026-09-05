@@ -34,7 +34,7 @@ test('a whole workout, start to finish, on a fresh profile', async ({ page }) =>
         const ins=[...row.querySelectorAll('input')];
         if (ins.length>=2) { ins[0].value='20'; ins[0].dispatchEvent(new Event('input',{bubbles:true}));
                              ins[1].value='10'; ins[1].dispatchEvent(new Event('input',{bubbles:true})); }
-        const eff=row.parentElement?.querySelector('.effort-strip button'); if (eff) eff.click();
+        const eff=row.nextElementSibling?.classList?.contains('effort-strip') ? row.nextElementSibling.querySelector('button') : null; if (eff) eff.click();
         const chk=row.querySelector('.set-check'); if (chk) { chk.click(); ticked++; }
         await new Promise(r=>setTimeout(r,60));
       }

@@ -49,7 +49,7 @@ async function finishSession(page) {
           inputs[0].value = '20'; inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
           inputs[1].value = '10'; inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
         }
-        row.parentElement?.querySelector('.effort-strip button')?.click();
+        if (row.nextElementSibling?.classList?.contains('effort-strip')) row.nextElementSibling.querySelector('button')?.click();
         row.querySelector('.set-check')?.click();
         await new Promise((r) => setTimeout(r, 60));
       }
