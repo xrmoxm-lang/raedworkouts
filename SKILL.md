@@ -304,6 +304,37 @@ For each exercise:
 
 Warm-up sets don't count toward working set total. They're displayed dimmed (W1, W2) above working sets (1, 2, 3).
 
+**The ramp is an input now, not just a formality (added 2026-09-05).** Two rules
+read it, and until this date every ramp set he had ever logged told the app
+nothing at all.
+
+1. **First exposure — the load probe.** `research/06` §6.3, step 1 of which is
+   titled *«Ask nothing. Start at the floor.»* With no history the app leaves the
+   ramp weight blank (it cannot know what the lightest pin on his machine weighs,
+   and inventing one is the fabrication D8 forbids) — but the moment a ramp set
+   is ticked and marked **سهل**, the working sets fill in:
+
+   ```
+   terminal_ramp_pct = 0.60 (1 ramp) | 0.70 (2) | 0.85 (>=3)
+   first_working_weight = round_to_step(weight_at_RPE_4to5 / terminal_ramp_pct)
+   ```
+
+   «a ramp set», not «the last one». RPE 4–5 is **سهل** because
+   `prescribedEffortKey` already maps RPE ≤ 6 to it — no new scale was invented.
+
+2. **Every other exposure — the feel signal.** `research/07` §2.7, which that
+   file marks *«build this — it is sourced and it is the highest-value app
+   behaviour here»*. After the last ramp set: **heavy** eases the FIRST working
+   set, **light** lifts all of them, ±7.5% (middle of [ML L8540-8550]'s ±5–10%),
+   never less than one equipment step. The asymmetry is the source's wording
+   ([ML L8530] «your working sets» / [ML L8534] «your first working set»).
+
+Both decline on a weight he typed himself: a derivation may fill a blank, never
+replace a decision. The three faces appear only **after** that ramp set is ticked
+and leave once answered — `research/07` §2.8 is an explicit anti-perfectionism
+guardrail it says to put in the UI: *«Warm-up sets are not building muscle. No
+need to overdo or over-think them.»*
+
 ### 5.5 Rest
 
 - Default: 120 seconds between working sets.
@@ -313,19 +344,48 @@ Warm-up sets don't count toward working set total. They're displayed dimmed (W1,
 
 ### 5.6 Deload triggers
 
-Deload (drop volume + intensity for 1 week) when ANY of these:
-1. Scheduled — week 12 of a block.
-2. Sleep <6 h for 3+ nights in the past week AND a session feels significantly harder than logs would predict.
-3. 3 consecutive sessions where suggested weight didn't increase on any compound.
-4. Joint pain (knee, shoulder, low back) that lasts >48 h after a session.
-5. Subjective: he reports motivation crash + heavy fatigue for 5+ days.
+> **Rewritten 2026-09-05, and the old version of this section was wrong in three
+> ways that mattered.** It said deload on **ANY** of five signs; the ruling is
+> **≥2 concurrently**. It said **drop the weight 10–20%**; the source says keep
+> the weight and take the RPE cut. It said **cut working sets in half**; the
+> source says one or two sets per exercise. Believing this file over
+> `research/06` is exactly how the invented «+1 kg accessory bump» got into the
+> app two nights earlier. **`research/06-beginner-protocol.md` §7 is the
+> authority. This section is a summary of it and nothing more.**
 
-Deload protocol:
-- Cut working sets in half (3→2 or 4→2)
-- Drop weight 10–20% from previous week
-- Cap RPE at 6–7
-- Increase rest to 3 minutes
-- Sleep + protein + hydration get the spotlight
+The ruling (`06` §7.2): *«[LADDER] wins. No scheduled deload in the first block.
+Deload on trigger, with a week-12 backstop.»*
+
+**The trigger (`06` §7.3, [LADDER] L523-551)** — fire when **≥2 of six** warning
+signs hold at the same time, for ≥1 week:
+
+| # | Sign | How the app knows |
+|---|---|---|
+| 1 | Persistent joint aches | asked |
+| 2 | Persistent loss of strength | **detected** — top working weight down on ≥2 exercises vs the best logged before this week |
+| 3 | Exhausted and run down | asked |
+| 4 | Persistent extreme soreness | asked |
+| 5 | Loss of motivation | asked |
+| 6 | Difficulty sleeping | asked |
+
+Asked **once a week**, on the end screen, only after he has trained that week
+(§7.1: *«if you're not actually training hard yet, you don't need a deload at
+all»*). A trigger books the **following** week, never the one being reported on.
+
+**Backstop:** week 12, if nothing has fired. `[LADDER]` L9791's own stated
+maximum interval.
+
+**What the deload week is (`06` §7.4, [LADDER] L9821-9829):**
+- **Volume −30 to −50%** — one or two sets per exercise: 3 → 2, 2 → 1.
+- **Effort −1 to −3 RPE** — machine compounds 8/9/9 → **6/7/7**; isolation
+  9/9/10 → **7/7/8**.
+- **Load: unchanged.** The source offers −5–10% only when working from %1RM;
+  this programme takes the RPE cut instead.
+
+Code: `domain/deload.js` (pure rule, 18 unit tests), `state.wellbeing_checks`,
+`state.triggered_deload`, and the DELOAD block in `data.js`. A triggered deload
+selects that block **without moving the programme clock** — faking the week
+number would advance him through the mesocycle for free.
 
 ### 5.7 Schedule flexibility
 
@@ -382,15 +442,15 @@ worktree-v16/
 ├── index.html              # shell: header, 9 <section class="page">, tab bar, rest timer, modal, toast
 ├── styles.css              # ~2060 lines. THREE skins (حديد / ورق / رخام), light+dark each
 ├── data.js                 # SOURCE OF TRUTH for exercises + programme (window.RW)
-├── app.js                  # ~6000 lines: render, runner, coach client, sync, settings
+├── app.js                  # ~7600 lines: render, runner, coach client, sync, settings
 ├── locale.js               # ALL user-facing copy as { en, ar } pairs
 ├── sw.js                   # service worker; bump VERSION on every deploy touching app/styles/index
 ├── manifest.webmanifest    # PNG icons (SVG alone breaks the iOS home screen)
 ├── icon-180.png            # apple-touch-icon: opaque, full-bleed, no rounded corners
 ├── domain/*.js             # pure modules — progression, clamps, volume, substitutions, programme,
-│                           #   catalogue, events, migrations, runner-session, sync-identity
+│                           #   catalogue, deload, events, migrations, runner-session, sync-identity
 ├── server/                 # raedsync.py, coach_index.py, coach_qa.py, admin.py, backup.sh
-├── tests/                  # 48 node:test units + ~26 playwright specs
+├── tests/                  # 19 spec files: 76 node:test units + 107 browser tests (npm run verify)
 └── scripts/                # verify-arabic-ui, verify-phase3-identity, verify-coach-ai, lint-contrast
 ```
 
@@ -438,6 +498,32 @@ reason a full phone no longer loses the session in silence.
 - `confirmAction({title, body, confirmLabel})` — the ONLY confirmation dialog.
   Never `confirm()` or `alert()`: they are English, and a standalone PWA shell can
   suppress them, which turns the tap into a no-op.
+- `runRampRules(exState, exerciseId)` — the single entry point for the two rules
+  that read a ramp set: `applyCalibrationProbe` (first exposure, `research/06`
+  §6.3) then `applyWarmupFeel` (`research/07` §2.7). Calibration runs first, and
+  the feel rule declines on an exercise that has just been calibrated — adjusting
+  a number by the feel of the ramp it was derived from counts the signal twice.
+- `videoIdentity(video)` — the key a hidden clip is remembered by. **Never the
+  index.** Clips get retired when YouTube takes them down, and a positional key
+  silently moves the hidden mark to a neighbouring clip.
+- `recordWellbeingCheck(signs)` / `deloadActive()` — the deload trigger, §5.6.
+- `progressRing(done, target, caption)` — the home hero's focal object.
+
+### Where the numbers he sees come from
+
+Every derived number on a card has a rule and a source. If you change one of
+these, change `SKILL.md` and the research reference in the same commit — the
+three drifting apart is what produced the invented «+1 kg accessory bump».
+
+| Number | Rule | Source |
+|---|---|---|
+| Load increment | smallest step the equipment offers, learned from his own logged gaps | `research/06` §5.2 |
+| Ramp loads | 60% (1 set) · 50/70% (2) · 45/65/85% (3) | `research/07` §2.2 |
+| First load, no history | ramp weight at «سهل» ÷ terminal_ramp_pct | `research/06` §6.3 |
+| Warm-up feel adjust | ±7.5%, min one equipment step | `research/07` §2.7 |
+| Weeks 1–2 RPE cap | 6/6/6 then 6/7/7 compounds; cycle 1 only | `research/20` §8.3 |
+| Deload trigger | ≥2 of six signs, concurrently | `research/06` §7.3 |
+| Deload week | −1 set, −1 to −3 RPE, load unchanged | `research/06` §7.4 |
 - `toast(msg)` — goes through the locale layer, so an English literal renders
   Arabic **if that exact string exists as an `.en` value in locale.js**.
 - `detectPR()` — silent, Epley `kg * (1 + reps/30)`.
@@ -481,9 +567,31 @@ Every one of these shipped green and was found by measuring, not by reading:
 - A gate that **asserts the broken state** and so certifies it (the manifest icon
   list).
 - A `return` **above** a block, silently removing a screen, with the suite green.
+- A setting that is **written, migrated and never read** (`focus_mode`,
+  `show_cues`, `runner_video_open`) while `GATES.md` records it as live.
+- A key that is a **position in a list that changes** — hidden clips were
+  `mohannad_0`, `mohannad_1`, and this repo retires clips YouTube takes down, so
+  the mark moved to a different clip.
+
+**Added 2026-09-05 — three ways a test can pass while proving nothing.** All
+three were mine, in one session, and each was found by mutating the code:
+
+- **A guard the UI can't reach.** The «never overwrite his weight» test tapped
+  through the interface, and the interface stops offering the picker once a
+  weight exists — so it never reached the guard. Removing the guard broke
+  nothing. Seed the state instead when the state is one he ARRIVES at (a resumed
+  session, a sync restore) rather than taps his way to.
+- **A threshold the fixture never crosses.** The swap test used one swapped
+  exercise, and one is below the trigger's threshold of two either way. Ignoring
+  swaps entirely still passed.
+- **An assertion satisfied by absence.** «The strip is gone after a reload»
+  passed because `addInitScript` clears localStorage on EVERY navigation, so
+  there was no exercise card at all. Assert on the written value, not on a
+  missing element.
 
 So: grep every field name before trusting it, and prove a fix by breaking it
-deliberately and watching a test fail.
+deliberately and watching a test fail. If the mutation passes, the test is the
+thing that is broken.
 
 ---
 
