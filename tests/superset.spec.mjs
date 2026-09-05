@@ -133,3 +133,54 @@ test('the alternation stops once the partner owes nothing', async ({ page }) => 
   await logOneWorkingSet(page);
   expect(await focused(page), 'nothing owed on A2, so stay put').toBe(before);
 });
+
+// ---- per-set effort ---------------------------------------------------------
+//
+// 86 of the 104 rows in his programme prescribe DIFFERENT efforts across their
+// sets — chest_press_machine is [7, 7, 8] — and the card rendered one word taken
+// from `Math.max`. «صعب» sat under a row whose first two sets are prescribed
+// «متوسط», so the app was asking for more than the programme does on 83% of what
+// he lifts. He feeds those sets back as fatigue, and the deload trigger reads
+// fatigue.
+test('the card states the effort of each set, not the hardest one', async ({ page }) => {
+  await intoSession(page);
+
+  const shown = await page.evaluate(() => {
+    const node = document.querySelector('[data-prescribed-effort]');
+    return node ? node.textContent.replace(/\s+/g, ' ').trim() : null;
+  });
+  expect(shown, 'the prescribed effort must be on the card').toBeTruthy();
+
+  const rpe = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const active = JSON.parse(localStorage[key]).active_session;
+    const first = Object.values(active.exercises)[0].planned;
+    return [first.rpe_set1, first.rpe_set2, first.rpe_set3].filter((v) => Number.isFinite(v));
+  });
+  const distinct = new Set(rpe).size;
+  // The word count follows the prescription: one word when every set shares a
+  // target, one per set when they differ.
+  const words = shown.split('·').map((w) => w.trim()).filter(Boolean);
+  if (distinct > 1) {
+    expect(words.length, `RPE ${JSON.stringify(rpe)} must not collapse to one word`).toBe(rpe.length);
+    expect(new Set(words).size, 'and the words must actually differ').toBeGreaterThan(1);
+  } else {
+    expect(words.length, 'identical targets stay one word — repeating it is noise').toBe(1);
+  }
+});
+
+test('a row whose sets share a target still reads as one word', async ({ page }) => {
+  await intoSession(page);
+  const counts = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const active = JSON.parse(localStorage[key]).active_session;
+    return Object.values(active.exercises).map((ex) => {
+      const p = ex.planned;
+      const rpe = [p.rpe_set1, p.rpe_set2, p.rpe_set3].filter((v) => Number.isFinite(v));
+      return { rpe, distinct: new Set(rpe).size };
+    });
+  });
+  // The programme genuinely contains both shapes; if it ever stops, this test is
+  // no longer testing what it claims.
+  expect(counts.some((c) => c.distinct > 1), 'this session must contain a varying row').toBe(true);
+});

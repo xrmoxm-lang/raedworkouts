@@ -617,10 +617,17 @@ test('the card states the effort the programme asks for, and says it differently
   await boot(page);
   await intoSession(page);
 
-  const normal = await page.evaluate(() =>
-    document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
-  expect(normal, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل/);
-  expect(normal, 'and it still explains what earns a load increase').toContain('ليرتفع الوزن');
+  // Two lines since 2026-09-05: the rep goal, and the effort under it. They were
+  // one line, and three effort words after the goal sentence wrapped into a
+  // run-on. Read each from its own element.
+  const read = () => page.evaluate(() => ({
+    goal: document.querySelector('[data-reps-goal]')?.textContent?.trim() || '',
+    effort: document.querySelector('[data-prescribed-effort]')?.textContent?.trim() || '',
+  }));
+
+  const normal = await read();
+  expect(normal.effort, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل|شبه الفشل/);
+  expect(normal.goal, 'and it still explains what earns a load increase').toContain('ليرتفع الوزن');
 
   // 44 completed sessions = week 12 = the deload block.
   await page.evaluate(() => {
@@ -641,10 +648,9 @@ test('the card states the effort the programme asks for, and says it differently
   await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
   await page.waitForTimeout(1000);
 
-  const deload = await page.evaluate(() =>
-    document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
-  expect(deload, 'the deload must ask for less effort, in words').toContain('خفيف');
-  expect(deload, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
+  const deload = await read();
+  expect(deload.effort, 'the deload must ask for less effort, in words').toContain('خفيف');
+  expect(deload.goal, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
 });
 
 // ---------------------------------------------------------------------------
@@ -739,7 +745,9 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
       const entry = parsed.active_session.exercises.chest_press_machine;
       return {
         sets: (entry?.sets || []).filter((s) => !s.is_warmup).length,
-        goal: document.querySelector('[data-reps-goal]')?.textContent?.trim() || '',
+        // The effort moved to its own line on 2026-09-05, so that it can state
+        // one word PER SET instead of the hardest of the three.
+        effort: document.querySelector('[data-prescribed-effort]')?.textContent?.trim() || '',
       };
     });
   };
@@ -748,17 +756,17 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
   // effort band the app has words for.
   const w1 = await atWeek(0);
   expect(w1.sets, 'week 1 caps first exposure at two working sets').toBe(2);
-  expect(w1.goal).toContain('خفيف');
+  expect(w1.effort).toContain('خفيف');
 
   // Week 2: full sets, one band up.
   const w2 = await atWeek(4);
   expect(w2.sets, 'week 2 restores the full prescription').toBe(3);
-  expect(w2.goal).toContain('متوسط');
+  expect(w2.effort).toContain('متوسط');
 
   // Week 3: the ramp is over.
   const w3 = await atWeek(8);
   expect(w3.sets).toBe(3);
-  expect(w3.goal, 'week 3 is Block A as printed').toContain('صعب');
+  expect(w3.effort, 'week 3 is Block A as printed').toContain('صعب');
 });
 
 // ---------------------------------------------------------------------------

@@ -2663,18 +2663,41 @@ function estimateSessionMinutes(session) {
 // D16 replaced numeric RPE with coarse words on purpose, so this shows a word.
 // The bands are the standard reading of the scale: 6 leaves about four reps in
 // reserve, 7 about three, 8 about two, 9+ is one or none.
-function prescribedEffortKey(planned) {
+const effortKeyForRpe = (rpe) => {
+  if (rpe <= 6) return 'effort_target_easy';
+  if (rpe <= 7) return 'effort_target_moderate';
+  if (rpe <= 8) return 'effort_target_hard';
+  return 'effort_target_near_failure';
+};
+function prescribedRpeValues(planned) {
   const values = [planned?.rpe_set1, planned?.rpe_set2, planned?.rpe_set3]
     .map(Number).filter(Number.isFinite);
+  if (values.length) return values;
   // Fall back to the joined `rpe` string the programme row also carries.
-  const fromString = String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [];
-  const all = values.length ? values : fromString.map(Number).filter(Number.isFinite);
+  return (String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [])
+    .map(Number).filter(Number.isFinite);
+}
+function prescribedEffortKey(planned) {
+  const all = prescribedRpeValues(planned);
   if (!all.length) return null;
-  const top = Math.max(...all);
-  if (top <= 6) return 'effort_target_easy';
-  if (top <= 7) return 'effort_target_moderate';
-  if (top <= 8) return 'effort_target_hard';
-  return 'effort_target_near_failure';
+  return effortKeyForRpe(Math.max(...all));
+}
+
+// The effort target of EACH set, not the hardest of them.
+//
+// 86 of the 104 rows in his programme prescribe different efforts across their
+// sets — chest_press_machine is [7, 7, 8] — and the card showed one word taken
+// from `Math.max`. So «صعب» sat under a row whose first two sets are prescribed
+// «متوسط», and the app was asking him for more than the programme does on 83% of
+// what he lifts. That is not a cosmetic collapse: he feeds those same sets back
+// as fatigue, and the deload trigger reads fatigue.
+//
+// Identical values still render as one word — «صعب · صعب · صعب» is noise.
+function prescribedEffortSequence(planned) {
+  const all = prescribedRpeValues(planned);
+  if (!all.length) return [];
+  const keys = all.map(effortKeyForRpe);
+  return new Set(keys).size === 1 ? [keys[0]] : keys;
 }
 
 // The load increment, from the equipment — not from a body-part guess.
@@ -5413,22 +5436,38 @@ function renderExerciseCard(ex_id, exState) {
   const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
   // Built here, appended after the sets: it is the target he checks each row
   // against, so it belongs beside the rows, not stacked on top of them.
-  const effortKey = prescribedEffortKey(planned);
+  const effortSequence = prescribedEffortSequence(planned);
   // During a deload the goal is NOT to earn a load increase, so promising one
   // next to «خفيف — بقصد» would contradict itself on the same line. The row
   // carries the flag through from the deload overlay.
   const goalText = planned.deload
     ? tf('reps_goal_deload', { n: repTop })
     : tf('reps_goal', { n: repTop });
+  // The effort target gets its OWN line rather than trailing the goal sentence.
+  // Three words after «أكمل 12 في كل المجموعات ليرتفع الوزن» wrapped into a
+  // run-on with an orphan on the second line — «خفيف — بقصد» alone is four
+  // words. Two short lines read faster than one long one.
+  // Spelled out, not looked up by a computed key: the locale gate reads every
+  // lookup in this file to prove its key exists, and a built key defeats it.
+  const EFFORT_SHORT = {
+    effort_target_easy: () => t('effort_short_easy'),
+    effort_target_moderate: () => t('effort_short_moderate'),
+    effort_target_hard: () => t('effort_short_hard'),
+    effort_target_near_failure: () => t('effort_short_near_failure'),
+  };
+  const effortWords = effortSequence.length === 1
+    // One target for every set: the expressive wording is the whole story.
+    ? [t(effortSequence[0])]
+    : effortSequence.map((key) => (EFFORT_SHORT[key] ? EFFORT_SHORT[key]() : t(key)));
+  const effortRow = effortWords.length
+    ? h('div', { class: 'reps-goal tiny effort-line', 'data-prescribed-effort': 'true' },
+        h('span', { class: 'effort-line-label' }, t('effort_label')),
+        // Set order is left-to-right in the list above, so the sequence is
+        // isolated as one run and reads in that same order.
+        isolate(effortWords.join(' · ')))
+    : null;
   const repsGoalRow = repTop
-    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' },
-        goalText,
-        // The programme states an effort for these sets. Saying it turns the
-        // deload from "one fewer set" into the lighter week it is meant to be.
-        effortKey
-          ? h('span', { class: 'reps-goal-effort', 'data-prescribed-effort': 'true' },
-              ' · ', t(effortKey))
-          : null)
+    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, goalText)
     : null;
 
   // A1/A2 run back to back. superset_group has been in data.js since the
@@ -5633,6 +5672,7 @@ function renderExerciseCard(ex_id, exState) {
   // first input he touches further down a screen he already said had too much
   // scrolling.
   if (repsGoalRow) body.appendChild(repsGoalRow);
+  if (effortRow) body.appendChild(effortRow);
   if (lastTimeRow) body.appendChild(lastTimeRow);
 
   // Action row: alternatives + add set + warmup helper

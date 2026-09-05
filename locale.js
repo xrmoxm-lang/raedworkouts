@@ -87,6 +87,7 @@ export const LOCALE = Object.freeze({
     'Warm-up felt heavy — easing into the first set at {kg} kg. Hit the target and it counts.',
     'الإحماء طلع ثقيل — نبدأ أول مجموعة بـ {kg} كغ. لو وصلت الهدف فهي محسوبة.'),
   superset_next: pair('Straight into {name} — no rest.', 'على طول إلى {name} — بلا راحة.'),
+  effort_label: pair('Effort', 'الجهد'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),
@@ -101,6 +102,13 @@ export const LOCALE = Object.freeze({
   effort_target_moderate: pair('moderate', 'متوسط'),
   effort_target_hard: pair('hard', 'صعب'),
   effort_target_near_failure: pair('close to failure', 'قريب من الفشل'),
+  // Short forms, used only when three targets sit on one line. The long ones
+  // above read well alone — «خفيف — بقصد» is the whole story when every set
+  // shares a target — and wrap the row when there are three of them.
+  effort_short_easy: pair('easy', 'خفيف'),
+  effort_short_moderate: pair('moderate', 'متوسط'),
+  effort_short_hard: pair('hard', 'صعب'),
+  effort_short_near_failure: pair('near failure', 'شبه الفشل'),
   superset_with: pair('Superset — no rest before {name}', 'سوبرست — بلا راحة قبل {name}'),
   extra_set: pair('extra set', 'مجموعة زائدة'),
   // Appending is not swapping: it adds a movement at the END without replacing
