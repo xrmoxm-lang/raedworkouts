@@ -218,3 +218,57 @@ test('a single clip can be hidden from the card he is standing at', async ({ pag
   const after = await page.locator('#ex-chest_press_machine .video-row a, #ex-chest_press_machine .video-row .video-thumb-wrap').count();
   expect(after).toBe(before - 1);
 });
+
+// Added 2026-09-05, from his own logged session. He trained Upper A that morning
+// and three of its seven exercises — the T-bar row, the rope triceps extension
+// and the cable lateral raise — were logged at 0 kg with «وزن الجهاز فقط» ticked.
+// That flag lived only on the active session, so he was re-ticking it three
+// times every workout, and until he did, the card opened with a blank weight box
+// on a machine whose weight he never enters.
+test('«machine weight only» is remembered for the exercise, not just the session', async ({ page }) => {
+  await boot(page, {}, HISTORY);
+  await intoSession(page);
+
+  await page.locator('#ex-chest_press_machine [data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('#modal [data-machine-weight]').check();
+  await page.waitForTimeout(500);
+
+  const prefs = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k))
+      || Object.keys(localStorage).find((k) => /\.state\./.test(k));
+    return JSON.parse(localStorage[key]).exercise_prefs?.chest_press_machine;
+  });
+  expect(prefs?.machine_weight, 'the choice belongs to the exercise').toBe(true);
+});
+
+// And a fresh session picks it up, with the loads already zeroed.
+test('a new session opens already set to machine weight', async ({ page }) => {
+  await boot(page, { chest_press_machine: { equipment: 'machine', device: '', known_devices: [], machine_weight: true } }, HISTORY);
+  await intoSession(page);
+
+  const state = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k));
+    const active = JSON.parse(localStorage[key]).active_session;
+    const entry = active.exercises.chest_press_machine;
+    return {
+      flag: entry.machine_weight,
+      workingWeights: entry.sets.filter((s) => !s.is_warmup).map((s) => s.weight),
+    };
+  });
+  expect(state.flag, 'the remembered choice is applied').toBe(true);
+  expect(state.workingWeights.every((w) => Number(w) === 0), 'and the loads it implies are set').toBe(true);
+
+  // The WORKING box is read-only and shows the machine placeholder rather than
+  // sitting blank — he never types a weight here. `.set-grid input` first() is a
+  // ramp row, which keeps its own computed load exactly as the gear toggle
+  // leaves it, so index by the working set.
+  const rampCount = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k));
+    return JSON.parse(localStorage[key]).active_session.exercises.chest_press_machine
+      .sets.filter((s) => s.is_warmup).length;
+  });
+  const workingWeight = page.locator('#ex-chest_press_machine [data-runner-weight-input]').nth(rampCount);
+  await expect(workingWeight).toHaveJSProperty('readOnly', true);
+  await expect(workingWeight).toHaveAttribute('placeholder', 'الجهاز');
+});

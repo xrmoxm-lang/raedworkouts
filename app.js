@@ -2552,6 +2552,17 @@ function suggestNextWeight(exercise_id, planned) {
   if (allHitTarget && finalEffort === 'easy' && bump > 0 && !isAccessory) {
     return { weight: lastTopSet.weight + bump, note: tf('why_easy_bump', { reps: topReps, kg: bump }) };
   }
+  // A machine that carries its own stack logs 0, and 0 is a real load — but it
+  // is a load that cannot go up. «طابق أو تجاوز 0 كغ» says nothing, and the card
+  // suppresses that note anyway, so he was left with a blank box and no guidance
+  // at all on a movement he had just done three sets of. Reps are the only thing
+  // that can progress here, so the note says so and names the target.
+  if (workingSets.every((set) => Number(set.weight) === 0)) {
+    return {
+      weight: 0,
+      note: tf('why_machine_reps', { reps: finalSet.reps, target: topReps }),
+    };
+  }
   // Tagged, because the card suppresses this one note and matching on the
   // rendered Arabic string would break the moment the wording changes. It is
   // the only branch that restates «آخر مرة» instead of explaining a decision.
@@ -2994,9 +3005,15 @@ function startSession(session) {
     // Keyed by the ORIGINAL programme id, with swapped_to naming the
     // replacement — the history lookups depend on that shape. `plan` now holds
     // the swapped id and the re-entry overlay, so both must come from rawPlan.
+    // Carry the remembered «وزن الجهاز فقط» choice into the new session, and
+    // zero the loads it implies — otherwise the card opens with a blank box on a
+    // machine whose weight he has never had to enter.
+    const machineOnly = Boolean(exercisePrefs(replacementId).machine_weight);
+    if (machineOnly) for (const set of sets) if (!set.is_warmup) set.weight = 0;
     exercises[rawPlan.exercise_id] = {
       planned: effectivePlan,
       sets,
+      machine_weight: machineOnly,
       swapped_to: replacementId === rawPlan.exercise_id ? null : replacementId,
     };
   });
@@ -5878,6 +5895,15 @@ function showExerciseSettings(ex_id, exState) {
         ...(exState.machine_weight ? { checked: 'checked' } : {}),
         onChange: () => {
           exState.machine_weight = !exState.machine_weight;
+          // Remembered for the EXERCISE, not just this session.
+          //
+          // It was written only onto the active session's state, so «وزن الجهاز
+          // فقط» had to be re-ticked on every workout. Three of the seven
+          // exercises in his Upper A carry it — the T-bar row, the rope triceps
+          // extension and the cable lateral raise — which is three taps he was
+          // making every single session, forever, and a blank weight box until
+          // he made them.
+          exercisePrefs(actualId).machine_weight = exState.machine_weight;
           if (exState.machine_weight) {
             for (const set of exState.sets) if (!set.is_warmup && !set.completed) set.weight = 0;
           }

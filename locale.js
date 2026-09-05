@@ -88,6 +88,9 @@ export const LOCALE = Object.freeze({
     'الإحماء طلع ثقيل — نبدأ أول مجموعة بـ {kg} كغ. لو وصلت الهدف فهي محسوبة.'),
   superset_next: pair('Straight into {name} — no rest.', 'على طول إلى {name} — بلا راحة.'),
   effort_label: pair('Effort', 'الجهد'),
+  why_machine_reps: pair(
+    'This machine carries its own weight, so reps are what progress. Last time {reps} — aim for {target}.',
+    'هذا الجهاز بأوزانه، فالتقدّم بالتكرارات. آخر مرة {reps} — الهدف {target}.'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),
