@@ -790,8 +790,12 @@ const defaultSettings = () => ({
   rest_seconds: 120,
   vibrate: true,
   notifications: true,         // browser notifications when rest ends (req permission)
-  focus_mode: true,            // one-exercise-at-a-time during active session
-  show_cues: true,             // live-session control; defaults to useful form cues
+  // `focus_mode` and `show_cues` lived here for months as dead state: no reader
+  // anywhere in the file and no control in Settings. v15 had a real focus-mode
+  // switch (one exercise vs all); v16 always renders one, which is the low-scroll
+  // runner Raed asked for repeatedly — so the BEHAVIOUR is the one he wants and
+  // only the unused key is gone. If he wants the choice back it is a real
+  // feature to build, not a key to re-add.
   runner_video_open: true,     // persisted per profile; Raed wants the explanation open by default
   // The coach may be told which exercise he is standing at. On by default; the
   // switch is on the Coach screen while a session is running.
@@ -2355,6 +2359,18 @@ const REENTRY_RPE = {
 };
 function reEntryPlan(plan, exercise) {
   if (derivedCycle() !== 1) return plan;
+  // The experience selector finally controls something.
+  //
+  // It sat in Settings offering four choices and changing NOTHING: its only
+  // consumer was effectiveStartKg's load multiplier, and zero of the 104 rows in
+  // the live programme carry a `start_kg` for it to scale. `research/06` §6.3 is
+  // explicit about why that is the right outcome — "the experience multiplier
+  // can be deleted entirely... what experience SHOULD drive is the RPE cap and
+  // the graduation gate, not the load."
+  //
+  // The RPE cap is exactly this ramp. Someone who has been training does not
+  // need re-entering; someone detrained, returning or new does.
+  if ((state.profile?.experience || 'returning') === 'experienced') return plan;
   const band = REENTRY_RPE[derivedWeek()];
   if (!band) return plan;
   const isIsolation = Boolean(exercise?.pattern && exercise.pattern.startsWith('isolation'));
