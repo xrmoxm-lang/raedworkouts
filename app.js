@@ -3500,6 +3500,15 @@ async function askCoach(question, context = null) {
   // easy in the first place.
   if (coachAbort) { try { coachAbort.abort(); } catch (_) { /* already gone */ } }
   coachAbort = typeof AbortController === 'function' ? new AbortController() : null;
+  // Kept so the idle screen can offer them back. Mid-set he re-asks the same few
+  // things — «كم راحة بين المجموعات؟» — and retyping Arabic on a phone with
+  // chalk on your hands is the friction worth removing. Five is enough to be
+  // useful and short enough never to become a list he has to read.
+  if (question) {
+    const recent = (state.coach_recent || []).filter((q) => q !== question);
+    state.coach_recent = [question, ...recent].slice(0, 5);
+    saveLocal();
+  }
   const ticket = ++coachRequestId;
   coachState = { status: 'loading', question, results: [], answer: null, error: '' };
   coachEnglish = new Set();
@@ -3695,6 +3704,26 @@ function renderCoach() {
         class: 'btn tiny',
         onClick: () => { input.value = t(example); submit(); },
       }, t(example)))),
+    ));
+
+    // Roughly 57% of this screen was empty — measured, 481px of 844. What
+    // belongs in it is not decoration: the questions he actually asked, so he
+    // can re-ask one without typing, and a plain statement of where the answers
+    // come from, because the whole point of this coach is that it answers from
+    // HIS books and says so.
+    const recent = (state.coach_recent || []).filter(Boolean);
+    if (recent.length) {
+      root.appendChild(h('div', { class: 'card compact', 'data-coach-recent': 'true' },
+        h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_recent')),
+        h('div', { class: 'coach-chips' }, recent.map((question) => h('button', {
+          class: 'btn tiny ghost',
+          onClick: () => { input.value = question; submit(); },
+        }, question))),
+      ));
+    }
+    root.appendChild(h('div', { class: 'card compact coach-scope', 'data-coach-scope': 'true' },
+      h('div', { class: 'coach-scope-line' }, t('coach_scope_books')),
+      h('div', { class: 'tiny muted' }, t('coach_scope_note')),
     ));
     return;
   }
@@ -5938,10 +5967,28 @@ async function setCoachModel(model) {
 function renderSettings() {
   const root = $('#page-settings');
   root.innerHTML = '';
-  const disclosure = (label, content) => {
+  // A settings row that answers its own question.
+  //
+  // These were seven identical white slabs: no icon, no subtitle, no grouping,
+  // the chevron floating just left of the label and about two thirds of every
+  // row empty. Nothing could be learned without opening all seven in turn, and
+  // «سحب البيانات» — which can wipe the device — looked exactly like «المساعدة».
+  //
+  // The dead space becomes the answer: each row carries the state he would have
+  // opened it to read. The chevron moves to the far end where a disclosure
+  // indicator belongs, and the icon anchors the start edge so the rows scan as a
+  // list rather than a wall.
+  const disclosure = (label, content, opts = {}) => {
+    const summary = h('summary', {},
+      opts.icon ? h('span', { class: 'sd-icon', 'aria-hidden': 'true' }, opts.icon) : null,
+      h('span', { class: 'sd-text' },
+        h('span', { class: 'sd-label' }, label),
+        opts.hint ? h('span', { class: 'sd-hint' }, opts.hint) : null),
+    );
     const node = h('details', {
-      class: 'settings-disclosure', 'data-settings-disclosure': 'true',
-    }, h('summary', {}, label), content);
+      class: 'settings-disclosure' + (opts.danger ? ' is-data' : ''),
+      'data-settings-disclosure': 'true',
+    }, summary, content);
     // A section may want to fetch the first time it is opened rather than when
     // the page renders. Nothing else needs this yet; the coach card does.
     if (typeof content?.load === 'function') {
@@ -6007,7 +6054,15 @@ function renderSettings() {
     h('div', { class: 'label' }, h('div', { class: 'name' }, t('cloud_identity')), h('div', { class: 'desc' }, t('separate_v16_cloud_row'))),
     h('button', { class: 'btn tiny', onClick: switchProfile }, 'Switch profile'),
   ));
-  root.appendChild(disclosure('الملف', profileCard));
+  const bw = state.profile?.bodyweight_kg;
+  // A Latin name and a number inside an Arabic line get reordered by bidi —
+  // "Raed · 82 kg" rendered as "82 kg · Raed". Each foreign run is isolated, the
+  // way every other mixed line in this app already is.
+  const profileHint = h('span', {},
+    isolate(state.profile?.display_name || settings.user_id),
+    bw ? h('span', {}, ' · ', isolate(`${fmtLoadKg(bw)} ${t('kg')}`)) : null,
+  );
+  root.appendChild(disclosure('الملف', profileCard, { icon: '👤', hint: profileHint }));
 
   // Programme — D6 has one adopted, history-driven Upper/Lower rotation.
   // There is intentionally no old 2/3-day variant switch to reinterpret a
@@ -6023,7 +6078,10 @@ function renderSettings() {
       h('div', { class: 'tiny muted' }, activeProgramme.block_name),
     ),
   );
-  root.appendChild(disclosure('البرنامج', programmeCard));
+  root.appendChild(disclosure('البرنامج', programmeCard, {
+    icon: '📋',
+    hint: tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() }),
+  }));
 
   // Preferences
   const card = h('div', { class: 'card' });
@@ -6361,11 +6419,17 @@ function renderSettings() {
   // الإعدادات الباقية... نفس السهم اللي على اليمين". He is right: a settings
   // page where one card behaves differently from the other six is not a
   // settings page, it is six settings and an announcement.
-  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard()));
-  root.appendChild(disclosure('تفضيلات', preferencesContent));
-  root.appendChild(disclosure('الموسيقى', musicCard));
-  root.appendChild(disclosure('سحب البيانات', dataCard));
-  root.appendChild(disclosure('المساعدة', buildHelpCard()));
+  // Each hint is the thing he would have opened the row to find out. Built
+  // defensively: a settings screen must render even when a value is missing.
+  const skinName = SKINS[activeSkin()]?.label || "";
+  const themeName = t(settings.theme === 'light' ? 'theme_light' : settings.theme === 'dark' ? 'theme_dark' : 'theme_auto');
+  const platform = PLATFORM_INFO[settings.music_platform || 'spotify']?.label || '';
+  const lastSync = state.last_sync ? fmtDateShort(state.last_sync) : t('sync_never');
+  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard(), { icon: '🧠', hint: t('coach_hint_settings') }));
+  root.appendChild(disclosure('تفضيلات', preferencesContent, { icon: '🎛', hint: `${skinName} · ${themeName}` }));
+  root.appendChild(disclosure('الموسيقى', musicCard, { icon: '🎧', hint: isolate(platform) }));
+  root.appendChild(disclosure('سحب البيانات', dataCard, { icon: '☁️', hint: tf('last_sync_hint', { when: lastSync }), danger: true }));
+  root.appendChild(disclosure('المساعدة', buildHelpCard(), { icon: 'ℹ️' }));
 }
 
 

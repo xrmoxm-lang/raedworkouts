@@ -1648,6 +1648,26 @@ body.welcome-mode main {
    up. Closed-sideways/open-up is not an accordion in any direction.
    A down chevron that flips to up is direction-neutral — nothing to mirror, and
    it reads the same to anyone: "more below" / "collapse". */
+/* Redesigned 2026-09-05. The row was a 52px slab holding one bold word with the
+   chevron pressed against it and roughly two thirds of the width empty. It now
+   carries an icon at the start edge, the label with its live state underneath,
+   and the chevron pushed to the far end where a disclosure indicator belongs. */
+.settings-disclosure > summary { gap: 12px; padding: 12px 16px; min-height: 60px; }
+.sd-icon { flex: 0 0 auto; font-size: 17px; line-height: 1; opacity: 0.9; }
+.sd-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.sd-label { font-weight: 750; line-height: 1.2; }
+/* The state he would otherwise have opened the row to read. Quiet on purpose —
+   it is an answer, not a second heading. */
+.sd-hint {
+  font-size: 11.5px; font-weight: 600; color: var(--text-muted);
+  line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* «سحب البيانات» can wipe the device and used to look exactly like «المساعدة».
+   A tinted start edge, not a red row: it is a place he goes on purpose, not a
+   warning he must be walled off from. */
+.settings-disclosure.is-data > summary {
+  border-inline-start: 3px solid color-mix(in srgb, var(--warning) 55%, var(--border));
+}
 .settings-disclosure > summary::before {
   /* Raed: "الأرو اللي up وdown ما هو على محاذاة الكلمة بشكل ممتاز". A text glyph
      carries its own font metrics, so its optical centre never lines up with the
@@ -1656,7 +1676,11 @@ body.welcome-mode main {
      holds it, so it lines up by construction rather than by fiddling. */
   content: '';
   width: 18px; height: 18px; flex: 0 0 18px;
-  margin-inline-end: 10px;
+  /* Pushed to the far end. It used to sit immediately before the label, which
+     left the whole other side of the row empty and read as decoration rather
+     than as "this opens". */
+  margin-inline-start: auto;
+  order: 9;
   background: currentColor; opacity: 0.55;
   -webkit-mask: var(--chev) center / 18px 18px no-repeat;
   mask: var(--chev) center / 18px 18px no-repeat;
@@ -2083,3 +2107,9 @@ body.session-active #page-home > .home-context { display: none; }
    Quieter than the rep target: the number is what he checks each row against,
    the effort is the qualifier on it. */
 .reps-goal-effort { color: var(--text-muted); font-weight: 700; }
+
+/* The idle coach screen was 57% empty — measured at 481px of 844. These two
+   blocks give that space a job: what he asked before, and where the answers
+   come from. Quiet by construction; this is a screen he passes through. */
+.coach-scope { border-style: dashed; }
+.coach-scope-line { font-weight: 750; font-size: 13px; margin-bottom: 4px; }

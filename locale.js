@@ -38,6 +38,22 @@ export const LOCALE = Object.freeze({
     'Stop at {n} — this week is for moving well, not for adding load',
     'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
   coach_asking: pair('Asking…', 'يسأل…'),
+  coach_recent: pair('You asked recently', 'سألت قريباً'),
+  coach_scope_books: pair(
+    'Answers come from your own Jeff Nippard library.',
+    'الأجوبة من مكتبتك أنت — كتب جيف نيبارد.'),
+  coach_scope_note: pair(
+    'If your books do not cover something, it says so instead of guessing. Anything from the open internet is labelled.',
+    'لو كتبك ما تغطي شيئاً، يقول لك بدل ما يخمّن. وأي شيء من الإنترنت يجي مكتوب عليه.'),
+  // Settings-row hints. Each says what the row would have told him if he opened
+  // it, so seven identical slabs stop needing seven taps to read.
+  theme_auto: pair('auto', 'تلقائي'),
+  theme_light: pair('light', 'فاتح'),
+  theme_dark: pair('dark', 'غامق'),
+  sync_never: pair('never', 'ما تمت بعد'),
+  last_sync_hint: pair('last sync {when}', 'آخر مزامنة {when}'),
+  programme_hint: pair('week {week} · cycle {cycle}', 'الأسبوع {week} · الدورة {cycle}'),
+  coach_hint_settings: pair('model and spending', 'الموديل والمصروف'),
   bodyweight_out_of_range: pair(
     'That does not look like a bodyweight. Enter a number between {min} and {max} kg.',
     'هذا ما يبدو وزن جسم. أدخل رقماً بين {min} و{max} كجم.'),
