@@ -2296,6 +2296,45 @@ function equipmentStepKg(exerciseId) {
 }
 
 // ---- Session warm-up phase ---------------------------------
+// The weeks 1-2 re-entry ramp. D19, and it was prose until now.
+//
+// D19: "Treat weeks 1-2 as a re-entry ramp rather than a first-ever exposure."
+// `research/20-programme-decision.md` §8.3 gives the table, and nothing in the
+// app read it — the Settings screen has been promising Raed "the first two weeks
+// are a re-entry ramp" while session creation built the ordinary Block A rows.
+//
+//   week 1   compounds 6/6/6   isolation 7/7/7   TWO working sets on an
+//                                               exercise's first exposure only
+//   week 2   compounds 6/7/7   isolation 7/8/8   full sets
+//   week 3+  Block A as printed
+//
+// Cycle 1 only. He is re-entering after a layoff once; by week 1 of cycle 2 he
+// has twelve weeks behind him, and the deload in week 12 is what handles fatigue
+// from then on. Re-ramping every cycle would just be a second deload.
+//
+// §8.3 is emphatic immediately below the table that "RPE is telemetry, not the
+// controller" — so this changes the effort SHOWN and, in week one, the set
+// count. It never touches how load is computed; that stays on achieved reps.
+const REENTRY_RPE = {
+  1: { compound: [6, 6, 6], isolation: [7, 7, 7] },
+  2: { compound: [6, 7, 7], isolation: [7, 8, 8] },
+};
+function reEntryPlan(plan, exercise) {
+  if (derivedCycle() !== 1) return plan;
+  const band = REENTRY_RPE[derivedWeek()];
+  if (!band) return plan;
+  const isIsolation = Boolean(exercise?.pattern && exercise.pattern.startsWith('isolation'));
+  const [r1, r2, r3] = band[isIsolation ? 'isolation' : 'compound'];
+  const next = { ...plan, rpe_set1: r1, rpe_set2: r2, rpe_set3: r3, reentry_week: derivedWeek() };
+  // Week 1 caps an exercise at two working sets, but only the FIRST time he
+  // meets it — §8.3, "first exposure only". Once it has history the full
+  // prescription applies.
+  if (derivedWeek() === 1 && !getLastPerformance(plan.exercise_id)) {
+    next.sets = Math.min(Number(plan.sets) || 0, 2) || 2;
+  }
+  return next;
+}
+
 function warmupTypeForSession(session) {
   // D12 is data-led: both Upper sessions use the merged push+pull warm-up;
   // both Lower sessions use the leg warm-up. The explicit fallback keeps an
@@ -2430,9 +2469,12 @@ function startSession(session) {
     return;
   }
   const exercises = {};
-  session.exercises.forEach(plan => {
-    const replacementId = scopedReplacementFor(session, plan.exercise_id);
-    const effectivePlan = replacementId === plan.exercise_id ? plan : { ...plan, exercise_id: replacementId };
+  session.exercises.forEach(rawPlan => {
+    const replacementId = scopedReplacementFor(session, rawPlan.exercise_id);
+    const swapped = replacementId === rawPlan.exercise_id ? rawPlan : { ...rawPlan, exercise_id: replacementId };
+    // D19's re-entry ramp, applied before anything reads sets or effort.
+    const plan = reEntryPlan(swapped, getAllExercises().find((e) => e.id === replacementId));
+    const effectivePlan = plan;
     const sug = suggestNextWeight(replacementId, effectivePlan);
     const suggestedWorkingWeight = editableWeightValue(sug.weight);
     const sets = [];
@@ -2471,10 +2513,13 @@ function startSession(session) {
       // In particular, a new catalogue movement has no made-up 0 kg default.
       sets.push({ is_warmup: false, weight: suggestedWorkingWeight, reps: workingRepTarget(effectivePlan), effort: null, completed: false });
     }
-    exercises[plan.exercise_id] = {
+    // Keyed by the ORIGINAL programme id, with swapped_to naming the
+    // replacement — the history lookups depend on that shape. `plan` now holds
+    // the swapped id and the re-entry overlay, so both must come from rawPlan.
+    exercises[rawPlan.exercise_id] = {
       planned: effectivePlan,
       sets,
-      swapped_to: replacementId === plan.exercise_id ? null : replacementId,
+      swapped_to: replacementId === rawPlan.exercise_id ? null : replacementId,
     };
   });
   sessionDoneDismissed = false;

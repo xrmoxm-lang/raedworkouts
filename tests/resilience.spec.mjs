@@ -699,3 +699,64 @@ test('the load increment comes from the equipment, learned from his own logs', a
   // Dumbbells step by 2.5 — the SAME rule, not a body-part exception.
   expect(suggested.curl, 'a 2.5 kg dumbbell jump must step by 2.5').toBe(12.5);
 });
+
+// ---------------------------------------------------------------------------
+// D19's re-entry ramp was prose. The Settings screen has been telling Raed "the
+// first two weeks are a re-entry ramp" while session creation built the ordinary
+// Block A rows. research/20 §8.3 gives the table; nothing read it.
+//
+//   week 1  compounds 6/6/6, isolation 7/7/7, TWO working sets on first exposure
+//   week 2  compounds 6/7/7, isolation 7/8/8, full sets
+//   week 3+ as printed
+//
+// Cycle 1 only — he re-enters after a layoff once, and week 12's deload handles
+// fatigue from then on.
+test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => {
+  await boot(page);
+
+  const atWeek = async (completed) => {
+    await page.evaluate((n) => {
+      const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+      const parsed = JSON.parse(localStorage[key]);
+      parsed.history = Array.from({ length: n }, (_, i) => ({
+        date: '2026-01-01', session_id: ['upper_a', 'lower_a', 'upper_b', 'lower_b'][i % 4],
+        started_at: '2026-01-01T09:00:00Z', ended_at: '2026-01-01T10:00:00Z', uid: `u${i}`,
+        exercises: {}, prs: [], stats: {},
+      }));
+      parsed.active_session = null;
+      parsed.forced_next_session = 'upper_a';
+      localStorage[key] = JSON.stringify(parsed);
+    }, completed);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(900);
+    await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+    await page.waitForTimeout(800);
+    await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+    await page.waitForTimeout(900);
+    return page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+      const parsed = JSON.parse(localStorage[key]);
+      const entry = parsed.active_session.exercises.chest_press_machine;
+      return {
+        sets: (entry?.sets || []).filter((s) => !s.is_warmup).length,
+        goal: document.querySelector('[data-reps-goal]')?.textContent?.trim() || '',
+      };
+    });
+  };
+
+  // Week 1: two working sets on a movement he has never done, and the gentlest
+  // effort band the app has words for.
+  const w1 = await atWeek(0);
+  expect(w1.sets, 'week 1 caps first exposure at two working sets').toBe(2);
+  expect(w1.goal).toContain('خفيف');
+
+  // Week 2: full sets, one band up.
+  const w2 = await atWeek(4);
+  expect(w2.sets, 'week 2 restores the full prescription').toBe(3);
+  expect(w2.goal).toContain('متوسط');
+
+  // Week 3: the ramp is over.
+  const w3 = await atWeek(8);
+  expect(w3.sets).toBe(3);
+  expect(w3.goal, 'week 3 is Block A as printed').toContain('صعب');
+});
