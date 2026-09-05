@@ -37,6 +37,10 @@ export const LOCALE = Object.freeze({
   reps_goal_deload: pair(
     'Stop at {n} — this week is for moving well, not for adding load',
     'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
+  coach_asking: pair('Asking…', 'يسأل…'),
+  bodyweight_out_of_range: pair(
+    'That does not look like a bodyweight. Enter a number between {min} and {max} kg.',
+    'هذا ما يبدو وزن جسم. أدخل رقماً بين {min} و{max} كجم.'),
   effort_target_easy: pair('take it easy', 'خفيف — بقصد'),
   effort_target_moderate: pair('moderate', 'متوسط'),
   effort_target_hard: pair('hard', 'صعب'),

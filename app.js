@@ -3423,6 +3423,7 @@ let coachEnglish = new Set();
 let coachOpen = new Set();
 // Monotonic, so a slow earlier request cannot overwrite a newer answer.
 let coachRequestId = 0;
+let coachAbort = null;
 
 // Raed's library deliberately keeps both editions of two Nippard programmes,
 // because their bytes differ and no supersession was ever proven. Retrieval does
@@ -3489,6 +3490,16 @@ async function askCoach(question, context = null) {
   // finish out of order and leave the FIRST answer sitting under the SECOND
   // question — with citation markers pointing into the wrong passage list,
   // because coachOpen and coachEnglish are keyed by index into it.
+  // Abort the previous request, do not merely ignore its answer.
+  //
+  // The ticket below already stops a slow first answer overwriting a fast second
+  // one, but the first fetch kept running and the server kept generating — and
+  // /answer is the one metered call in this app. A double tap, or a second
+  // question typed while the first was still thinking, paid twice. The input and
+  // the button also stayed enabled throughout, which is what made a double tap
+  // easy in the first place.
+  if (coachAbort) { try { coachAbort.abort(); } catch (_) { /* already gone */ } }
+  coachAbort = typeof AbortController === 'function' ? new AbortController() : null;
   const ticket = ++coachRequestId;
   coachState = { status: 'loading', question, results: [], answer: null, error: '' };
   coachEnglish = new Set();
@@ -3525,7 +3536,11 @@ async function askCoach(question, context = null) {
         // such — he asked for the answer AND for it to say where it came from.
         allow_web: true,
       }),
-      signal: AbortSignal.timeout(30000),
+      // Both the 30s ceiling AND this request's own abort, so a newer question
+      // actually cancels the paid call rather than leaving it to finish unread.
+      signal: coachAbort
+        ? (AbortSignal.any ? AbortSignal.any([coachAbort.signal, AbortSignal.timeout(30000)]) : coachAbort.signal)
+        : AbortSignal.timeout(30000),
     });
     if (ticket !== coachRequestId) return;
     // Status first, body second. res.json() used to run before anything looked
@@ -3611,12 +3626,18 @@ function renderCoach() {
   root.innerHTML = '';
   root.appendChild(h('div', { class: 'page-header' }, h('h1', {}, t('coach'))));
 
+  // Disabled while a question is in flight. They were rendered before the
+  // loading branch and never disabled, so a double tap on «اسأل» — easy on a
+  // phone — fired a second metered request before the first had answered.
+  const busy = coachState.status === 'loading';
   const input = h('input', {
     type: 'text', class: 'coach-input', value: coachState.question,
     placeholder: t('coach_placeholder'), 'data-coach-input': 'true',
+    ...(busy ? { disabled: 'disabled' } : {}),
     onKeydown: (ev) => { if (ev.key === 'Enter') submit(); },
   });
   const submit = () => {
+    if (coachState.status === 'loading') return;
     const question = input.value.trim();
     // The service rejects anything under 3 characters; catching it here keeps a
     // stray tap from rendering as a server error.
@@ -3657,7 +3678,10 @@ function renderCoach() {
     h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_intro')),
     h('div', { class: 'coach-row' },
       input,
-      h('button', { class: 'btn primary', onClick: submit, 'data-coach-submit': 'true' }, t('coach_ask')),
+      h('button', {
+        class: 'btn primary', onClick: submit, 'data-coach-submit': 'true',
+        ...(busy ? { disabled: 'disabled' } : {}),
+      }, busy ? t('coach_asking') : t('coach_ask')),
     ),
   ));
 
@@ -5441,6 +5465,40 @@ function renderLibExerciseCard(ex) {
     return card;
 }
 
+// One place that decides what a bodyweight entry means.
+//
+// There were two, and they disagreed. The quick logger in History accepted any
+// truthy parsed number — including a negative — appended it to the log, and did
+// NOT update `profile.bodyweight_kg`; the protein target reads the profile, so
+// logging a new weight left the target computed from an old one. Settings
+// accepted a negative too, stored it as the current weight, and appended a
+// SECOND entry for the same day.
+//
+// A human bodyweight has bounds. 25-300 kg is wide enough to never argue with a
+// real person and narrow enough to catch a typo or a stray minus sign.
+const BODYWEIGHT_MIN_KG = 25;
+const BODYWEIGHT_MAX_KG = 300;
+function isPlausibleBodyweight(kg) {
+  return Number.isFinite(kg) && kg >= BODYWEIGHT_MIN_KG && kg <= BODYWEIGHT_MAX_KG;
+}
+// Records a weigh-in: one entry per DAY (the last one wins, because a second
+// reading on the same morning is a correction, not a second data point), and the
+// profile follows it so the protein target cannot go stale.
+function recordBodyweight(kg) {
+  if (!isPlausibleBodyweight(kg)) {
+    toast(tf('bodyweight_out_of_range', { min: BODYWEIGHT_MIN_KG, max: BODYWEIGHT_MAX_KG }), 5000);
+    return false;
+  }
+  if (!Array.isArray(state.bodyweight_log)) state.bodyweight_log = [];
+  const today = todayISO();
+  const existing = state.bodyweight_log.findIndex((entry) => entry?.date === today);
+  if (existing >= 0) state.bodyweight_log[existing] = { date: today, kg };
+  else state.bodyweight_log.push({ date: today, kg });
+  state.profile.bodyweight_kg = kg;
+  saveLocal();
+  return true;
+}
+
 // ---- Add custom exercise modal -------------------------------
 function openAddCustomExerciseModal() {
   const m = $('#modal');
@@ -5533,9 +5591,7 @@ function renderHistory() {
       }),
       h('button', { class: 'btn primary', onClick: () => {
         const v = parseFloat($('#bw-input').value);
-        if (!v) return;
-        state.bodyweight_log.push({ date: todayISO(), kg: v });
-        saveLocal();
+        if (!recordBodyweight(v)) return;
         toastSaved('Bodyweight logged.');
         renderHistory();
       }}, 'Log'),
@@ -5921,10 +5977,17 @@ function renderSettings() {
     value: state.profile?.bodyweight_kg ?? '',
     placeholder: 'kg',
     onChange: (e) => {
-      const kg = parseFloat(e.target.value);
-      state.profile.bodyweight_kg = kg || null;
-      if (kg) state.bodyweight_log.push({ date: todayISO(), kg });
-      saveLocal();
+      const raw = e.target.value.trim();
+      if (raw === '') {
+        state.profile.bodyweight_kg = null;
+        saveLocal();
+        renderSettings();
+        return;
+      }
+      if (!recordBodyweight(parseFloat(raw))) {
+        e.target.value = state.profile?.bodyweight_kg ?? '';
+        return;
+      }
       renderSettings();
     }
   });
