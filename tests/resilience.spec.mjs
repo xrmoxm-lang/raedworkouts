@@ -807,3 +807,46 @@ test('home tells him whether today is a training day or a rest day', async ({ pa
   // half-English — the trap the week strip already documents.
   expect(weekDone, 'no raw English session name').not.toMatch(/Upper|Lower/);
 });
+
+// ---------------------------------------------------------------------------
+// Raed caught this one himself: "إذا غيرت مصدر الموسيقى بالإعدادات ما يتغير" —
+// and it worked in v15.
+//
+// v15 carried spotify / youtube_music / apple_music per session. v16 ported only
+// Spotify while the Settings picker kept offering all three, and the resolver
+// falls back to Spotify when a platform has no data — so the control looked like
+// it worked and silently ignored him. A picker that offers a choice and drops it
+// is worse than one that offers nothing.
+test('changing the music source changes the links', async ({ page }) => {
+  await boot(page);
+
+  const linksFor = async (platform) => {
+    await page.evaluate((p) => {
+      const key = Object.keys(localStorage).find((k) => /\.settings\./.test(k) && /raed/i.test(k));
+      const settings = JSON.parse(localStorage[key]);
+      settings.music_platform = p;
+      localStorage[key] = JSON.stringify(settings);
+    }, platform);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(900);
+    return page.evaluate(() => [...document.querySelectorAll('#page-home a')]
+      .map((a) => a.getAttribute('href') || '')
+      .filter((h) => /spotify|youtube|apple/.test(h)));
+  };
+
+  const spotify = await linksFor('spotify');
+  expect(spotify.length).toBeGreaterThan(0);
+  expect(spotify.every((h) => h.includes('spotify'))).toBe(true);
+
+  const youtube = await linksFor('youtube_music');
+  expect(youtube.length, 'YouTube Music must have its own links').toBeGreaterThan(0);
+  expect(youtube.every((h) => h.includes('music.youtube.com')),
+    `picking YouTube Music must not fall back to Spotify — got ${youtube.join(', ')}`).toBe(true);
+
+  const apple = await linksFor('apple_music');
+  expect(apple.length, 'Apple Music must have its own links').toBeGreaterThan(0);
+  expect(apple.every((h) => h.includes('music.apple.com')),
+    `picking Apple Music must not fall back to Spotify — got ${apple.join(', ')}`).toBe(true);
+
+  expect(await linksFor('none'), 'choosing no music must show none').toEqual([]);
+});

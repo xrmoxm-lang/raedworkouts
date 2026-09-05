@@ -916,6 +916,11 @@ export const ALLOWED_PLAYLIST_TITLES = Object.freeze([
   // Upper/Lower keeps these v15 Spotify titles literally so the hand-off
   // matches the title Raed sees in Spotify. Retired PPL titles stay out.
   'Beast Mode', 'Power Workout',
+  // Added 2026-09-05 with the YouTube Music and Apple Music playlists that v16
+  // never ported — the picker offered both and silently served Spotify. Latin
+  // for the same reason as the two above: it is the title he will see once the
+  // link opens, and translating it would make the hand-off harder to follow.
+  'Heavy Lifting', 'Hard Rap Workout', 'Pure Workout', 'Pump Up',
 ]);
 export const ALLOWED_PROPER_NOUNS = Object.freeze([
   'Raedworkouts Go', 'Raedworkouts', 'Jeff Nippard', 'Mohannad', 'Raed', 'Bassam', 'Abdullah',
