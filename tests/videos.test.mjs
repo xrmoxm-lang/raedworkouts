@@ -283,3 +283,33 @@ test('no native confirm/prompt/alert survives anywhere reachable', () => {
   assert.deepEqual(offenders, [],
     'a PWA shell can suppress a native dialog, so the tap silently does nothing — use confirmAction()');
 });
+
+// Added 2026-09-05. A hidden clip was remembered by its POSITION in the list —
+// 'mohannad_0', 'mohannad_1' — and this file's own «clips confirmed removed from
+// YouTube are retired» test is the proof that the list is not stable.
+//
+// Measured on incline_chest_press before the fix: hide the second clip
+// (wMksQXD01K0), retire the first, and 'mohannad_1' names o0Ud3RU59hw instead.
+// A clip he deliberately hid comes back, a different one vanishes, silently.
+test('a hidden clip is remembered by which clip it is, not by where it sat', async () => {
+  const src = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+
+  // The stored key is derived from the clip's own identity.
+  assert.match(src, /const videoIdentity = \(video\) =>[^\n]*video\.id[^\n]*'yt:'/,
+    'the hide key must come from the clip id, not its index');
+
+  // Every visibility call goes through it. A single surviving `v.key` here is
+  // the whole bug back again.
+  const visibilityCalls = [...src.matchAll(/(?:isVideoHidden|toggleVideoVisibility)\([^)]*\)/g)].map((m) => m[0]);
+  assert.ok(visibilityCalls.length >= 3, `expected the three visibility call sites, saw ${visibilityCalls.length}`);
+  for (const call of visibilityCalls) {
+    if (/^(?:isVideoHidden|toggleVideoVisibility)\((?:exerciseId|key)/.test(call)) continue; // the definitions
+    assert.ok(/videoIdentity\(/.test(call) || /\bkey\b\s*\)$/.test(call),
+      `visibility keyed by position again: ${call}`);
+  }
+
+  // And the choices already stored get converted once, rather than silently
+  // meaning something different after the next retirement.
+  assert.match(src, /function migrateVideoHiddenKeys\(\)/);
+  assert.match(src, /migrateVideoHiddenKeys\(\);/);
+});

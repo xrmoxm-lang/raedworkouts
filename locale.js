@@ -60,6 +60,11 @@ export const LOCALE = Object.freeze({
   last_sync_hint: pair('last sync {when}', 'آخر مزامنة {when}'),
   programme_hint: pair('week {week} · cycle {cycle}', 'الأسبوع {week} · الدورة {cycle}'),
   coach_hint_settings: pair('model and spending', 'الموديل والمصروف'),
+  clips_section: pair('Clips', 'المقاطع'),
+  show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
+  clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),
+  clip_hidden_tap_show: pair('Hidden — tap to show', 'مخفي — اضغط للإظهار'),
+  no_clips_for_exercise: pair('No clips for this exercise yet.', 'ما فيه مقاطع لهذا التمرين بعد.'),
   coach_restored: pair('Your last answer', 'آخر جواب سألت عنه'),
   coach_clear: pair('New question', 'سؤال جديد'),
   bodyweight_out_of_range: pair(

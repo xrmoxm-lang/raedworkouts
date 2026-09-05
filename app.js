@@ -409,6 +409,59 @@ function deleteCustomExercise(id) {
 }
 
 // ---- Video visibility helpers --------------------------------
+//
+// A hidden clip is remembered by WHICH CLIP it is, not by where it sits in the
+// list. It used to be the position — 'mohannad_0', 'mohannad_1' — and the list
+// is not stable: videos.test.mjs exists precisely because clips get retired
+// when YouTube takes them down, and retiring one shifts every clip after it.
+//
+// Measured on incline_chest_press, which carries three: hide the second
+// (wMksQXD01K0), retire the first, and 'mohannad_1' now names o0Ud3RU59hw. A
+// clip he deliberately hid comes back and a different one disappears, silently.
+// It is the wrong-video failure D8 is written against, arriving through the
+// back door of a preference.
+const videoIdentity = (video) => (video && video.id) ? 'yt:' + video.id : 'url:' + String(video?.url || '');
+
+// One-time conversion of the positional keys already stored. It is only correct
+// while the lists still match what they were when he made the choice, which is
+// why it runs at load rather than lazily — the moment a clip is retired, the
+// old keys stop meaning anything and there is nothing left to convert.
+function migrateVideoHiddenKeys() {
+  if (state.video_hidden_key_version >= 2) return;
+  const stored = state.video_hidden;
+  // Whether anything actually moved. The first cut called saveLocal() on every
+  // load — including the overwhelmingly common case of an empty video_hidden —
+  // and saveLocal() marks the state dirty for sync, so every boot queued a push.
+  // Twelve browser tests started failing on `page.reload: Timeout 20000ms` and
+  // the suite went from 2.9 to 8.0 minutes. A migration that finds nothing to do
+  // must leave no trace but its own version marker.
+  let changed = false;
+  if (stored && typeof stored === 'object') {
+    for (const [exerciseId, list] of Object.entries(stored)) {
+      if (!Array.isArray(list) || !list.length) continue;
+      const exercise = getAllExercises().find((item) => item.id === exerciseId);
+      if (!exercise) continue;
+      // buildExerciseVideos still emits the old positional `key` alongside each
+      // clip, so the map comes straight from it. Reconstructing the key by hand
+      // got the custom-video index wrong — those count within their own list,
+      // not the combined one.
+      const byPosition = new Map(
+        buildExerciseVideos(exerciseId, exercise, { includeHidden: true })
+          .map((video) => [video.key, videoIdentity(video)]));
+      const converted = list.map((key) => byPosition.get(key)).filter(Boolean);
+      // A key that resolves to nothing names a clip that is already gone.
+      // Dropping it is the honest outcome: there is no clip left to hide.
+      if (converted.length) stored[exerciseId] = [...new Set(converted)];
+      else delete stored[exerciseId];
+      changed = true;
+    }
+  }
+  state.video_hidden_key_version = 2;
+  // The marker rides along with the next real write. It is only an optimisation
+  // — re-running the migration over already-converted keys is a no-op, because
+  // an identity key matches no positional key in the map.
+  if (changed) saveLocal();
+}
 function isVideoHidden(exerciseId, key) {
   const list = state.video_hidden?.[exerciseId];
   return Array.isArray(list) && list.includes(key);
@@ -615,7 +668,7 @@ function buildExerciseVideos(exerciseId, ex, opts = {}) {
       };
     })
   ];
-  return opts.includeHidden ? videos : videos.filter(v => !isVideoHidden(exerciseId, v.key));
+  return opts.includeHidden ? videos : videos.filter(v => !isVideoHidden(exerciseId, videoIdentity(v)));
 }
 function buildVideoTile(v, opts = {}) {
   const id = v.id || ytIdFromUrl(v.url);
@@ -768,7 +821,8 @@ const defaultState = () => ({
   bodyweight_log: [],          // [{ date, kg }]
   custom_videos: {},           // { exercise_id: [url, url, ...] }  — extra videos user adds
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
-  video_hidden: {},            // { exercise_id: ['mohannad_0','jn','custom_2'] } — hidden video keys
+  video_hidden: {},            // { exercise_id: ['yt:<id>', 'url:<href>'] } — hidden clips, by clip
+  video_hidden_key_version: 0, // 2 = keys are clip identities, not list positions
   custom_exercises: [],        // [{ id, name, name_ar, primary, secondary, jeff_nippard, mohannad, ... }]
   programme_overrides: null,   // optional: replace default PROGRAMME entirely
   prs: {},                     // { exercise_id: { kg, reps, date, score } } — best ever per exercise
@@ -1058,6 +1112,7 @@ function loadLocal() {
   coachEnglish = new Set();
   coachOpen = new Set();
   restoreCoachAnswer();
+  migrateVideoHiddenKeys();
   // D6 replaces the selectable v15 programme variants. Stored values are
   // deliberately retired rather than interpreted as new programme choices.
   delete settings.programme_variant;
@@ -4983,8 +5038,18 @@ function renderExerciseCard(ex_id, exState) {
       );
     }
   }
-  // Videos — Library controls which are visible via state.video_hidden
-  const allVideos = buildExerciseVideos(actualId, ex);
+  // Videos.
+  //
+  // `runner_video_open` was declared in defaultSettings(), migrated once on
+  // load, written by nothing and READ BY NOTHING — while GATES.md said it was
+  // live. Raed asked for this control in his own words: «فيه زي هذه العجلة حقة
+  // الإعدادات إنه مثلاً أحط أخفي الـvideos... وتكون مخفية، أهم شيء يكون real app
+  // وتتذكر التصرفات». The gear he pointed at now owns it, and it is remembered.
+  //
+  // Two levels, because he described both: this switch hides the strip during a
+  // workout without forgetting anything, and the per-clip marks below it in the
+  // sheet are still the Library's choices about individual clips.
+  const allVideos = settings.runner_video_open ? buildExerciseVideos(actualId, ex) : [];
   if (allVideos.length) {
     const videoRow = h('div', { class: 'video-row' },
       allVideos.map(v => buildVideoTile(v))
@@ -5438,6 +5503,45 @@ function showExerciseSettings(ex_id, exState) {
     ),
   ));
 
+  // ---- 2b. المقاطع — which clips he sees, from where he is standing -------
+  //
+  // The per-clip toggles existed only in Library. Mid-set, that is two screens
+  // and a scroll away from the card the clip is on, which is why the control he
+  // asked for never felt delivered even though half of it was there.
+  const clips = buildExerciseVideos(actualId, ex, { includeHidden: true });
+  modal.appendChild(h('section', { class: 'xs-section' },
+    h('div', { class: 'xs-label' }, t('clips_section')),
+    h('label', { class: 'xs-toggle' },
+      h('input', {
+        type: 'checkbox', 'data-runner-video-open': 'true',
+        ...(settings.runner_video_open ? { checked: 'checked' } : {}),
+        onChange: () => {
+          settings.runner_video_open = !settings.runner_video_open;
+          saveLocal(); reopen();
+        },
+      }),
+      h('span', {}, t('show_clips_in_workout')),
+    ),
+    clips.length
+      ? h('div', { class: 'xs-clips', 'data-xs-clips': 'true' }, clips.map((video) => {
+          const key = videoIdentity(video);
+          const hidden = isVideoHidden(actualId, key);
+          return h('button', {
+            type: 'button',
+            class: 'chip xs-clip' + (hidden ? ' off' : ''),
+            'data-xs-clip': key,
+            // The state is in the strike-through and the fill, but a chip is not
+            // self-describing to a screen reader, so it says which it is.
+            'aria-pressed': hidden ? 'false' : 'true',
+            title: hidden ? t('clip_hidden_tap_show') : t('clip_shown_tap_hide'),
+            onClick: () => { toggleVideoVisibility(actualId, key); reopen(); },
+          }, h('bdi', { class: 'ltr-run' }, video.label || video.title));
+        }))
+      // Not every movement has a clip. Saying so beats an empty row that looks
+      // like the control failed to load.
+      : h('div', { class: 'tiny muted' }, t('no_clips_for_exercise')),
+  ));
+
   // ---- 3. إجراءات — verbs ------------------------------------------------
   const rest = prescribedRestSeconds(planned);
   modal.appendChild(h('section', { class: 'xs-section' },
@@ -5743,7 +5847,7 @@ function renderLibExerciseCard(ex) {
         t('video_tap_hint')));
       body.appendChild(h('div', { class: 'video-row' },
         allVideos.map(v => {
-          const hidden = isVideoHidden(ex.id, v.key);
+          const hidden = isVideoHidden(ex.id, videoIdentity(v));
           const wrap = h('div', {
             class: 'video-thumb-wrap' + (hidden ? ' hidden-video' : ''),
             style: 'position:relative;',
@@ -5754,7 +5858,7 @@ function renderLibExerciseCard(ex) {
             type: 'button',
             class: 'video-toggle' + (hidden ? ' off' : ' on'),
             title: hidden ? 'Hidden from session — tap to show' : 'Showing — tap to hide from session',
-            onClick: (e) => { e.preventDefault(); e.stopPropagation(); toggleVideoVisibility(ex.id, v.key); renderLibrary(); }
+            onClick: (e) => { e.preventDefault(); e.stopPropagation(); toggleVideoVisibility(ex.id, videoIdentity(v)); renderLibrary(); }
           }, hidden ? '⊘' : '✓');
           wrap.appendChild(link);
           wrap.appendChild(toggle);

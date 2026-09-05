@@ -2252,3 +2252,9 @@ body.session-active #page-home > .home-context { display: none; }
   margin-bottom: 10px; font-size: 11.5px; font-weight: 700;
   letter-spacing: 0.04em; color: var(--text-muted);
 }
+
+/* Clip chips in the exercise gear sheet. A hidden clip stays visible as a chip —
+   it has to, or there would be no way to bring it back — so "off" is struck
+   through and drained rather than removed. */
+.xs-clips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.xs-clip.off { opacity: 0.45; text-decoration: line-through; }
