@@ -2117,28 +2117,13 @@ function suggestNextWeight(exercise_id, planned) {
   const allHitTarget = workingSets.every(s => s.reps >= topReps);
   const finalEffort = finalSet.effort || null;
   // Check if last 2 sessions both hit target
-  const isLowerBody = ['quads','glutes','hamstrings','calves'].some(m => ex.primary.includes(m));
   const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
-  // Accessories add reps BEFORE weight — but they have to add weight eventually.
-  //
-  // This was `isAccessory ? 0 : 2.5`, and a bump of zero makes both increase
-  // branches below unreachable, so an upper-body isolation movement was pinned
-  // at one load PERMANENTLY while the card said «أضف تكرارًا بدل الوزن» — add a
-  // rep instead — every single session, for ever. In Upper A that is the biceps
-  // curl, the rope triceps extension and the cable lateral raise: three of seven.
-  //
-  // SKILL.md §5.2 is explicit that this is only half the rule — "add reps first
-  // (until you exceed the rep range), THEN add weight" — and its own worked
-  // example bumps a lateral raise from 4 kg to 5 kg once 15/15/15 lands twice.
-  // So: a small step, and only on the two-consecutive-sessions branch, never on
-  // a single easy session. 1 kg under 10 kg because that is a real dumbbell and
-  // 2.5 would be a 60% jump; 2.5 kg above it, where that is the smallest plate
-  // or pin most machines offer.
-  //
-  // Lower-body isolation (leg curl, calf, leg extension) was never affected —
-  // isLowerBody wins first and gives it 5 kg.
-  const accessoryBump = (load) => (Number(load) < 10 ? 1 : 2.5);
-  const bump = isLowerBody ? 5 : (isAccessory ? accessoryBump(lastTopSet.weight) : 2.5);
+  // Accessories still add reps BEFORE weight — that half of the rule is sound and
+  // is enforced by the two-consecutive-sessions gate below, not by the size of
+  // the step. What changed is the SIZE: it is the equipment's own smallest
+  // increment now, the same for a leg press and a triceps pressdown, because
+  // that is what the sources actually show. See equipmentStepKg().
+  const bump = equipmentStepKg(exercise_id);
   if (allHitTarget && last2.length === 2) {
     const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
     const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
@@ -2247,6 +2232,67 @@ function prescribedEffortKey(planned) {
   if (top <= 7) return 'effort_target_moderate';
   if (top <= 8) return 'effort_target_hard';
   return 'effort_target_near_failure';
+}
+
+// The load increment, from the equipment — not from a body-part guess.
+//
+// `research/06-beginner-protocol.md` §5.2 carries a red-flag callout naming this
+// app by line number:
+//
+//   "The current app's increment rule is not in any source. app.js sets
+//    bump = isLowerBody ? 5 : (isAccessory ? 0 : 2.5). The lower/upper split does
+//    not appear in [LADDER], [PPL], [RECOMP] or [PELLAND]; the sources' own
+//    examples use the same increment for a barbell squat and a triceps
+//    pressdown."
+//
+//   "Encode instead: step(E) = the smallest load increment physically available
+//    on that machine or implement — which is exactly [PPL]'s 'some minimum
+//    amount of weight'. Fallback when the increment is unknown: +2.5 kg."
+//
+// And §858 repeats it in the gaps table. So the split goes.
+//
+// Learned first, because the only honest source for "smallest available" is his
+// own gym: the gaps between the distinct loads he has actually logged on that
+// movement. The comment on roundToGymIncrement has claimed for months that the
+// step is "learned from logged weights" — nothing was learning it.
+//
+// Equipment defaults come from §5.2's own examples: a pin stack is often 5 kg,
+// dumbbells and plate-loaded machines about 2.5. Getting this too LOW is not
+// harmless — suggesting 42.5 kg on a 5 kg pin stack is a weight he cannot set.
+const EQUIPMENT_STEP_KG = {
+  machine: 5,      // pin stack
+  cable: 2.5,
+  dumbbells: 2.5,
+  plates: 2.5,     // a 1.25 kg plate per side
+  bodyweight: 2.5,
+};
+const DEFAULT_STEP_KG = 2.5;
+function learnedStepFromHistory(exerciseId) {
+  const weights = new Set();
+  for (const session of state.history || []) {
+    const entry = findPerformedEntry(session, exerciseId);
+    for (const set of entry?.sets || []) {
+      if (set.is_warmup) continue;
+      const w = Number(set.weight);
+      if (Number.isFinite(w) && w > 0) weights.add(w);
+    }
+  }
+  const sorted = [...weights].sort((a, b) => a - b);
+  if (sorted.length < 2) return null;
+  let smallest = Infinity;
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = Math.round((sorted[i] - sorted[i - 1]) * 100) / 100;
+    if (gap > 0 && gap < smallest) smallest = gap;
+  }
+  // A gap outside this range is noise — a typo, or a machine swap — not a step.
+  if (!Number.isFinite(smallest) || smallest < 0.5 || smallest > 10) return null;
+  return smallest;
+}
+function equipmentStepKg(exerciseId) {
+  const learned = learnedStepFromHistory(exerciseId);
+  if (learned) return learned;
+  const kind = exercisePrefs(exerciseId).equipment;
+  return EQUIPMENT_STEP_KG[kind] || DEFAULT_STEP_KG;
 }
 
 // ---- Session warm-up phase ---------------------------------

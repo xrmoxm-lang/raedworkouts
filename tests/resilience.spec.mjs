@@ -317,8 +317,16 @@ test('every movement eventually earns more weight, accessories included', async 
     expect(Number(suggested[id]), `${id} must not be frozen at ${was}kg after two sessions at the top of its range`)
       .toBeGreaterThan(was);
   }
-  // And the step stays sane: never more than a plate on an accessory.
-  expect(Number(suggested.biceps_curl)).toBe(9);
+  // The SIZE of the step is the equipment's, not a body-part guess.
+  //
+  // This used to assert 9 for the biceps curl — an accessory rule of +1 kg that I
+  // invented before reading research/06 §5.2, which flags the whole lower/upper/
+  // accessory split as unsourced and prescribes the smallest increment the
+  // equipment offers with a 2.5 kg fallback. Every load in this fixture is
+  // identical across sessions, so there are no gaps to learn from and no
+  // equipment kind set: the sourced fallback applies, and it is the SAME for the
+  // curl and the chest press. That sameness is the point.
+  expect(Number(suggested.biceps_curl)).toBe(10.5);
   expect(Number(suggested.chest_press_machine)).toBe(42.5);
 });
 
@@ -637,4 +645,57 @@ test('the card states the effort the programme asks for, and says it differently
     document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
   expect(deload, 'the deload must ask for less effort, in words').toContain('خفيف');
   expect(deload, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
+});
+
+// ---------------------------------------------------------------------------
+// The load increment used to be a body-part guess: +5 kg lower, +2.5 upper,
+// 0 for accessories. research/06 §5.2 carries a red-flag callout naming this app
+// by line number — the lower/upper split appears in NO source, and the sources'
+// own worked examples use the same increment for a barbell squat and a triceps
+// pressdown. The rule is step(E) = the smallest increment physically available,
+// fallback 2.5 kg.
+test('the load increment comes from the equipment, learned from his own logs', async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const session = (date, loads) => ({
+      date, session_id: 'upper_a', started_at: `${date}T09:00:00Z`, ended_at: `${date}T10:00:00Z`, uid: `s${date}`,
+      exercises: Object.fromEntries(Object.entries(loads).map(([id, w]) => [id, {
+        planned: { exercise_id: id, reps: '8-10' },
+        sets: [0, 1, 2].map((_, i) => ({
+          is_warmup: false, weight: w, reps: 15, completed: true, effort: i === 2 ? 'right' : null,
+        })),
+      }])),
+      prs: [], stats: {},
+    });
+    // Chest press on a 5 kg pin stack; biceps curl on 2.5 kg dumbbells. The gaps
+    // between the loads he actually logged ARE the smallest available increment.
+    parsed.history = [
+      session('2026-08-20', { chest_press_machine: 35, biceps_curl: 7.5 }),
+      session('2026-08-24', { chest_press_machine: 40, biceps_curl: 10 }),
+      session('2026-08-28', { chest_press_machine: 40, biceps_curl: 10 }),
+    ];
+    parsed.active_session = null;
+    parsed.forced_next_session = 'upper_a';
+    localStorage[key] = JSON.stringify(parsed);
+  });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(1000);
+
+  const suggested = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    const first = (id) => (parsed.active_session.exercises[id]?.sets || []).find((s) => !s.is_warmup)?.weight;
+    return { press: Number(first('chest_press_machine')), curl: Number(first('biceps_curl')) };
+  });
+
+  // A 5 kg stack steps by 5, and suggesting 42.5 would be a weight he cannot set.
+  expect(suggested.press, 'a 5 kg pin stack must step by 5').toBe(45);
+  // Dumbbells step by 2.5 — the SAME rule, not a body-part exception.
+  expect(suggested.curl, 'a 2.5 kg dumbbell jump must step by 2.5').toBe(12.5);
 });

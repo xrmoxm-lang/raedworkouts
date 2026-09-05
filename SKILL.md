@@ -255,9 +255,18 @@ The numeric value (7/8/9) feeds the progression algorithm. The emoji is just the
 For each exercise:
 1. Look at the **last 2 logged sessions** that used this exercise.
 2. If the top set in BOTH hit the top of the rep range at RPE ≤ 8 (Right or Easy), bump the suggested weight:
-   - **Upper body:** +2.5 kg
-   - **Lower body:** +5 kg
-   - **Accessories (lateral raise, face pull, calf):** add reps first (until you exceed the rep range), then add weight
+   - **Every exercise:** add **the smallest load increment that equipment offers** —
+     a pin stack is often 5 kg, dumbbells and plate-loaded machines about 2.5.
+     The app learns it from the gaps between the loads he has actually logged and
+     falls back to 2.5 kg when it cannot.
+   - **Accessories:** add reps first (until you exceed the rep range), then add
+     weight — the SIZE of that increase is the same equipment step, not a smaller one.
+
+   > **Corrected 2026-09-05.** This said +2.5 upper / +5 lower / 0 accessory.
+   > `research/06-beginner-protocol.md` §5.2 flags that rule by name: the
+   > lower/upper split appears in **no source**, and the corpus uses the same
+   > increment for a barbell squat and a triceps pressdown ([LADDER] L6961-7133).
+   > §858 repeats it. The `0` for accessories was contradicted outright.
 3. If only 1 of the last 2 hit, repeat the same weight.
 4. If neither hit, repeat the same weight. If 3 sessions in a row don't hit, drop 5–10% and re-build (deload).
 
