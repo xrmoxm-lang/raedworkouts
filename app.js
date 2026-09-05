@@ -848,6 +848,7 @@ const defaultSettings = () => ({
   weight_unit: 'kg',           // kg | lb
   rest_seconds: 120,
   rest_override: false,        // opt-in: use rest_seconds instead of the programme's per-exercise rest
+  superset_mode: 'auto',       // auto | manual | off — how A1/A2 pairs behave
   vibrate: true,
   notifications: true,         // browser notifications when rest ends (req permission)
   // `focus_mode` and `show_cues` lived here for months as dead state: no reader
@@ -2268,6 +2269,12 @@ function supersetPartnerEntry(exerciseId) {
 // Only working sets alternate. Ramps are per-movement: you warm the calf raise
 // up, you do not warm up mid-superset.
 function advanceSuperset(exerciseId) {
+  // «أبغى أوبشن إنه أنا أوقفها، وأوبشن إنه لا تصير تلقائي.» Three modes:
+  //   auto   — the app moves him to the partner. [PPL]'s own instruction.
+  //   manual — the pair still says «بلا راحة قبل X» and offers a tap to go
+  //            there, but nothing moves under him.
+  //   off    — the pair is ordinary; no note, no jump.
+  if ((settings.superset_mode || 'auto') !== 'auto') return null;
   const partner = supersetPartnerEntry(exerciseId);
   if (!partner) return null;
   const owed = (partner.state?.sets || []).some((set) => !set.is_warmup && !set.completed && !set.skipped);
@@ -4853,7 +4860,19 @@ function renderHome() {
     // worth 84px of a card with its own border, shadow and heading above the
     // thing he actually came to the screen for.
     context.appendChild(h('div', { class: 'home-v15-spotify', 'data-home-v15-spotify': 'true' },
-      h('span', { class: 'tiny muted', 'data-home-spotify-handoff': 'true' }, t('home_spotify_handoff')),
+      // Name the platform he actually chose.
+      //
+      // This line was the hardcoded string «🎧 سبوتيفاي — شغّل وانسَ الموضوع»,
+      // printed whatever he picked. v89 gave YouTube Music and Apple Music their
+      // own links, so the LINKS started changing while the LABEL above them kept
+      // saying Spotify — which is exactly what he reported twice: «لما أغير إلى
+      // موسيقى مختلفة، يصير العزال كاتب سبوتيفاي». Fixing the resolver without
+      // fixing its label fixed the half he could not see.
+      h('span', { class: 'tiny muted', 'data-home-spotify-handoff': 'true' },
+        icon('music', 14),
+        h('span', {}, tf('home_music_handoff', {
+          platform: PLATFORM_INFO[settings.music_platform || 'spotify']?.label || '',
+        }))),
       h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
         platformPlaylists.map((playlist) => h('a', {
           href: playlist.url, target: '_blank', rel: 'noopener', class: 'btn tiny', title: playlist.vibe,
@@ -5352,11 +5371,27 @@ function renderExerciseCard(ex_id, exState) {
   // programme was transcribed and was read by nothing, so the app rested 2:00
   // between the paired curl and triceps extension where Jeff prescribes 0.
   const activeSessionPlan = getActiveProgramme()?.sessions?.find((item) => item.id === state.active_session?.session_id);
-  const partner = supersetPartner(activeSessionPlan, planned);
+  const partner = (settings.superset_mode || 'auto') === 'off'
+    ? null
+    : supersetPartner(activeSessionPlan, planned);
   if (partner) {
+    const partnerName = getAllExercises().find((item) => item.id === partner.exercise_id)?.name || partner.exercise_id;
     body.appendChild(h('div', { class: 'superset-note tiny', 'data-superset': 'true' },
       explainMark('superset'),
-      tf('superset_with', { name: getAllExercises().find((item) => item.id === partner.exercise_id)?.name || partner.exercise_id })));
+      h('span', {}, tf('superset_with', { name: partnerName })),
+      // In manual mode nothing moves under him, so the note carries the move as
+      // a tap instead. The instruction is the same; who performs it is his.
+      (settings.superset_mode || 'auto') === 'manual'
+        ? h('button', {
+            type: 'button', class: 'btn tiny ghost', 'data-superset-go': 'true',
+            onClick: () => {
+              const target = supersetPartnerEntry(actualId);
+              if (!target) return;
+              focusExerciseIdx = target.index;
+              render();
+            },
+          }, tf('superset_go', { name: partnerName }))
+        : null));
   }
 
   // Sets table. The 12px spacer div that used to sit here was a element whose
@@ -6824,6 +6859,31 @@ function renderSettings() {
       onChange: (e) => { settings.rest_seconds = parseInt(e.target.value, 10) || 120; saveLocal(); }
     }),
   ));
+  // Only shown when his programme actually pairs anything. «بس إنه تكون موجودة
+  // في الأشياء اللي فيها سوبر سيت فقط» — a control for a thing that is not in
+  // his plan is a control that has to be read and dismissed every time.
+  const hasSupersets = ((state.programme_overrides || RW.PROGRAMME).blocks || [])
+    .some((block) => (block.sessions || [])
+      .some((session) => (session.exercises || [])
+        .some((row) => /^[A-Z]\d$/.test(String(row.superset_group || '')))));
+  if (hasSupersets) {
+    const modes = [['auto', 'superset_auto'], ['manual', 'superset_manual'], ['off', 'superset_off']];
+    card.appendChild(h('div', { class: 'setting-row' },
+      h('div', { class: 'label' },
+        h('div', { class: 'name' }, t('superset_mode')),
+        h('div', { class: 'desc' }, t('superset_mode_desc')),
+      ),
+      h('div', { class: 'seg', 'data-superset-mode': 'true' }, modes.map(([value, key]) => h('button', {
+        type: 'button',
+        // .seg-btn, not .opt — .opt is scoped to .platform-picker and would have
+        // rendered these three unstyled.
+        class: 'seg-btn' + ((settings.superset_mode || 'auto') === value ? ' active' : ''),
+        'data-superset-mode-option': value,
+        onClick: () => { settings.superset_mode = value; saveLocal(); renderSettings(); },
+      }, t(key)))),
+    ));
+  }
+
   card.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
       h('div', { class: 'name' }, t('rest_override')),

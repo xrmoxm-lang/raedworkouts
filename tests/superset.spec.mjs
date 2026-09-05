@@ -272,3 +272,111 @@ test('the rest override is off by default, and never shortens a superset', async
   expect(await restFor(normal.id), 'a normal exercise follows his number').toBe(60);
   expect(await restFor(a1.id), 'a prescribed 0 is an instruction, not a short rest').toBe(0);
 });
+
+// ---- the music label --------------------------------------------------------
+//
+// He reported this twice. v89 gave YouTube Music and Apple Music their own
+// links, so the LINKS changed with the setting — but the line above them was the
+// hardcoded string «🎧 سبوتيفاي — شغّل وانسَ الموضوع» and kept saying Spotify
+// whatever he picked. Fixing the resolver without its label fixed the half he
+// could not see.
+for (const [platform, label] of [['youtube_music', 'YT Music'], ['apple_music', 'Apple Music'], ['spotify', 'Spotify']]) {
+  test(`the home music line names ${label} when that is what he chose`, async ({ page }) => {
+    await page.route('https://raed-hp.tail53bd35.ts.net/**', (r) => r.abort());
+    await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
+    await page.goto(APP, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      const t = [...document.querySelectorAll('.profile-tile')].find((e) => /Raed/.test(e.textContent));
+      if (t) t.click();
+    });
+    await page.waitForTimeout(900);
+    await page.evaluate((p) => {
+      const k = Object.keys(localStorage).find((x) => /\.settings\./.test(x) && /raed/i.test(x));
+      const cfg = JSON.parse(localStorage[k]);
+      cfg.music_platform = p;
+      localStorage[k] = JSON.stringify(cfg);
+    }, platform);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(900);
+
+    const line = page.locator('[data-home-spotify-handoff]');
+    await expect(line).toContainText(label);
+    if (platform !== 'spotify') {
+      await expect(line, 'and must not still say Spotify').not.toContainText('سبوتيفاي');
+    }
+  });
+}
+
+// ---- the three superset modes -----------------------------------------------
+//
+// «أبغى أوبشن إنه أنا أوقفها، وأوبشن إنه لا تصير تلقائي... بس إنه تكون موجودة في
+// الأشياء اللي فيها سوبر سيت فقط.»
+async function setMode(page, mode) {
+  await page.evaluate((m) => {
+    const k = Object.keys(localStorage).find((x) => /\.settings\./.test(x) && /raed/i.test(x));
+    const cfg = JSON.parse(localStorage[k]);
+    cfg.superset_mode = m;
+    localStorage[k] = JSON.stringify(cfg);
+  }, mode);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1100);
+}
+
+test('manual mode offers the move instead of making it', async ({ page }) => {
+  await intoSession(page);
+  const rows = await plan(page);
+  const a1 = rows.find((r) => r.group === 'A1');
+  await setMode(page, 'manual');
+  await goTo(page, a1.i);
+  await clearRamps(page);
+
+  const before = await focused(page);
+  // The note is still there, and now carries a tap.
+  await expect(page.locator('[data-superset]')).toHaveCount(1);
+  await expect(page.locator('[data-superset-go]')).toHaveCount(1);
+
+  await logOneWorkingSet(page);
+  expect(await focused(page), 'manual must not move him').toBe(before);
+
+  await page.locator('[data-superset-go]').click();
+  await page.waitForTimeout(600);
+  expect(await focused(page), 'but the tap does').not.toBe(before);
+});
+
+test('off treats the pair as ordinary exercises', async ({ page }) => {
+  await intoSession(page);
+  const rows = await plan(page);
+  const a1 = rows.find((r) => r.group === 'A1');
+  await setMode(page, 'off');
+  await goTo(page, a1.i);
+  await clearRamps(page);
+
+  await expect(page.locator('[data-superset]'), 'no note when it is off').toHaveCount(0);
+  const before = await focused(page);
+  await logOneWorkingSet(page);
+  expect(await focused(page), 'and nothing moves').toBe(before);
+});
+
+test('the setting only appears because his programme has pairs', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (r) => r.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
+  await page.goto(APP, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const t = [...document.querySelectorAll('.profile-tile')].find((e) => /Raed/.test(e.textContent));
+    if (t) t.click();
+  });
+  await page.waitForTimeout(900);
+  await page.locator('.tab-bar .tab[data-route="settings"]').click();
+  await page.waitForTimeout(600);
+  await page.evaluate(() => document.querySelectorAll('#page-settings details').forEach((d) => { d.open = true; }));
+  await page.waitForTimeout(400);
+
+  const pairs = await page.evaluate(() => (window.RW.PROGRAMME.blocks || [])
+    .some((b) => (b.sessions || []).some((s) => (s.exercises || [])
+      .some((r) => /^[A-Z]\d$/.test(String(r.superset_group || ''))))));
+  expect(pairs, 'this programme does pair exercises').toBe(true);
+  await expect(page.locator('[data-superset-mode]')).toHaveCount(1);
+  await expect(page.locator('[data-superset-mode-option]')).toHaveCount(3);
+});

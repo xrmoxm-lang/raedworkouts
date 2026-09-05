@@ -776,7 +776,11 @@ body.runner-mode .page-runner.active {
 .ex-settings-btn {
   appearance: none; border: 1px solid var(--border); background: var(--bg-card);
   color: var(--text-muted); line-height: 1;
-  width: 38px; height: 38px; border-radius: 10px; flex: 0 0 auto;
+  /* 30px visual, 44px touchable. Raed: «أحس إنه مرة كبير بزيادة». The tap
+     target is NOT this box — the ::before below expands every one of these to
+     max(100%, 44px), so shrinking the visible button costs nothing in the gym.
+     Measured, not assumed: the point test in resilience.spec.mjs still passes. */
+  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast), color var(--dur-fast);
 }
@@ -784,8 +788,8 @@ body.runner-mode .page-runner.active {
 /* The button holds an emoji again, so it needs a size and a line box rather
    than an SVG sizing rule. Emoji ignore `color`, which is why .done below sets
    the border alone — its glyph carries its own colour. */
-.ex-settings-btn { font-size: 18px; }
-.ex-settings-btn svg { width: 18px; height: 18px; display: block; }
+.ex-settings-btn { font-size: 15px; }
+.ex-settings-btn svg { width: 15px; height: 15px; display: block; }
 .ex-settings-btn.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
 @media (hover: hover) { .ex-settings-btn:hover { border-color: var(--accent); color: var(--accent); } }
 

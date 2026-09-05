@@ -99,6 +99,14 @@ export const LOCALE = Object.freeze({
   rest_override_desc: pair(
     'Off, each exercise uses the rest the programme prescribes. On, they all use the number above — for a day you are short of time. Supersets stay at zero either way.',
     'مطفي: كل تمرين يستعمل الراحة اللي يحددها البرنامج. مشغّل: كلها تستعمل الرقم فوق — ليوم وقتك فيه ضيق. السوبرست يبقى بلا راحة في الحالتين.'),
+  superset_go: pair('Go to {name}', 'روح إلى {name}'),
+  superset_mode: pair('Supersets', 'السوبرست'),
+  superset_mode_desc: pair(
+    'Only affects the A1/A2 pairs the programme marks. Automatic moves you to the partner after each set; manual just offers the link; off treats them as ordinary exercises.',
+    'يخصّ فقط أزواج A1/A2 اللي يحددها البرنامج. تلقائي: ينقلك للتمرين الثاني بعد كل مجموعة. يدوي: يعطيك زر تروح فيه بنفسك. مطفي: يتعامل معهما كتمرينين عاديين.'),
+  superset_auto: pair('Automatic', 'تلقائي'),
+  superset_manual: pair('Manual', 'يدوي'),
+  superset_off: pair('Off', 'مطفي'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),
@@ -594,7 +602,10 @@ export const LOCALE = Object.freeze({
   runner_music_handoff: pair('{platform} — press play, then forget about it:', '{platform} — شغّل ثم ركّز في التمرين:'),
   // Phase 6 keeps v15's Home music-card layout, but T1 makes its app copy
   // Arabic. Playlist titles below remain literal Spotify titles.
-  home_spotify_handoff: pair('🎧 Spotify — press play, then forget about it:', '🎧 سبوتيفاي — شغّل وانسَ الموضوع:'),
+  // Kept so an older cached shell still resolves it; the live line is
+  // home_music_handoff, which names whichever platform he actually chose.
+  home_spotify_handoff: pair('Spotify — press play, then forget about it:', 'سبوتيفاي — شغّل وانسَ الموضوع:'),
+  home_music_handoff: pair('{platform} — press play, then forget about it:', '{platform} — شغّل وانسَ الموضوع:'),
   runner_active_started: pair('Active · started {time}', 'جارية · بدأت {time}'),
   runner_add_set: pair('＋ Add set', '+ مجموعة'),
   warmup_spotify: pair('▶ Spotify — press play', 'سبوتيفاي — شغّل'),

@@ -63,7 +63,12 @@ const requiredTerms = {
   runner_skip_warmup: 'تخطّي الإحماء',
   runner_finish_warmup: 'أكمل الإحماء',
   warmup_spotify: 'سبوتيفاي — شغّل',
-  home_spotify_handoff: '🎧 سبوتيفاي — شغّل وانسَ الموضوع:',
+  // The live line is home_music_handoff now: this one hardcoded «سبوتيفاي» and
+  // printed it whatever platform he had chosen, which he reported twice. The old
+  // key is kept only so an older cached shell still resolves something, and its
+  // emoji went with the rest of them.
+  home_spotify_handoff: 'سبوتيفاي — شغّل وانسَ الموضوع:',
+  home_music_handoff: '{platform} — شغّل وانسَ الموضوع:',
   kg: 'kg',
 };
 for (const [key, expected] of Object.entries(requiredTerms)) {
