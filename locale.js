@@ -86,6 +86,7 @@ export const LOCALE = Object.freeze({
   warmup_felt_heavy: pair(
     'Warm-up felt heavy — easing into the first set at {kg} kg. Hit the target and it counts.',
     'الإحماء طلع ثقيل — نبدأ أول مجموعة بـ {kg} كغ. لو وصلت الهدف فهي محسوبة.'),
+  superset_next: pair('Straight into {name} — no rest.', 'على طول إلى {name} — بلا راحة.'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),

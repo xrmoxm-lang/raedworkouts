@@ -2240,6 +2240,48 @@ function supersetPartner(session, planned) {
   return position === '1' ? members[1] : null;
 }
 
+// The other half of a superset, in either direction, resolved against the LIVE
+// session rather than the programme row — this is used to move him between the
+// two while he is training, so it has to speak in the ids the runner is keyed by.
+//
+// supersetPartner() above deliberately answers only for A1, because its job is to
+// render the note exactly once. This one answers for both.
+function supersetPartnerEntry(exerciseId) {
+  const active = state.active_session;
+  const entries = Object.entries(active?.exercises || {});
+  const self = entries.find(([id]) => id === exerciseId);
+  const tag = String(self?.[1]?.planned?.superset_group || '');
+  const match = tag.match(/^([A-Z])(\d)$/);
+  if (!match) return null;
+  const [, letter] = match;
+  const index = entries.findIndex(([id, entry]) => id !== exerciseId
+    && String(entry?.planned?.superset_group || '').startsWith(letter));
+  if (index < 0) return null;
+  return { index, id: entries[index][0], state: entries[index][1] };
+}
+
+// [PPL] E p.27 L:1292-1302, carried into research/06 §«Superset note»:
+// «Do not rest after completing the first set of the A1 exercise and MOVE RIGHT
+// INTO the first set of the A2 exercise. Then rest for the time period indicated
+// in the A2 row.»
+//
+// The app already knew this and said it — «سوبرست — بلا راحة قبل Cable Crunch» —
+// while leaving him standing on A1, where the next thing under his thumb is A1
+// set 2. The interface was prescribing the opposite of the note printed on it,
+// on the last two exercises of every single session he trains.
+//
+// Only working sets alternate. Ramps are per-movement: you warm the calf raise
+// up, you do not warm up mid-superset.
+function advanceSuperset(exerciseId) {
+  const partner = supersetPartnerEntry(exerciseId);
+  if (!partner) return null;
+  const owed = (partner.state?.sets || []).some((set) => !set.is_warmup && !set.completed && !set.skipped);
+  if (!owed) return null;
+  if (focusExerciseIdx === partner.index) return null;
+  focusExerciseIdx = partner.index;
+  return partner;
+}
+
 function suggestedWeightPlaceholder(value) {
   // An empty box told Raed nothing -- he could not tell "no suggestion yet" from
   // "the app is broken". With no logged history there IS no number to suggest,
@@ -5507,6 +5549,16 @@ function renderExerciseCard(ex_id, exState) {
             const restSeconds = prescribedRestSeconds(planned);
             if (restSeconds > 0) startRest(restSeconds);
             if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
+            // Move to the other half of the pair. After A1 that is «move right
+            // into» A2; after A2 it is back to A1 for the next round, and A2's
+            // own rest_min has just started the timer above — which is exactly
+            // «rest for the time period indicated in the A2 row».
+            const moved = advanceSuperset(actualId);
+            if (moved) {
+              const name = getAllExercises().find((item) => item.id === (moved.state?.swapped_to || moved.id))?.name;
+              toast(tf('superset_next', { name: name || moved.id }));
+              render();
+            }
           }
         }
       }, set.skipped ? '↷' : set.completed ? '✓' : ''),
