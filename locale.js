@@ -60,6 +60,8 @@ export const LOCALE = Object.freeze({
   last_sync_hint: pair('last sync {when}', 'آخر مزامنة {when}'),
   programme_hint: pair('week {week} · cycle {cycle}', 'الأسبوع {week} · الدورة {cycle}'),
   coach_hint_settings: pair('model and spending', 'الموديل والمصروف'),
+  coach_restored: pair('Your last answer', 'آخر جواب سألت عنه'),
+  coach_clear: pair('New question', 'سؤال جديد'),
   bodyweight_out_of_range: pair(
     'That does not look like a bodyweight. Enter a number between {min} and {max} kg.',
     'هذا ما يبدو وزن جسم. أدخل رقماً بين {min} و{max} كجم.'),

@@ -231,12 +231,33 @@ test('every browser test blocks the live sync host before it opens the app', asy
   for (const file of files) {
     const src = await readFile(new URL(file, dir), 'utf8');
     if (!/page\.goto\(/.test(src)) continue;
-    // Either it aborts the host itself, or it calls a helper that does.
-    const guards = /raed-hp\.tail53bd35\.ts\.net/.test(src);
-    if (!guards) unguarded.push(file);
+    // Tightened 2026-09-05. The check used to be "does the hostname appear
+    // anywhere in this file", and coach.spec.mjs passed it by naming the host in
+    // a constant while routing ONE path on it. Everything else — /state, the
+    // pushes and the pulls — reached Raed's live server, and it showed: his real
+    // cloud row had a test fixture's coach answer and a coach_recent list of
+    // «السؤال الأول»/«السؤال الثاني» in it.
+    //
+    // A gate that passes on a mention rather than on the behaviour is worse than
+    // no gate: it certifies the bug. What actually protects his data is a route
+    // covering the WHOLE host, so require exactly that — the sync port, which is
+    // where state is written.
+    //
+    // Matching only a literal URL was too strict and flagged deploy-safe.spec.mjs,
+    // which is correctly guarded through a `const syncOrigin = ...` and a
+    // template literal. So resolve those bindings first, then require a
+    // host-wide route through the literal or through one of them.
+    const SYNC_ORIGIN = 'https://raed-hp.tail53bd35.ts.net:8443';
+    const aliases = [...src.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*['"`]https:\/\/raed-hp\.tail53bd35\.ts\.net:8443['"`]/g)]
+      .map((m) => m[1]);
+    const patterns = [
+      new RegExp(`page\\.route\\(\\s*['"\`]${SYNC_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/\\*\\*['"\`]`),
+      ...aliases.map((name) => new RegExp(`page\\.route\\(\\s*\`\\$\\{${name}\\}\\/\\*\\*\``)),
+    ];
+    if (!patterns.some((re) => re.test(src))) unguarded.push(file);
   }
   assert.deepEqual(unguarded, [],
-    'a test that opens the app without blocking the sync host writes to his real cloud data');
+    'a test that opens the app without a host-wide block on the sync port writes to his real cloud data');
 });
 
 

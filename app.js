@@ -1051,6 +1051,13 @@ function loadLocal() {
   if (activeUser && !safeGetItem(lastWriteKey(activeUser)) && hasMeaningfulLocalData()) {
     safeSetItem(lastWriteKey(activeUser), new Date().toISOString());
   }
+  // Bring back the last answer, if this profile has one. loadLocal() runs on
+  // boot AND on every profile switch, so restoring here is also what stops
+  // profile A's answer being shown under profile B.
+  coachState = { status: 'idle', question: '', results: [], answer: null, error: '' };
+  coachEnglish = new Set();
+  coachOpen = new Set();
+  restoreCoachAnswer();
   // D6 replaces the selectable v15 programme variants. Stored values are
   // deliberately retired rather than interpreted as new programme choices.
   delete settings.programme_variant;
@@ -3605,6 +3612,43 @@ const COACH_URL = 'https://raed-hp.tail53bd35.ts.net/coach';
 const COACH_KEY = 'oQq1nmXFMvfZ1M6A2gyiGWQeLB9h6xCW1e5DQW5ARWk';
 const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
 let coachState = { status: 'idle', question: '', results: [], answer: null, error: '' };
+
+// The last answer survives leaving the tab.
+//
+// It did not before: coachState was memory only, so the sequence he actually
+// performs in the gym — ask, switch to the runner to log the set the answer was
+// about, switch back — threw the answer away and left an empty screen. Re-asking
+// is not free either: /answer is the one metered call in this app, so forgetting
+// costs money as well as the answer.
+//
+// Only a successful answer is kept. An error, an offline, a no_match and a
+// half-finished loading state are all about a moment that has passed; restoring
+// «الخادم غير متاح» on a screen he opens tomorrow would be a lie about now.
+const COACH_LAST_KEY = 'coach_last_answer';
+function rememberCoachAnswer() {
+  if (coachState.status !== 'ok') return;
+  try {
+    state[COACH_LAST_KEY] = {
+      question: coachState.question,
+      answer: coachState.answer,
+      // Passages carry the citation targets, so the answer is unreadable
+      // without them — but they are also the bulk. Six is every citation the
+      // model has ever used and keeps the record well inside a storage quota
+      // that safeSetItem already has to defend.
+      results: (coachState.results || []).slice(0, 6),
+      at: Date.now(),
+    };
+    saveLocal();
+  } catch (_) { /* a record of an answer is never worth breaking the answer */ }
+}
+function restoreCoachAnswer() {
+  const saved = state[COACH_LAST_KEY];
+  if (!saved || !saved.answer || !Array.isArray(saved.results)) return;
+  coachState = {
+    status: 'ok', question: saved.question || '',
+    results: saved.results, answer: saved.answer, error: '', restored: true,
+  };
+}
 // Which passages he has flipped to English, and which he has opened in full,
 // keyed by index within the current answer. Both reset on every new question —
 // a toggle belongs to the passage on screen, not to an index that will mean
@@ -3794,6 +3838,7 @@ async function askCoach(question, context = null) {
     // saying that beats a spinner that never resolves.
     coachState = { status: 'offline', question, results: [], error: String(err?.message || err) };
   }
+  rememberCoachAnswer();
   renderCoach();
 }
 
@@ -4174,6 +4219,26 @@ function coachAnswerText(text, passageCount) {
 function renderCoachAnswer(root) {
   const answer = coachState.answer;
   const results = coachState.results;
+
+  // Say so when this is yesterday's answer rather than one just returned. The
+  // screen is otherwise identical either way, and an answer that looks live is
+  // the sort of small lie that costs trust in a coach whose entire pitch is
+  // that it shows its sources. The clear also gives him the suggestion chips
+  // back, which the restored answer replaces.
+  if (coachState.restored) {
+    root.appendChild(h('div', { class: 'coach-restored', 'data-coach-restored': 'true' },
+      h('span', {}, t('coach_restored')),
+      h('button', {
+        type: 'button', class: 'btn tiny ghost',
+        onClick: () => {
+          coachState = { status: 'idle', question: '', results: [], answer: null, error: '' };
+          delete state[COACH_LAST_KEY];
+          saveLocal();
+          renderCoach();
+        },
+      }, t('coach_clear')),
+    ));
+  }
 
   // `answered` alone is not enough. The model returns the flag and the source
   // list independently, so {answered: true, used: []} is reachable — a confident

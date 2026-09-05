@@ -12,6 +12,21 @@ const answer = (text, used) => ({ status: 'ok', answered: true, text, used, mode
 const refusal = (text) => ({ status: 'ok', answered: false, text, used: [] });
 
 async function openCoach(page) {
+  // The sync host, blocked host-wide.
+  //
+  // This file named the hostname in its COACH constant and routed exactly one
+  // path — /coach/answer — so the guard in videos.test.mjs, which only looked
+  // for the hostname anywhere in the file, passed while every other request to
+  // that host went straight through to Raed's live server. It did: on
+  // 2026-09-05 his real cloud row was carrying `coach_last_answer` from a test
+  // fixture (model "gpt-5.6-luna") and a coach_recent list reading «السؤال
+  // الأول», «السؤال الثاني». Removed at rev 645; his 4 sessions and 24 PRs were
+  // untouched, and that was luck, not design.
+  //
+  // Registered BEFORE the /coach/answer route in each test? No — Playwright
+  // matches the most recently added route first, so the specific COACH route
+  // registered in the test body still wins over this catch-all.
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
   await page.goto(appUrl, { waitUntil: 'networkidle' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
@@ -520,4 +535,76 @@ test('every request carries the access key', async ({ page }) => {
   // Without it the public endpoint answers 401 and the coach is simply dead.
   expect(sentKey).toBeTruthy();
   expect(sentKey.length).toBeGreaterThan(20);
+});
+
+// The sequence he actually performs in the gym: ask, go log the set the answer
+// was about, come back. coachState was memory only, so coming back showed the
+// empty ask screen and the only way to see the answer again was to pay for it
+// again — /answer is the one metered call in this app.
+test('the last answer survives leaving the app, and says it is the last one', async ({ page }) => {
+  let calls = 0;
+  await page.route(COACH, (route) => {
+    calls += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        answer: answer('دقيقتان إلى ثلاث بين المجموعات المركّبة. (The Hypertrophy Handbook، صفحة ٤٤)', [0]),
+        results: [
+          { text: 'rest 2-3 minutes between sets of compound exercises', work: 'The Hypertrophy Handbook', page: 44, score: 0.91 },
+        ],
+      }),
+    });
+  });
+  await openCoach(page);
+  await ask(page, 'كم راحة بين المجموعات');
+  await expect(page.locator('[data-coach-answer]')).toContainText('دقيقتان');
+  expect(calls).toBe(1);
+
+  // Leave and come back the hard way — a full reload, which is what closing the
+  // PWA and reopening it does.
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
+    if (tab) tab.click();
+  });
+  await page.waitForTimeout(400);
+
+  await expect(page.locator('[data-coach-answer]')).toContainText('دقيقتان');
+  // The passage the answer cites came back with it, or the citation is a
+  // dangling reference and the answer is unverifiable.
+  await expect(page.locator('[data-coach-passage]')).toContainText('The Hypertrophy Handbook');
+  // Restored, not re-fetched: no second metered call.
+  expect(calls).toBe(1);
+  // And it says so rather than passing an old answer off as a fresh one.
+  await expect(page.locator('[data-coach-restored]')).toBeVisible();
+
+  // «سؤال جديد» clears it back to the ask screen with its suggestions.
+  await page.locator('[data-coach-restored] button').click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-coach-answer]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-scope]')).toBeVisible();
+});
+
+// An error is about a moment that has passed. Restoring «الخادم غير متاح» onto a
+// screen he opens the next morning would be a statement about now that is not
+// true, so only a successful answer is ever kept.
+test('a failed answer is not the thing that comes back tomorrow', async ({ page }) => {
+  await page.route(COACH, (route) => route.fulfill({ status: 503, contentType: 'text/html', body: '<html>down</html>' }));
+  await openCoach(page);
+  await ask(page, 'متى أسوي ديلود');
+  await expect(page.locator('[data-coach-error]')).toBeVisible();
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
+    if (tab) tab.click();
+  });
+  await page.waitForTimeout(400);
+  await expect(page.locator('[data-coach-error]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-restored]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-scope]')).toBeVisible();
 });

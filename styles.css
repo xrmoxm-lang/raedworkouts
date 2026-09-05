@@ -2244,3 +2244,11 @@ body.session-active #page-home > .home-context { display: none; }
 .week-day.trained { background: var(--accent-soft); }
 .week-day.today { background: var(--bg-card); border-color: var(--accent); }
 .week-day.today .wd-name { color: var(--text); font-weight: 800; }
+
+/* The "this is the answer from before" line. Quiet — it is a caption on the
+   answer, not a warning about it. */
+.coach-restored {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 10px; font-size: 11.5px; font-weight: 700;
+  letter-spacing: 0.04em; color: var(--text-muted);
+}
