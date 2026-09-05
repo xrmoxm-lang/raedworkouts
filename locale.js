@@ -39,6 +39,11 @@ export const LOCALE = Object.freeze({
     'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
   coach_asking: pair('Asking…', 'يسأل…'),
   coach_recent: pair('You asked recently', 'سألت قريباً'),
+  // The rest-day banner. Its branch existed but could never be reached, so every
+  // day of the week announced itself as a gym day.
+  rest_day_earned: pair('Recover', 'ارتَحْ اليوم'),
+  rest_next_up: pair('Next up: {name}', 'الجاي: {name}'),
+  rest_week_done: pair('{n} of {target} sessions done this week', 'خلصت {n} من {target} جلسات هذا الأسبوع'),
   coach_scope_books: pair(
     'Answers come from your own Jeff Nippard library.',
     'الأجوبة من مكتبتك أنت — كتب جيف نيبارد.'),
