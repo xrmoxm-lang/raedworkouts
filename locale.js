@@ -74,6 +74,12 @@ export const LOCALE = Object.freeze({
     'Two or more warning signs together. One set less per exercise and a lighter target effort, then straight back to where you were.',
     'ظهرت علامتان أو أكثر مع بعض. مجموعة أقل بكل تمرين وجهد أخف، وبعدها ترجع من نفس المكان.'),
   deload_running: pair('Deload week — lighter on purpose', 'أسبوع تخفيف — خفيف عن قصد'),
+  calibrated_from_ramp: pair(
+    'Working sets set to {kg} kg, from the ramp set that came back easy.',
+    'حطّيت مجموعات العمل على {kg} كغ، من مجموعة الإحماء اللي طلعت سهلة.'),
+  why_probe_floor: pair(
+    'First time here. Start at the lightest setting and climb one step each ramp set — the working weight comes from whichever one feels easy.',
+    'أول مرة على هذا التمرين. ابدأ بأخف وزن وارفع درجة وحدة كل مجموعة إحماء — وزن العمل بيطلع من اللي تحسّها سهلة.'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),

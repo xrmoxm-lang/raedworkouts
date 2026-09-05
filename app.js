@@ -2284,6 +2284,57 @@ function editableWeightValue(value) {
 // weight gave 5 kg twice. A ramp has to ascend, so the second set is lifted to
 // the next step, never to or past the working weight, and drops to a single set
 // when even that is impossible.
+// research/06 §6.3 — the first exposure to a movement, when there is no history
+// to build on. Step 1 of the source algorithm is titled «Ask nothing. Start at
+// the floor», and the app has been doing the opposite: «لا سجلّ بعد — اختر وزنًا
+// تتحكّم فيه» hands the whole question back to him, on exactly the exercises
+// where he is least able to answer it. He is one week into this programme, so
+// that is most of them.
+//
+// The app cannot know what the lightest pin on his machine weighs, and inventing
+// a number would be the same fabrication D8 forbids for videos. What it CAN do
+// is the arithmetic he cannot do mid-set: once a ramp set comes back easy, the
+// working load follows from the ramp table.
+//
+//   terminal_ramp_pct(ramp_sets) = 0.60 (1) | 0.70 (2) | 0.85 (>=3)
+//   first_working_weight = round_to_step(weight_at_RPE_4to5 / terminal_ramp_pct)
+//
+// «a ramp set», not «the last ramp set» — the source fires on whichever one
+// comes back at RPE 4–5, and divides by the pct for the PLANNED count. The app's
+// own effort scale already maps RPE ≤ 6 to «سهل» (see prescribedEffortKey), so
+// «easy» is the trigger and no new scale is invented for it.
+function terminalRampPct(rampSets) {
+  const n = Number(rampSets) || 0;
+  if (n <= 0) return 0;
+  if (n === 1) return 0.60;
+  if (n === 2) return 0.70;
+  return 0.85;
+}
+
+// Fills the working sets of a first exposure from a ramp set that came back
+// easy. Returns the derived weight, or null when the probe does not apply.
+//
+// Only untouched working sets are written. Once he has typed or completed one,
+// his number is the truth and a derivation must never overwrite it.
+function applyCalibrationProbe(exState, exerciseId) {
+  if (!exState || exState.calibrated_from) return null;
+  const sets = exState.sets || [];
+  const ramps = sets.filter((set) => set.is_warmup);
+  if (!ramps.length) return null;
+  const working = sets.filter((set) => !set.is_warmup);
+  // Not a first exposure if any working set already carries a load.
+  if (working.some((set) => hasWorkingWeight(set.weight) || set.completed)) return null;
+  const hit = ramps.find((set) => set.completed && set.effort === 'easy' && hasWorkingWeight(set.weight));
+  if (!hit) return null;
+  const pct = terminalRampPct(ramps.length);
+  if (!pct) return null;
+  const derived = roundToGymIncrement(Number(hit.weight) / pct, equipmentStepKg(exerciseId));
+  if (!(derived > 0)) return null;
+  for (const set of working) set.weight = derived;
+  exState.calibrated_from = { weight: Number(hit.weight), pct, ramps: ramps.length };
+  return derived;
+}
+
 function rampLoadsFor(weight, count, step) {
   const s = Number(step) > 0 ? Number(step) : 2.5;
   if (count <= 1) {
@@ -5383,6 +5434,13 @@ function renderExerciseCard(ex_id, exState) {
             if (!isWarm && set.weight && set.reps) detectPR(actualId, parseFloat(set.weight), parseInt(set.reps, 10));
           }
           set.completed = !set.completed;
+          // A ramp set that came back easy is the load probe of research/06
+          // §6.3. Run it before the re-render so the working rows below already
+          // carry the derived weight when he looks down at them.
+          if (set.completed && isWarm) {
+            const derived = applyCalibrationProbe(exState, actualId);
+            if (derived) toast(tf('calibrated_from_ramp', { kg: fmtKgValue(derived) }));
+          }
           saveLocal();
           render();
           if (set.completed && !isWarm) {
@@ -5393,6 +5451,25 @@ function renderExerciseCard(ex_id, exState) {
         }
       }, set.skipped ? '↷' : set.completed ? '✓' : ''),
     );
+    // On a first exposure the ramp sets ARE the measurement — §6.3 step 2 says
+    // «Run it as warm-up set 1, 10 reps, full ROM. Log the RPE.» Only the final
+    // working set had a picker, so there was nowhere to log it.
+    const probing = isWarm && !exState.calibrated_from
+      && !(exState.sets || []).some((item) => !item.is_warmup && (hasWorkingWeight(item.weight) || item.completed));
+    if (probing) {
+      const strip = h('div', { class: 'effort-strip prompting', 'data-ramp-effort': 'true' });
+      row.appendChild(h('span', { class: 'effort-slot' }));
+      strip.appendChild(effortPicker(set, () => {
+        if (set.completed) {
+          const derived = applyCalibrationProbe(exState, actualId);
+          if (derived) toast(tf('calibrated_from_ramp', { kg: fmtKgValue(derived) }));
+        }
+        saveLocal(); render();
+      }));
+      body.appendChild(row);
+      body.appendChild(strip);
+      return;
+    }
     if (isFinalWorkingSet) {
       // Raed: "ليش ما تحطها بشكل أنظف جنب الجلسة الأخيرة؟ ليش حاطها تحت، كأن
       // مسبب زحمة؟" — it was a full-width block under the sets. Now it is one
