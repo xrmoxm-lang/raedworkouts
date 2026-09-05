@@ -380,3 +380,78 @@ test('the setting only appears because his programme has pairs', async ({ page }
   await expect(page.locator('[data-superset-mode]')).toHaveCount(1);
   await expect(page.locator('[data-superset-mode-option]')).toHaveCount(3);
 });
+
+// ---- reordering -------------------------------------------------------------
+//
+// «بعض الأحيان الأجهزة تصير تنقل في النادي بشكل مبالغ فيه» — the gym moves
+// machines and the printed order stops matching the room. He asked for the order
+// to be changeable and remembered, and said he did not know where the control
+// belonged. It is on the exercise gear: that is where his hand already is the
+// moment he walks up and finds the rack gone.
+test('an exercise can be moved, and the order is kept for next time', async ({ page }) => {
+  await intoSession(page);
+  const before = await plan(page);
+  expect(before.length).toBeGreaterThan(2);
+
+  // Move the SECOND exercise earlier.
+  await goTo(page, 1);
+  await page.locator('[data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  await expect(page.locator('#modal [data-move-earlier]')).toBeEnabled();
+  await page.locator('#modal [data-move-earlier]').click();
+  await page.waitForTimeout(700);
+
+  const after = await plan(page);
+  expect(after[0].id, 'it took the first slot').toBe(before[1].id);
+  expect(after[1].id, 'and pushed the opener down').toBe(before[0].id);
+
+  // Recorded against the session, not just this workout.
+  const saved = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const st = JSON.parse(localStorage[key]);
+    return { order: st.exercise_order, sessionId: st.active_session.session_id };
+  });
+  expect(saved.order[saved.sessionId][0]).toBe(before[1].id);
+
+  // The first exercise cannot move earlier — no wrap-around.
+  await page.locator('[data-exercise-settings]').first().click();
+  await page.waitForTimeout(500);
+  await expect(page.locator('#modal [data-move-earlier]')).toBeDisabled();
+
+  // And the order is resettable, so a change he regrets is not permanent.
+  await expect(page.locator('#modal [data-order-reset]')).toHaveCount(1);
+  await page.locator('#modal [data-order-reset]').click();
+  await page.waitForTimeout(600);
+  const cleared = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const st = JSON.parse(localStorage[key]);
+    return st.exercise_order[st.active_session.session_id];
+  });
+  expect(cleared).toBeFalsy();
+});
+
+// The order has to reach a session BUILT later, not just the one he reordered —
+// that is the whole of «تصير محفوظة». Mutating the sort away fails this.
+test('a saved order survives into a NEW session', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', r=>r.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', r=>r.abort());
+  await page.goto('http://localhost:8877',{waitUntil:'networkidle'}); await page.waitForTimeout(800);
+  await page.evaluate(()=>{const t=[...document.querySelectorAll('.profile-tile')].find(e=>/Raed/.test(e.textContent)); t&&t.click();});
+  await page.waitForTimeout(900);
+  // Seed an order that reverses the session, with no active workout.
+  const ids = await page.evaluate(()=>{
+    const k=Object.keys(localStorage).find(x=>/\.state\./.test(x)&&/raed/i.test(x));
+    const p=JSON.parse(localStorage[k]); p.active_session=null; p.forced_next_session='upper_a';
+    const s=window.RW.PROGRAMME.blocks[0].sessions.find(x=>x.id==='upper_a');
+    const order=s.exercises.map(e=>e.exercise_id).reverse();
+    p.exercise_order={upper_a:order}; localStorage[k]=JSON.stringify(p); return order;
+  });
+  await page.reload({waitUntil:'networkidle'}); await page.waitForTimeout(900);
+  await page.evaluate(()=>document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  const built = await page.evaluate(()=>{
+    const k=Object.keys(localStorage).find(x=>/\.state\./.test(x)&&/raed/i.test(x));
+    return Object.keys(JSON.parse(localStorage[k]).active_session.exercises);
+  });
+  expect(built, 'a NEW session must open in his order').toEqual(ids);
+});

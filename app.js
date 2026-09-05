@@ -826,6 +826,7 @@ const defaultState = () => ({
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
   video_hidden: {},            // { exercise_id: ['yt:<id>', 'url:<href>'] } — hidden clips, by clip
   video_hidden_key_version: 0, // 2 = keys are clip identities, not list positions
+  exercise_order: {},          // { session_id: [exercise_id, ...] } — his order, when he sets one
   wellbeing_checks: [],        // [{ week_id: 'cycle:week', signs: [...], at }] — research/06 §7.3
   triggered_deload: null,      // { week_id, signs, at } — the week a trigger booked
   custom_exercises: [],        // [{ id, name, name_ar, primary, secondary, jeff_nippard, mohannad, ... }]
@@ -2960,7 +2961,26 @@ function startSession(session) {
     return;
   }
   const exercises = {};
-  session.exercises.forEach(rawPlan => {
+  // His own order for this session, if he has set one.
+  //
+  // «بعض الأحيان الأجهزة تصير تنقل في النادي بشكل مبالغ فيه» — the gym moves
+  // machines and the printed order stops matching the room. Reordering is his
+  // call, it belongs to the SESSION rather than to one workout, and it survives:
+  // move the leg extension ahead of the RDL once and every Lower A after it
+  // opens that way.
+  //
+  // Applied as a sort, never as a replacement list: an id he has ordered that is
+  // no longer in the programme is dropped, and a new one the programme adds
+  // lands at the end instead of vanishing.
+  const savedOrder = (state.exercise_order || {})[session.id];
+  const orderedRows = Array.isArray(savedOrder) && savedOrder.length
+    ? [...session.exercises].sort((a, b) => {
+        const ia = savedOrder.indexOf(a.exercise_id);
+        const ib = savedOrder.indexOf(b.exercise_id);
+        return (ia === -1 ? Number.MAX_SAFE_INTEGER : ia) - (ib === -1 ? Number.MAX_SAFE_INTEGER : ib);
+      })
+    : session.exercises;
+  orderedRows.forEach(rawPlan => {
     const replacementId = scopedReplacementFor(session, rawPlan.exercise_id);
     const swapped = replacementId === rawPlan.exercise_id ? rawPlan : { ...rawPlan, exercise_id: replacementId };
     // D19's re-entry ramp, applied before anything reads sets or effort.
@@ -5848,6 +5868,68 @@ function showExerciseSettings(ex_id, exState) {
       // like the control failed to load.
       : h('div', { class: 'tiny muted' }, t('no_clips_for_exercise')),
   ));
+
+  // ---- 2c. الترتيب — where this movement sits in the session --------------
+  //
+  // The gym moves machines. Reordering here rather than in Settings because this
+  // is where his hand already is the moment he walks up and finds the rack gone:
+  // «ما أدري وين تكون صراحة» — it belongs at the exercise, not two screens away.
+  //
+  // Moves the LIVE session and records the order for every future one.
+  const moveExercise = (delta) => {
+    const active = state.active_session;
+    if (!active) return;
+    const ids = Object.keys(active.exercises);
+    const from = ids.indexOf(ex_id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    // Object key order IS the running order here, so the map is rebuilt.
+    active.exercises = Object.fromEntries(ids.map((id) => [id, active.exercises[id]]));
+    // Remember it against the session, keyed by the PROGRAMME's own ids so a
+    // swap performed today does not rewrite the order of the plan itself.
+    state.exercise_order = { ...(state.exercise_order || {}), [active.session_id]: ids };
+    // Follow the exercise he just moved rather than whatever slid into its slot.
+    focusExerciseIdx = to;
+    saveLocal();
+    close();
+    render();
+  };
+  const positions = Object.keys(state.active_session?.exercises || {});
+  const atIndex = positions.indexOf(ex_id);
+  if (positions.length > 1 && atIndex >= 0) {
+    modal.appendChild(h('section', { class: 'xs-section' },
+      h('div', { class: 'xs-label' }, t('order_section')),
+      h('div', { class: 'xs-grid' },
+        h('button', {
+          class: 'btn xs-action', 'data-move-earlier': 'true',
+          ...(atIndex === 0 ? { disabled: 'disabled' } : {}),
+          onClick: () => moveExercise(-1),
+        }, t('move_earlier')),
+        h('button', {
+          class: 'btn xs-action', 'data-move-later': 'true',
+          ...(atIndex === positions.length - 1 ? { disabled: 'disabled' } : {}),
+          onClick: () => moveExercise(1),
+        }, t('move_later')),
+      ),
+      h('div', { class: 'tiny muted' }, tf('order_position', { n: atIndex + 1, total: positions.length })),
+      // A saved order he regrets must not be permanent. Only offered once one
+      // exists, so it is not a button asking to undo something he never did.
+      (state.exercise_order || {})[state.active_session?.session_id]
+        ? h('button', {
+            class: 'btn tiny ghost', 'data-order-reset': 'true',
+            onClick: () => {
+              const next = { ...(state.exercise_order || {}) };
+              delete next[state.active_session?.session_id];
+              state.exercise_order = next;
+              saveLocal();
+              close();
+              toast(t('order_reset_done'));
+            },
+          }, t('order_reset'))
+        : null,
+    ));
+  }
 
   // ---- 3. إجراءات — verbs ------------------------------------------------
   const rest = prescribedRestSeconds(planned);
