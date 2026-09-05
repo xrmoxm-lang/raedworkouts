@@ -507,6 +507,10 @@ reason a full phone no longer loses the session in silence.
   index.** Clips get retired when YouTube takes them down, and a positional key
   silently moves the hidden mark to a neighbouring clip.
 - `recordWellbeingCheck(signs)` / `deloadActive()` — the deload trigger, §5.6.
+- `advanceSuperset(exerciseId)` — moves him A1 → A2 → A1 as `[PPL]` prescribes.
+  Every session ends with an A1/A2 pair, so this is the last two exercises of
+  every workout. Only working sets alternate; ramps are per-movement.
+- `prescribedEffortSequence(planned)` — one effort word per set.
 - `progressRing(done, target, caption)` — the home hero's focal object.
 
 ### Where the numbers he sees come from
@@ -524,6 +528,14 @@ three drifting apart is what produced the invented «+1 kg accessory bump».
 | Weeks 1–2 RPE cap | 6/6/6 then 6/7/7 compounds; cycle 1 only | `research/20` §8.3 |
 | Deload trigger | ≥2 of six signs, concurrently | `research/06` §7.3 |
 | Deload week | −1 set, −1 to −3 RPE, load unchanged | `research/06` §7.4 |
+| Target effort | **one word per set**, never `Math.max` across them | `data.js` rpe_set1/2/3 |
+| Superset order | A1 set → A2 set → rest (A2's row) → repeat | `[PPL]` E p.27 L:1292-1302 |
+
+**86 of the 104 rows prescribe different efforts across their sets.** The card
+used to show one word taken from the maximum, which asked for more than the
+programme does on 83% of what he lifts — and he feeds that back as fatigue, which
+the deload trigger then reads. Rows whose sets share a target still show one
+word; a sequence uses the short forms (`effort_short_*`).
 - `toast(msg)` — goes through the locale layer, so an English literal renders
   Arabic **if that exact string exists as an `.en` value in locale.js**.
 - `detectPR()` — silent, Epley `kg * (1 + reps/30)`.
