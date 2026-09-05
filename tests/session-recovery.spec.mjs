@@ -159,6 +159,19 @@ test('a finished session can be reopened from the log later', async ({ page }) =
   // Let the undo toast expire — this is the path he needs when he notices later.
   await page.waitForTimeout(9500);
 
+  // Scroll to the top before reaching for the tab bar.
+  //
+  // initAutoHideNav() hides the bottom nav on any scroll DOWN past 120px and
+  // brings it back on the way up — app-wide, deliberate. Playwright's own
+  // scroll-into-view is a scroll down, so clicking the tab straight from a
+  // scrolled end screen chases a nav that has just translated itself off the
+  // bottom of the screen. A person scrolls back up; so does this.
+  //
+  // The end screen only became tall enough to scroll when the weekly check-in
+  // landed on it, which is why this surfaced now rather than being written this
+  // way from the start.
+  await page.evaluate(() => window.scrollTo({ top: 0 }));
+  await page.waitForTimeout(400);
   await page.locator('nav.tab-bar button[data-route="history"]').click();
   await page.waitForTimeout(800);
   const card = page.locator('#page-history .history-card').first();

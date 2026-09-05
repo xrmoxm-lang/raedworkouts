@@ -6,6 +6,15 @@ import {
   runProgrammeReferenceMigrations,
 } from './domain/programme.js';
 import {
+  REPORTED_SIGNS,
+  SIGN_THRESHOLD,
+  detectStrengthLoss,
+  nextWeekId,
+  shouldDeload,
+  signsThisWeek,
+  weekId as makeWeekId,
+} from './domain/deload.js';
+import {
   localProfileIdFromV16SyncId,
   v16SyncUserId,
 } from './domain/sync-identity.js';
@@ -823,6 +832,8 @@ const defaultState = () => ({
   custom_jn_urls: {},          // { exercise_id: 'https://youtube.com/...' } — overrides default JN URL
   video_hidden: {},            // { exercise_id: ['yt:<id>', 'url:<href>'] } — hidden clips, by clip
   video_hidden_key_version: 0, // 2 = keys are clip identities, not list positions
+  wellbeing_checks: [],        // [{ week_id: 'cycle:week', signs: [...], at }] — research/06 §7.3
+  triggered_deload: null,      // { week_id, signs, at } — the week a trigger booked
   custom_exercises: [],        // [{ id, name, name_ar, primary, secondary, jeff_nippard, mohannad, ... }]
   programme_overrides: null,   // optional: replace default PROGRAMME entirely
   prs: {},                     // { exercise_id: { kg, reps, date, score } } — best ever per exercise
@@ -1946,8 +1957,89 @@ function derivedBlock() {
   return found?.block || 1;
 }
 
+// ---- Trigger-based deload (research/06 §7.3) -----------------
+//
+// The ruling in `06` §7.2 is «[LADDER] wins. No scheduled deload in the first
+// block. Deload on trigger, with a week-12 backstop.» Only the backstop was
+// built. The trigger — the part the ruling actually turns on — was prose.
+//
+// §7.3: fire when ≥2 of six warning signs are true AT THE SAME TIME for ≥1
+// week. Five of the six are things only he can report; one, «persistent loss of
+// strength», the app can see for itself. So it asks once a week, at the end of a
+// session, and supplies the sixth from his own logs.
+//
+// Asking once a week is not a UI preference, it is the rule: "for ≥1 week" is
+// the unit the source measures in, and he has said plainly he does not want the
+// app chattering at him.
+const DELOAD_SIGNS = REPORTED_SIGNS;
+const DELOAD_SIGN_THRESHOLD = SIGN_THRESHOLD;
+// Spelled out rather than looked up by a computed key. The locale gate reads
+// every lookup call in this file to prove its key has an entry, and building the
+// key by concatenation defeats it — the gate saw the prefix alone as the key.
+// (It also read the first draft of this comment, which quoted the concatenation
+// verbatim, and flagged that too. Correctly.) Each label below is a literal.
+const DELOAD_SIGN_LABEL = {
+  joint_aches: () => t('sign_joint_aches'),
+  exhausted: () => t('sign_exhausted'),
+  sore: () => t('sign_sore'),
+  no_motivation: () => t('sign_no_motivation'),
+  poor_sleep: () => t('sign_poor_sleep'),
+};
+
+function trainingWeekId() { return makeWeekId(derivedCycle(), derivedWeek()); }
+
+function deloadSignsThisWeek() {
+  const check = (state.wellbeing_checks || []).find((row) => row.week_id === trainingWeekId());
+  return signsThisWeek({
+    reported: check?.signs,
+    strengthLoss: detectStrengthLoss(state.history || [], currentTrainingWeek()?.startISO),
+  });
+}
+
+function wellbeingCheckDue() {
+  // Only after he has actually trained this week — «if you're not actually
+  // training hard yet, you don't need a deload at all» (§7.1, [LADDER] L9791).
+  if ((currentTrainingWeek()?.done || 0) < 1) return false;
+  if (deloadActive()) return false;
+  return !(state.wellbeing_checks || []).some((row) => row.week_id === trainingWeekId());
+}
+
+// Records the answer and, if the bar is met, books the deload for the week that
+// follows. Not this week: he has already trained it, and the source prescribes
+// «reducing your training load for a week», not truncating the one in progress.
+function recordWellbeingCheck(signs) {
+  const rows = (state.wellbeing_checks || []).filter((row) => row.week_id !== trainingWeekId());
+  rows.push({ week_id: trainingWeekId(), signs: [...new Set(signs)], at: new Date().toISOString() });
+  // Twelve weeks of check-ins is a full cycle and all any rule here looks at.
+  state.wellbeing_checks = rows.slice(-12);
+  const total = deloadSignsThisWeek();
+  if (shouldDeload(total)) {
+    state.triggered_deload = {
+      week_id: nextWeekId(derivedCycle(), derivedWeek(), programmeCycleLength()),
+      signs: total,
+      at: new Date().toISOString(),
+    };
+  }
+  saveLocal();
+  return total;
+}
+
+function deloadActive() {
+  return state.triggered_deload?.week_id === trainingWeekId();
+}
+
 function getActiveProgramme() {
   const programme = state.programme_overrides || RW.PROGRAMME;
+  // A triggered deload selects the DELOAD block WITHOUT moving the programme
+  // clock. Faking the week number would advance him through the mesocycle for
+  // free and hand him block C a week early.
+  const deloadBlock = (programme.blocks || []).find((block) => block.deload);
+  if (deloadActive() && deloadBlock) {
+    return resolveProgrammeBlock(programme, {
+      currentWeek: deloadBlock.week_start,
+      currentBlock: deloadBlock.block,
+    });
+  }
   return resolveProgrammeBlock(programme, {
     currentWeek: derivedWeek(),
     currentBlock: derivedBlock(),
@@ -3020,6 +3112,50 @@ function showSessionEnd(session) {
   render();
 }
 
+// Five taps and «كله تمام». The sixth sign, «persistent loss of strength», is
+// not asked — the app reads it out of his own logs, because asking someone
+// whether they are weaker is asking them to guess at something recorded.
+function buildWellbeingCheck() {
+  const chosen = new Set();
+  const wrap = h('section', { class: 'wellbeing', 'data-wellbeing-check': 'true' });
+  const finish = (signs) => {
+    const total = recordWellbeingCheck(signs);
+    wrap.innerHTML = '';
+    wrap.appendChild(h('div', { class: 'wellbeing-done', 'data-wellbeing-done': 'true' },
+      total.length >= DELOAD_SIGN_THRESHOLD
+        // Say what will happen and why, not just that something was noted.
+        ? h('div', {},
+            h('strong', {}, t('deload_booked')),
+            h('p', { class: 'tiny muted' }, t('deload_booked_why')))
+        : h('span', { class: 'tiny muted' }, t('wellbeing_noted')),
+    ));
+  };
+  wrap.appendChild(h('div', { class: 'wellbeing-q' }, t('wellbeing_question')));
+  wrap.appendChild(h('div', { class: 'wellbeing-chips' }, DELOAD_SIGNS.map((sign) => {
+    const chip = h('button', {
+      type: 'button', class: 'chip', 'data-wellbeing-sign': sign, 'aria-pressed': 'false',
+      onClick: () => {
+        if (chosen.has(sign)) chosen.delete(sign); else chosen.add(sign);
+        chip.classList.toggle('active', chosen.has(sign));
+        chip.setAttribute('aria-pressed', chosen.has(sign) ? 'true' : 'false');
+        save.disabled = chosen.size === 0;
+      },
+    }, DELOAD_SIGN_LABEL[sign]());
+    return chip;
+  })));
+  const save = h('button', {
+    class: 'btn primary', 'data-wellbeing-save': 'true', disabled: 'disabled',
+    onClick: () => finish([...chosen]),
+  }, t('wellbeing_save'));
+  wrap.appendChild(h('div', { class: 'wellbeing-actions' },
+    save,
+    // «كله تمام» is an answer, not a dismissal: it records a week with no signs,
+    // which is what stops the question coming back tomorrow.
+    h('button', { class: 'btn ghost', 'data-wellbeing-none': 'true', onClick: () => finish([]) }, t('wellbeing_all_good')),
+  ));
+  return wrap;
+}
+
 function renderSessionEnd() {
   const root = $('#page-end');
   root.innerHTML = '';
@@ -3080,6 +3216,12 @@ function renderSessionEnd() {
     ) : null,
 
     h('div', { class: 'reminder' }, msg),
+
+    // The once-a-week check that research/06 §7.3 turns on. It appears here
+    // because he has just trained and knows exactly how the week has felt, and
+    // it appears ONCE a week — the source measures these signs over a week, and
+    // he does not want the app asking him things.
+    wellbeingCheckDue() ? buildWellbeingCheck() : null,
 
     h('div', { class: 'next-up' },
       h('div', { class: 'tiny muted', style: 'margin-bottom:4px;' },
@@ -4507,6 +4649,9 @@ function renderHome() {
         // existed only inside Settings, and it is the fact that shows the
         // 12-month progression is actually moving on its own.
         h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
+        // A deload week has fewer sets and a lower target effort. Unannounced,
+        // that reads as the app losing his programme rather than following it.
+        deloadActive() ? h('div', { class: 'tb-deload', 'data-deload-running': 'true' }, t('deload_running')) : null,
       ),
       progressRing(week.done, week.target, t('this_week_plain')),
     ));

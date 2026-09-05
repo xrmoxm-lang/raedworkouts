@@ -2258,3 +2258,24 @@ body.session-active #page-home > .home-context { display: none; }
    through and drained rather than removed. */
 .xs-clips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .xs-clip.off { opacity: 0.45; text-decoration: line-through; }
+
+/* The weekly check on the end screen. It is a question, so it looks like one
+   thing rather than another stat card in the column of results above it. */
+.wellbeing {
+  margin: 12px 0; padding: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+.wellbeing-q { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.wellbeing-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.wellbeing-chips .chip { font-size: 12px; padding: 6px 10px; }
+.wellbeing-actions { display: flex; gap: 8px; margin-top: 10px; }
+.wellbeing-actions .btn { flex: 1; }
+.wellbeing-done { font-size: 13px; }
+.wellbeing-done p { margin: 4px 0 0; }
+/* A deload week is a state, not a warning: it is the programme working. */
+.today-banner .tb-deload {
+  display: inline-flex; margin-top: 8px; padding: 4px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--text);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+}
