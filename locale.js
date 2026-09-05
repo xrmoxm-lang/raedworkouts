@@ -28,6 +28,39 @@ export const LOCALE = Object.freeze({
   // Shown in the weight box when there is no logged history to suggest from.
   calibrate: pair('calibrate', 'معايرة'),
   reps_goal: pair('Complete {n} on every set to earn a load increase', 'أكمل {n} في كل المجموعات ليرتفع الوزن'),
+  // The effort the PROGRAMME asks for, as a word. D16 replaced numeric RPE with
+  // coarse language, so these are bands, not numbers: 6 leaves about four reps
+  // in reserve, 7 three, 8 two, 9+ one or none.
+  // A deload is not chasing a load increase, so the goal line says what the week
+  // is actually for. Promising an increase beside «خفيف — بقصد» contradicts
+  // itself on one line.
+  reps_goal_deload: pair(
+    'Stop at {n} — this week is for moving well, not for adding load',
+    'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
+  coach_asking: pair('Asking…', 'يسأل…'),
+  coach_recent: pair('You asked recently', 'سألت قريباً'),
+  coach_scope_books: pair(
+    'Answers come from your own Jeff Nippard library.',
+    'الأجوبة من مكتبتك أنت — كتب جيف نيبارد.'),
+  coach_scope_note: pair(
+    'If your books do not cover something, it says so instead of guessing. Anything from the open internet is labelled.',
+    'لو كتبك ما تغطي شيئاً، يقول لك بدل ما يخمّن. وأي شيء من الإنترنت يجي مكتوب عليه.'),
+  // Settings-row hints. Each says what the row would have told him if he opened
+  // it, so seven identical slabs stop needing seven taps to read.
+  theme_auto: pair('auto', 'تلقائي'),
+  theme_light: pair('light', 'فاتح'),
+  theme_dark: pair('dark', 'غامق'),
+  sync_never: pair('never', 'ما تمت بعد'),
+  last_sync_hint: pair('last sync {when}', 'آخر مزامنة {when}'),
+  programme_hint: pair('week {week} · cycle {cycle}', 'الأسبوع {week} · الدورة {cycle}'),
+  coach_hint_settings: pair('model and spending', 'الموديل والمصروف'),
+  bodyweight_out_of_range: pair(
+    'That does not look like a bodyweight. Enter a number between {min} and {max} kg.',
+    'هذا ما يبدو وزن جسم. أدخل رقماً بين {min} و{max} كجم.'),
+  effort_target_easy: pair('take it easy', 'خفيف — بقصد'),
+  effort_target_moderate: pair('moderate', 'متوسط'),
+  effort_target_hard: pair('hard', 'صعب'),
+  effort_target_near_failure: pair('close to failure', 'قريب من الفشل'),
   superset_with: pair('Superset — no rest before {name}', 'سوبرست — بلا راحة قبل {name}'),
   extra_set: pair('extra set', 'مجموعة زائدة'),
   // Appending is not swapping: it adds a movement at the END without replacing
@@ -656,6 +689,12 @@ export const LOCALE = Object.freeze({
   deleted: pair('Deleted.', 'تم الحذف.'),
   paste_youtube: pair('Paste a YouTube link to add to this exercise:', 'الصق رابط يوتيوب لإضافته لهذا التمرين:'),
   jn_url_updated: pair('JN URL updated.', 'تم تحديث رابط JN.'),
+  jn_url_hint: pair(
+    'Paste a full YouTube link — video, shorts or playlist. Leave it empty to go back to the default.',
+    'الصق رابط يوتيوب كامل — فيديو أو شورتس أو قائمة. اتركه فارغاً للرجوع للافتراضي.'),
+  delete_custom_exercise_body: pair(
+    'Deletes "{name}" from your library. This cannot be undone.',
+    'يحذف «{name}» من مكتبتك. ما فيه رجعة.'),
 
   profile: pair('👤 Profile', '👤 الملف'),
   display_name: pair('Display name', 'اسم العرض'),

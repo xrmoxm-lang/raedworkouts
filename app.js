@@ -147,7 +147,20 @@ const fmtTime = (d) => {
   if (activeLanguage() === 'ar') return `${hour}:${minute} ${period === 'PM' ? 'م' : 'ص'}`;
   return `${hour}:${minute} ${period || ''}`.trim();
 };
-const todayISO = () => new Date().toISOString().slice(0,10);
+// His local calendar date, not UTC's.
+//
+// This was `new Date().toISOString().slice(0,10)`, which is the date in UTC.
+// Riyadh is UTC+3, so between local midnight and 03:00 the app stamped
+// YESTERDAY. Proven live at 01:37 on 5 September: the app wrote 2026-09-04.
+// Raed trains late — an earlier screenshot shows a session started 12:05 ص — and
+// this date stamps his workouts, his personal records, his bodyweight log and
+// his exports. A late session landed on the wrong day in every one of them, and
+// the week strip then drew it on the wrong square.
+//
+// Device-local rather than a hardcoded Asia/Riyadh, so it stays right if he
+// travels. 'en-CA' is the locale whose short date is already YYYY-MM-DD.
+const localISODate = (date = new Date()) => date.toLocaleDateString('en-CA');
+const todayISO = () => localISODate();
 const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
   t.innerHTML = '';
@@ -671,18 +684,41 @@ function buildVideoTile(v, opts = {}) {
   link.insertBefore(img, chip);
   return link;
 }
+// Was a native prompt(): English, unstyled, and suppressible by an installed PWA
+// shell — the same class already replaced everywhere else, missed because the
+// earlier scan only looked for a quoted literal after the paren and this one
+// interpolates the exercise name.
 function editJNUrlPrompt(exerciseId) {
   const ex = getAllExercises().find(e => e.id === exerciseId);
   if (!ex) return;
-  const current = getJNUrl(exerciseId);
-  const next = prompt(
-    `Edit Jeff Nippard URL for "${ex.name}".\n\nPaste a full YouTube link (video, shorts, or playlist). Leave empty to reset to default.`,
-    current
-  );
-  if (next === null) return;  // cancelled
-  setJNUrl(exerciseId, next);
-  if (typeof toast === 'function') toast('JN URL updated.');
-  render();
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  const close = () => $('#modal-overlay').classList.remove('show');
+  const input = h('input', {
+    type: 'url', class: 'search-input', dir: 'ltr',
+    'aria-label': t('video_edit_jn'),
+    placeholder: 'https://youtube.com/…',
+    value: getJNUrl(exerciseId) || '',
+  });
+  modal.appendChild(h('h3', {}, t('video_edit_jn')));
+  modal.appendChild(h('p', { class: 'tiny muted' },
+    h('bdi', { class: 'ltr-run' }, ex.name)));
+  modal.appendChild(h('p', { class: 'tiny muted' }, t('jn_url_hint')));
+  modal.appendChild(input);
+  modal.appendChild(h('button', {
+    class: 'btn primary full', style: 'margin-top:10px;',
+    onClick: () => {
+      const next = input.value.trim();
+      close();
+      setJNUrl(exerciseId, next);
+      toastSaved(t('jn_url_updated'));
+      render();
+    },
+  }, t('save')));
+  modal.appendChild(h('button', {
+    class: 'btn ghost full', style: 'margin-top:8px;', onClick: close,
+  }, t('cancel')));
+  $('#modal-overlay').classList.add('show');
 }
 
 // ---- Music platform ------------------------------------------
@@ -1695,8 +1731,26 @@ function showSkinSuggestion(suggestion) {
 // history-driven principle the session rotation already uses. Deriving it means
 // there is no counter to forget to advance, and it self-corrects if he misses a
 // week or logs two sessions in a day.
+// Only sessions from THIS programme move the programme clock.
+//
+// This was `state.history.length`, which counts everything — including the v15
+// full-body sessions the migration deliberately preserves, and anything he
+// restores from a backup or imports from a JSON export. Since the clock is
+// `sessions / 4`, importing a few months of old history would drop him into an
+// arbitrary week: block B, block C, or straight into a deload he has not earned,
+// and it would fire the six-month review prompt at the wrong time.
+//
+// Counting by the current rotation's session ids is the check that matches how
+// the week is used. Entries with no session_id at all are counted, because a
+// hand-restored row from this programme should not be silently ignored either —
+// the failure mode being closed is a FOREIGN programme, not a sparse record.
 function completedSessionCount() {
-  return (state.history || []).length;
+  const rotation = new Set((RW.PROGRAMME?.rotation_order) || []);
+  if (!rotation.size) return (state.history || []).length;
+  return (state.history || []).filter((entry) => {
+    const id = entry?.session_id;
+    return !id || rotation.has(id);
+  }).length;
 }
 // The mesocycle REPEATS. It used to stop.
 //
@@ -2063,28 +2117,13 @@ function suggestNextWeight(exercise_id, planned) {
   const allHitTarget = workingSets.every(s => s.reps >= topReps);
   const finalEffort = finalSet.effort || null;
   // Check if last 2 sessions both hit target
-  const isLowerBody = ['quads','glutes','hamstrings','calves'].some(m => ex.primary.includes(m));
   const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
-  // Accessories add reps BEFORE weight — but they have to add weight eventually.
-  //
-  // This was `isAccessory ? 0 : 2.5`, and a bump of zero makes both increase
-  // branches below unreachable, so an upper-body isolation movement was pinned
-  // at one load PERMANENTLY while the card said «أضف تكرارًا بدل الوزن» — add a
-  // rep instead — every single session, for ever. In Upper A that is the biceps
-  // curl, the rope triceps extension and the cable lateral raise: three of seven.
-  //
-  // SKILL.md §5.2 is explicit that this is only half the rule — "add reps first
-  // (until you exceed the rep range), THEN add weight" — and its own worked
-  // example bumps a lateral raise from 4 kg to 5 kg once 15/15/15 lands twice.
-  // So: a small step, and only on the two-consecutive-sessions branch, never on
-  // a single easy session. 1 kg under 10 kg because that is a real dumbbell and
-  // 2.5 would be a 60% jump; 2.5 kg above it, where that is the smallest plate
-  // or pin most machines offer.
-  //
-  // Lower-body isolation (leg curl, calf, leg extension) was never affected —
-  // isLowerBody wins first and gives it 5 kg.
-  const accessoryBump = (load) => (Number(load) < 10 ? 1 : 2.5);
-  const bump = isLowerBody ? 5 : (isAccessory ? accessoryBump(lastTopSet.weight) : 2.5);
+  // Accessories still add reps BEFORE weight — that half of the rule is sound and
+  // is enforced by the two-consecutive-sessions gate below, not by the size of
+  // the step. What changed is the SIZE: it is the equipment's own smallest
+  // increment now, the same for a leg press and a triceps pressdown, because
+  // that is what the sources actually show. See equipmentStepKg().
+  const bump = equipmentStepKg(exercise_id);
   if (allHitTarget && last2.length === 2) {
     const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
     const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
@@ -2169,6 +2208,93 @@ function estimateSessionMinutes(session) {
   return Math.max(10, Math.round((WARMUP_MINUTES + seconds / 60) / 5) * 5);
 }
 
+// The prescribed effort, in words rather than a number.
+//
+// Every programme row carries per-set RPE, Block B raises it, and the week-12
+// deload lowers it — and `planned.rpe` was read NOWHERE in this file. So Block
+// B's effort progression never reached him, and worse, the deload's effort cut
+// did not either: his deload week was "one fewer set" while the source
+// (research/06 §7.4) prescribes the SAME weight with the effort taken off. A
+// deload trained at normal intensity is not a deload.
+//
+// D16 replaced numeric RPE with coarse words on purpose, so this shows a word.
+// The bands are the standard reading of the scale: 6 leaves about four reps in
+// reserve, 7 about three, 8 about two, 9+ is one or none.
+function prescribedEffortKey(planned) {
+  const values = [planned?.rpe_set1, planned?.rpe_set2, planned?.rpe_set3]
+    .map(Number).filter(Number.isFinite);
+  // Fall back to the joined `rpe` string the programme row also carries.
+  const fromString = String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [];
+  const all = values.length ? values : fromString.map(Number).filter(Number.isFinite);
+  if (!all.length) return null;
+  const top = Math.max(...all);
+  if (top <= 6) return 'effort_target_easy';
+  if (top <= 7) return 'effort_target_moderate';
+  if (top <= 8) return 'effort_target_hard';
+  return 'effort_target_near_failure';
+}
+
+// The load increment, from the equipment — not from a body-part guess.
+//
+// `research/06-beginner-protocol.md` §5.2 carries a red-flag callout naming this
+// app by line number:
+//
+//   "The current app's increment rule is not in any source. app.js sets
+//    bump = isLowerBody ? 5 : (isAccessory ? 0 : 2.5). The lower/upper split does
+//    not appear in [LADDER], [PPL], [RECOMP] or [PELLAND]; the sources' own
+//    examples use the same increment for a barbell squat and a triceps
+//    pressdown."
+//
+//   "Encode instead: step(E) = the smallest load increment physically available
+//    on that machine or implement — which is exactly [PPL]'s 'some minimum
+//    amount of weight'. Fallback when the increment is unknown: +2.5 kg."
+//
+// And §858 repeats it in the gaps table. So the split goes.
+//
+// Learned first, because the only honest source for "smallest available" is his
+// own gym: the gaps between the distinct loads he has actually logged on that
+// movement. The comment on roundToGymIncrement has claimed for months that the
+// step is "learned from logged weights" — nothing was learning it.
+//
+// Equipment defaults come from §5.2's own examples: a pin stack is often 5 kg,
+// dumbbells and plate-loaded machines about 2.5. Getting this too LOW is not
+// harmless — suggesting 42.5 kg on a 5 kg pin stack is a weight he cannot set.
+const EQUIPMENT_STEP_KG = {
+  machine: 5,      // pin stack
+  cable: 2.5,
+  dumbbells: 2.5,
+  plates: 2.5,     // a 1.25 kg plate per side
+  bodyweight: 2.5,
+};
+const DEFAULT_STEP_KG = 2.5;
+function learnedStepFromHistory(exerciseId) {
+  const weights = new Set();
+  for (const session of state.history || []) {
+    const entry = findPerformedEntry(session, exerciseId);
+    for (const set of entry?.sets || []) {
+      if (set.is_warmup) continue;
+      const w = Number(set.weight);
+      if (Number.isFinite(w) && w > 0) weights.add(w);
+    }
+  }
+  const sorted = [...weights].sort((a, b) => a - b);
+  if (sorted.length < 2) return null;
+  let smallest = Infinity;
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = Math.round((sorted[i] - sorted[i - 1]) * 100) / 100;
+    if (gap > 0 && gap < smallest) smallest = gap;
+  }
+  // A gap outside this range is noise — a typo, or a machine swap — not a step.
+  if (!Number.isFinite(smallest) || smallest < 0.5 || smallest > 10) return null;
+  return smallest;
+}
+function equipmentStepKg(exerciseId) {
+  const learned = learnedStepFromHistory(exerciseId);
+  if (learned) return learned;
+  const kind = exercisePrefs(exerciseId).equipment;
+  return EQUIPMENT_STEP_KG[kind] || DEFAULT_STEP_KG;
+}
+
 // ---- Session warm-up phase ---------------------------------
 function warmupTypeForSession(session) {
   // D12 is data-led: both Upper sessions use the merged push+pull warm-up;
@@ -2202,8 +2328,13 @@ function scopedReplacementFor(session, exerciseId) {
   const active = (state.substitutions || []).filter((entry) => {
     if (entry.from_exercise_id !== exerciseId) return false;
     if (entry.scope === 'always') return true;
-    if (entry.scope === 'this_week') return entry.expires_after_week === derivedWeek();
-    if (entry.scope === 'this_block') return entry.block === derivedBlock();
+    // A scoped swap belongs to ONE cycle. Entries written before `cycle` existed
+    // carry undefined, and those are honoured only in the cycle he is in now —
+    // there is no way to know which cycle they came from, and the safe reading
+    // of an unknown is "this one", never "every future one".
+    const sameCycle = entry.cycle == null || entry.cycle === derivedCycle();
+    if (entry.scope === 'this_week') return sameCycle && entry.expires_after_week === derivedWeek();
+    if (entry.scope === 'this_block') return sameCycle && entry.block === derivedBlock();
     return false;
   });
   return active.length ? active[active.length - 1].to_exercise_id : exerciseId;
@@ -2766,6 +2897,15 @@ function recordSubstitution(exercise_id, alt_id, scope, assessment, override = n
     session_id: scope === 'this_session' ? state.active_session?.session_id : null,
     expires_after_week: scope === 'this_week' ? derivedWeek() : null,
     block: scope === 'this_block' ? derivedBlock() : null,
+    // The cycle a scoped swap belongs to.
+    //
+    // Weeks and blocks REPEAT now that the twelve-week mesocycle wraps, so a
+    // week number on its own stopped identifying a point in time: a swap scoped
+    // to week 5 of cycle 1 matched week 5 of cycle 2 as well, and a block-B swap
+    // came back in every future block B. Raed would be put on a substitute
+    // months after whatever caused it — a busy machine, a tweaked shoulder — had
+    // been forgotten. Recorded here so the matcher can tell the two apart.
+    cycle: scope === 'this_week' || scope === 'this_block' ? derivedCycle() : null,
     created_at: new Date().toISOString(),
     ledger_delta: assessment.ledger_delta,
     warning: assessment.classification.severity === 'clean' ? null : assessment.classification,
@@ -3283,6 +3423,7 @@ let coachEnglish = new Set();
 let coachOpen = new Set();
 // Monotonic, so a slow earlier request cannot overwrite a newer answer.
 let coachRequestId = 0;
+let coachAbort = null;
 
 // Raed's library deliberately keeps both editions of two Nippard programmes,
 // because their bytes differ and no supersession was ever proven. Retrieval does
@@ -3349,6 +3490,25 @@ async function askCoach(question, context = null) {
   // finish out of order and leave the FIRST answer sitting under the SECOND
   // question — with citation markers pointing into the wrong passage list,
   // because coachOpen and coachEnglish are keyed by index into it.
+  // Abort the previous request, do not merely ignore its answer.
+  //
+  // The ticket below already stops a slow first answer overwriting a fast second
+  // one, but the first fetch kept running and the server kept generating — and
+  // /answer is the one metered call in this app. A double tap, or a second
+  // question typed while the first was still thinking, paid twice. The input and
+  // the button also stayed enabled throughout, which is what made a double tap
+  // easy in the first place.
+  if (coachAbort) { try { coachAbort.abort(); } catch (_) { /* already gone */ } }
+  coachAbort = typeof AbortController === 'function' ? new AbortController() : null;
+  // Kept so the idle screen can offer them back. Mid-set he re-asks the same few
+  // things — «كم راحة بين المجموعات؟» — and retyping Arabic on a phone with
+  // chalk on your hands is the friction worth removing. Five is enough to be
+  // useful and short enough never to become a list he has to read.
+  if (question) {
+    const recent = (state.coach_recent || []).filter((q) => q !== question);
+    state.coach_recent = [question, ...recent].slice(0, 5);
+    saveLocal();
+  }
   const ticket = ++coachRequestId;
   coachState = { status: 'loading', question, results: [], answer: null, error: '' };
   coachEnglish = new Set();
@@ -3385,7 +3545,11 @@ async function askCoach(question, context = null) {
         // such — he asked for the answer AND for it to say where it came from.
         allow_web: true,
       }),
-      signal: AbortSignal.timeout(30000),
+      // Both the 30s ceiling AND this request's own abort, so a newer question
+      // actually cancels the paid call rather than leaving it to finish unread.
+      signal: coachAbort
+        ? (AbortSignal.any ? AbortSignal.any([coachAbort.signal, AbortSignal.timeout(30000)]) : coachAbort.signal)
+        : AbortSignal.timeout(30000),
     });
     if (ticket !== coachRequestId) return;
     // Status first, body second. res.json() used to run before anything looked
@@ -3471,12 +3635,18 @@ function renderCoach() {
   root.innerHTML = '';
   root.appendChild(h('div', { class: 'page-header' }, h('h1', {}, t('coach'))));
 
+  // Disabled while a question is in flight. They were rendered before the
+  // loading branch and never disabled, so a double tap on «اسأل» — easy on a
+  // phone — fired a second metered request before the first had answered.
+  const busy = coachState.status === 'loading';
   const input = h('input', {
     type: 'text', class: 'coach-input', value: coachState.question,
     placeholder: t('coach_placeholder'), 'data-coach-input': 'true',
+    ...(busy ? { disabled: 'disabled' } : {}),
     onKeydown: (ev) => { if (ev.key === 'Enter') submit(); },
   });
   const submit = () => {
+    if (coachState.status === 'loading') return;
     const question = input.value.trim();
     // The service rejects anything under 3 characters; catching it here keeps a
     // stray tap from rendering as a server error.
@@ -3517,7 +3687,10 @@ function renderCoach() {
     h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_intro')),
     h('div', { class: 'coach-row' },
       input,
-      h('button', { class: 'btn primary', onClick: submit, 'data-coach-submit': 'true' }, t('coach_ask')),
+      h('button', {
+        class: 'btn primary', onClick: submit, 'data-coach-submit': 'true',
+        ...(busy ? { disabled: 'disabled' } : {}),
+      }, busy ? t('coach_asking') : t('coach_ask')),
     ),
   ));
 
@@ -3531,6 +3704,26 @@ function renderCoach() {
         class: 'btn tiny',
         onClick: () => { input.value = t(example); submit(); },
       }, t(example)))),
+    ));
+
+    // Roughly 57% of this screen was empty — measured, 481px of 844. What
+    // belongs in it is not decoration: the questions he actually asked, so he
+    // can re-ask one without typing, and a plain statement of where the answers
+    // come from, because the whole point of this coach is that it answers from
+    // HIS books and says so.
+    const recent = (state.coach_recent || []).filter(Boolean);
+    if (recent.length) {
+      root.appendChild(h('div', { class: 'card compact', 'data-coach-recent': 'true' },
+        h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_recent')),
+        h('div', { class: 'coach-chips' }, recent.map((question) => h('button', {
+          class: 'btn tiny ghost',
+          onClick: () => { input.value = question; submit(); },
+        }, question))),
+      ));
+    }
+    root.appendChild(h('div', { class: 'card compact coach-scope', 'data-coach-scope': 'true' },
+      h('div', { class: 'coach-scope-line' }, t('coach_scope_books')),
+      h('div', { class: 'tiny muted' }, t('coach_scope_note')),
     ));
     return;
   }
@@ -4529,8 +4722,22 @@ function renderExerciseCard(ex_id, exState) {
   const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
   // Built here, appended after the sets: it is the target he checks each row
   // against, so it belongs beside the rows, not stacked on top of them.
+  const effortKey = prescribedEffortKey(planned);
+  // During a deload the goal is NOT to earn a load increase, so promising one
+  // next to «خفيف — بقصد» would contradict itself on the same line. The row
+  // carries the flag through from the deload overlay.
+  const goalText = planned.deload
+    ? tf('reps_goal_deload', { n: repTop })
+    : tf('reps_goal', { n: repTop });
   const repsGoalRow = repTop
-    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, tf('reps_goal', { n: repTop }))
+    ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' },
+        goalText,
+        // The programme states an effort for these sets. Saying it turns the
+        // deload from "one fewer set" into the lighter week it is meant to be.
+        effortKey
+          ? h('span', { class: 'reps-goal-effort', 'data-prescribed-effort': 'true' },
+              ' · ', t(effortKey))
+          : null)
     : null;
 
   // A1/A2 run back to back. superset_group has been in data.js since the
@@ -5243,10 +5450,15 @@ function renderLibExerciseCard(ex) {
     }, jnHasCustomOverride(ex.id) ? t('video_edit_jn_custom') : t('video_edit_jn')));
     if (customVids.length) {
       body.appendChild(h('button', { class: 'btn tiny ghost', style: 'margin-left:6px;', onClick: () => {
-        if (confirm(t('video_clear_confirm'))) {
+        confirmAction({
+          title: t('video_clear_custom'),
+          body: t('video_clear_confirm'),
+          confirmLabel: t('video_clear_custom'),
+        }).then((yes) => {
+          if (!yes) return;
           delete state.custom_videos[ex.id];
           saveLocal(); renderLibrary();
-        }
+        });
       }}, t('video_clear_custom')));
     }
     if (ex.alternatives?.length) {
@@ -5264,17 +5476,56 @@ function renderLibExerciseCard(ex) {
       body.appendChild(h('button', {
         class: 'btn tiny danger ghost',
         onClick: () => {
-          if (confirm(`Delete custom exercise "${ex.name}"? This cannot be undone.`)) {
+          confirmAction({
+            title: t('delete_custom_exercise'),
+            body: tf('delete_custom_exercise_body', { name: ex.name }),
+            confirmLabel: t('delete_custom_exercise'),
+          }).then((yes) => {
+            if (!yes) return;
             deleteCustomExercise(ex.id);
             renderLibrary();
             toastSaved('Deleted.');
-          }
+          });
         }
       }, '🗑 Delete this custom exercise'));
     }
     card.appendChild(head);
     card.appendChild(body);
     return card;
+}
+
+// One place that decides what a bodyweight entry means.
+//
+// There were two, and they disagreed. The quick logger in History accepted any
+// truthy parsed number — including a negative — appended it to the log, and did
+// NOT update `profile.bodyweight_kg`; the protein target reads the profile, so
+// logging a new weight left the target computed from an old one. Settings
+// accepted a negative too, stored it as the current weight, and appended a
+// SECOND entry for the same day.
+//
+// A human bodyweight has bounds. 25-300 kg is wide enough to never argue with a
+// real person and narrow enough to catch a typo or a stray minus sign.
+const BODYWEIGHT_MIN_KG = 25;
+const BODYWEIGHT_MAX_KG = 300;
+function isPlausibleBodyweight(kg) {
+  return Number.isFinite(kg) && kg >= BODYWEIGHT_MIN_KG && kg <= BODYWEIGHT_MAX_KG;
+}
+// Records a weigh-in: one entry per DAY (the last one wins, because a second
+// reading on the same morning is a correction, not a second data point), and the
+// profile follows it so the protein target cannot go stale.
+function recordBodyweight(kg) {
+  if (!isPlausibleBodyweight(kg)) {
+    toast(tf('bodyweight_out_of_range', { min: BODYWEIGHT_MIN_KG, max: BODYWEIGHT_MAX_KG }), 5000);
+    return false;
+  }
+  if (!Array.isArray(state.bodyweight_log)) state.bodyweight_log = [];
+  const today = todayISO();
+  const existing = state.bodyweight_log.findIndex((entry) => entry?.date === today);
+  if (existing >= 0) state.bodyweight_log[existing] = { date: today, kg };
+  else state.bodyweight_log.push({ date: today, kg });
+  state.profile.bodyweight_kg = kg;
+  saveLocal();
+  return true;
 }
 
 // ---- Add custom exercise modal -------------------------------
@@ -5369,9 +5620,7 @@ function renderHistory() {
       }),
       h('button', { class: 'btn primary', onClick: () => {
         const v = parseFloat($('#bw-input').value);
-        if (!v) return;
-        state.bodyweight_log.push({ date: todayISO(), kg: v });
-        saveLocal();
+        if (!recordBodyweight(v)) return;
         toastSaved('Bodyweight logged.');
         renderHistory();
       }}, 'Log'),
@@ -5718,10 +5967,28 @@ async function setCoachModel(model) {
 function renderSettings() {
   const root = $('#page-settings');
   root.innerHTML = '';
-  const disclosure = (label, content) => {
+  // A settings row that answers its own question.
+  //
+  // These were seven identical white slabs: no icon, no subtitle, no grouping,
+  // the chevron floating just left of the label and about two thirds of every
+  // row empty. Nothing could be learned without opening all seven in turn, and
+  // «سحب البيانات» — which can wipe the device — looked exactly like «المساعدة».
+  //
+  // The dead space becomes the answer: each row carries the state he would have
+  // opened it to read. The chevron moves to the far end where a disclosure
+  // indicator belongs, and the icon anchors the start edge so the rows scan as a
+  // list rather than a wall.
+  const disclosure = (label, content, opts = {}) => {
+    const summary = h('summary', {},
+      opts.icon ? h('span', { class: 'sd-icon', 'aria-hidden': 'true' }, opts.icon) : null,
+      h('span', { class: 'sd-text' },
+        h('span', { class: 'sd-label' }, label),
+        opts.hint ? h('span', { class: 'sd-hint' }, opts.hint) : null),
+    );
     const node = h('details', {
-      class: 'settings-disclosure', 'data-settings-disclosure': 'true',
-    }, h('summary', {}, label), content);
+      class: 'settings-disclosure' + (opts.danger ? ' is-data' : ''),
+      'data-settings-disclosure': 'true',
+    }, summary, content);
     // A section may want to fetch the first time it is opened rather than when
     // the page renders. Nothing else needs this yet; the coach card does.
     if (typeof content?.load === 'function') {
@@ -5757,10 +6024,17 @@ function renderSettings() {
     value: state.profile?.bodyweight_kg ?? '',
     placeholder: 'kg',
     onChange: (e) => {
-      const kg = parseFloat(e.target.value);
-      state.profile.bodyweight_kg = kg || null;
-      if (kg) state.bodyweight_log.push({ date: todayISO(), kg });
-      saveLocal();
+      const raw = e.target.value.trim();
+      if (raw === '') {
+        state.profile.bodyweight_kg = null;
+        saveLocal();
+        renderSettings();
+        return;
+      }
+      if (!recordBodyweight(parseFloat(raw))) {
+        e.target.value = state.profile?.bodyweight_kg ?? '';
+        return;
+      }
       renderSettings();
     }
   });
@@ -5780,7 +6054,15 @@ function renderSettings() {
     h('div', { class: 'label' }, h('div', { class: 'name' }, t('cloud_identity')), h('div', { class: 'desc' }, t('separate_v16_cloud_row'))),
     h('button', { class: 'btn tiny', onClick: switchProfile }, 'Switch profile'),
   ));
-  root.appendChild(disclosure('الملف', profileCard));
+  const bw = state.profile?.bodyweight_kg;
+  // A Latin name and a number inside an Arabic line get reordered by bidi —
+  // "Raed · 82 kg" rendered as "82 kg · Raed". Each foreign run is isolated, the
+  // way every other mixed line in this app already is.
+  const profileHint = h('span', {},
+    isolate(state.profile?.display_name || settings.user_id),
+    bw ? h('span', {}, ' · ', isolate(`${fmtLoadKg(bw)} ${t('kg')}`)) : null,
+  );
+  root.appendChild(disclosure('الملف', profileCard, { icon: '👤', hint: profileHint }));
 
   // Programme — D6 has one adopted, history-driven Upper/Lower rotation.
   // There is intentionally no old 2/3-day variant switch to reinterpret a
@@ -5796,7 +6078,10 @@ function renderSettings() {
       h('div', { class: 'tiny muted' }, activeProgramme.block_name),
     ),
   );
-  root.appendChild(disclosure('البرنامج', programmeCard));
+  root.appendChild(disclosure('البرنامج', programmeCard, {
+    icon: '📋',
+    hint: tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() }),
+  }));
 
   // Preferences
   const card = h('div', { class: 'card' });
@@ -6134,11 +6419,17 @@ function renderSettings() {
   // الإعدادات الباقية... نفس السهم اللي على اليمين". He is right: a settings
   // page where one card behaves differently from the other six is not a
   // settings page, it is six settings and an announcement.
-  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard()));
-  root.appendChild(disclosure('تفضيلات', preferencesContent));
-  root.appendChild(disclosure('الموسيقى', musicCard));
-  root.appendChild(disclosure('سحب البيانات', dataCard));
-  root.appendChild(disclosure('المساعدة', buildHelpCard()));
+  // Each hint is the thing he would have opened the row to find out. Built
+  // defensively: a settings screen must render even when a value is missing.
+  const skinName = SKINS[activeSkin()]?.label || "";
+  const themeName = t(settings.theme === 'light' ? 'theme_light' : settings.theme === 'dark' ? 'theme_dark' : 'theme_auto');
+  const platform = PLATFORM_INFO[settings.music_platform || 'spotify']?.label || '';
+  const lastSync = state.last_sync ? fmtDateShort(state.last_sync) : t('sync_never');
+  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard(), { icon: '🧠', hint: t('coach_hint_settings') }));
+  root.appendChild(disclosure('تفضيلات', preferencesContent, { icon: '🎛', hint: `${skinName} · ${themeName}` }));
+  root.appendChild(disclosure('الموسيقى', musicCard, { icon: '🎧', hint: isolate(platform) }));
+  root.appendChild(disclosure('سحب البيانات', dataCard, { icon: '☁️', hint: tf('last_sync_hint', { when: lastSync }), danger: true }));
+  root.appendChild(disclosure('المساعدة', buildHelpCard(), { icon: 'ℹ️' }));
 }
 
 
@@ -6189,7 +6480,9 @@ function buildWeekStrip() {
   // Week starts Saturday, as it does in Saudi.
   const start = new Date(today);
   start.setDate(today.getDate() - ((today.getDay() + 1) % 7));
-  const iso = (date) => date.toISOString().slice(0, 10);
+  // Same bug as todayISO had: this function had already worked out the local
+  // Saturday boundary and then converted back through UTC, undoing it.
+  const iso = (date) => localISODate(date);
 
   const trainedOn = new Map();
   for (const entry of state.history || []) {

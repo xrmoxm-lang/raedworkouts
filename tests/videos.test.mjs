@@ -3,6 +3,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
+const APP_SOURCE = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+
 async function legacyData() {
   const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
   const context = { window: {} };
@@ -235,4 +237,28 @@ test('every browser test blocks the live sync host before it opens the app', asy
   }
   assert.deepEqual(unguarded, [],
     'a test that opens the app without blocking the sync host writes to his real cloud data');
+});
+
+
+// Added 2026-09-05. Three native dialogs survived an earlier sweep because that
+// scan matched `confirm('...')` — a QUOTED LITERAL after the paren — and these
+// called `confirm(t('key'))` and a template literal. An installed PWA shell can
+// suppress a native dialog, which turns the tap into nothing at all, and they
+// are unstyled and English. confirmAction() is the app's own sheet.
+test('no native confirm/prompt/alert survives anywhere reachable', () => {
+  const src = APP_SOURCE;
+  const KNOWN_DEAD = ['discardActiveSessionFromHome'];
+  const offenders = [];
+  const lines = src.split('\n');
+  lines.forEach((line, i) => {
+    if (!/(^|[^.\w])(confirm|prompt|alert)\s*\(/.test(line)) return;
+    if (/confirmAction/.test(line)) return;
+    if (/^\s*(\/\/|\*)/.test(line)) return;          // a comment about them
+    // Allow the one inside a function the dead-code fence already tracks.
+    const before = lines.slice(Math.max(0, i - 25), i).join('\n');
+    if (KNOWN_DEAD.some((name) => before.includes(`function ${name}(`))) return;
+    offenders.push(`${i + 1}: ${line.trim().slice(0, 90)}`);
+  });
+  assert.deepEqual(offenders, [],
+    'a PWA shell can suppress a native dialog, so the tap silently does nothing — use confirmAction()');
 });
