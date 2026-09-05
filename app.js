@@ -2160,11 +2160,45 @@ function getStreak() {
   const fourWeeksMs = 28 * 24 * 60 * 60 * 1000;
   return state.history.filter(h => (now - new Date(h.date).getTime()) < fourWeeksMs).length;
 }
+// One definition of "this week", and it is his week.
+//
+// There were two and they disagreed on the same screen: the volume tile used a
+// rolling 7x24 hours, the week strip used Saturday-to-Friday Saudi time. Near
+// each Saturday boundary the tile could count a session the strip had correctly
+// put in last week, while "remaining" had already reset.
+//
+// It also reads `weekly_layout` — which has sat in data.js since the programme
+// was transcribed and was consumed by NOTHING — for the number of training days
+// a week is meant to hold. That is the one honest use for it: the rotation is
+// deliberately history-driven, never weekday-driven (a missed Tuesday must not
+// break it), so the layout cannot say "Tuesday is Upper A". It can say "four".
+function weeklyTrainingTarget() {
+  const layout = (state.programme_overrides || RW.PROGRAMME)?.weekly_layout;
+  if (!Array.isArray(layout) || !layout.length) return 4;
+  return layout.filter((day) => day && day !== 'rest').length;
+}
+function currentTrainingWeek() {
+  const today = new Date();
+  // The Saudi week starts Saturday.
+  const start = new Date(today);
+  start.setDate(today.getDate() - ((today.getDay() + 1) % 7));
+  start.setHours(0, 0, 0, 0);
+  const startISO = localISODate(start);
+  const days = new Set();
+  for (const entry of state.history || []) {
+    const date = String(entry?.date || '').slice(0, 10);
+    if (date && date >= startISO) days.add(date);
+  }
+  const target = weeklyTrainingTarget();
+  return { startISO, done: days.size, target, remaining: Math.max(0, target - days.size) };
+}
+
 function getWeeklyVolume() {
-  const weekAgo = Date.now() - 7 * 86400 * 1000;
+  // Saturday-to-now, the same week the strip draws, instead of a rolling 7x24h.
+  const { startISO } = currentTrainingWeek();
   let totalSets = 0, totalKg = 0;
   state.history.forEach(h => {
-    if (new Date(h.date).getTime() >= weekAgo) {
+    if (String(h.date || '').slice(0, 10) >= startISO) {
       Object.values(h.exercises).forEach(ex => {
         (ex.sets || []).forEach(s => {
           if (isCountableWorkingSet(s)) {
@@ -4166,6 +4200,11 @@ function renderHome() {
   const next = getNextPlannedSession();
   const streak = getStreak();
   const vol = getWeeklyVolume();
+  const week = currentTrainingWeek();
+  // A rest day is one where the week's training days are already done AND he has
+  // not started anything today. Not a weekday lookup — the rotation never was.
+  const restDayToday = week.remaining === 0 && !(state.history || [])
+    .some((entry) => String(entry?.date || '').slice(0, 10) === todayISO());
   const dow = ['weekday_sunday','weekday_monday','weekday_tuesday','weekday_wednesday','weekday_thursday','weekday_friday','weekday_saturday'][new Date().getDay()];
 
   // Header — structured (accent carries state via the progress meter / top rule)
@@ -4180,6 +4219,30 @@ function renderHome() {
       h('span', { class: 'rl-name' }, parts[0]),
       h('span', { class: 'rl-dot' }, '·'),
       h('span', { class: 'rl-since' }, tf('runner_active_started', { time: fmtTime(a.started_at) })),
+    ));
+  } else if (planned && restDayToday) {
+    // He asked for "today training / tomorrow rest, at a glance, before I leave
+    // the house" four separate times and never got it. The rest branch below
+    // existed but was UNREACHABLE: it needed `planned` to be falsy, and
+    // getTodayPlannedSession() always returns the next session in the rotation,
+    // so every single day said «يوم نادٍ» — including days he had already
+    // finished his week.
+    //
+    // The rotation is history-driven on purpose, so the app cannot promise that
+    // Tuesday is Upper A. What it CAN say honestly is whether he still owes the
+    // week a session. Once the week's training days are done, today is rest, and
+    // the card says what is waiting rather than pretending it is due now.
+    const parts = planned.name.split(' — ');
+    root.appendChild(h('div', { class: 'today-banner rest', 'data-home-overview': 'true' },
+      h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('rest_day_plain')),
+      // The kicker already says «يوم راحة»; the heading says what it is FOR.
+      h('h2', {}, t('rest_day_earned')),
+      // t() the name BEFORE interpolating. Passing it raw puts "Upper A" inside
+      // the template, and the combined string matches no locale key — so the
+      // line renders half-English. The week strip carries the same warning
+      // twenty lines away, and I walked into it anyway.
+      h('p', {}, tf('rest_next_up', { name: t(parts[0]) })),
+      h('div', { class: 'tb-meta' }, tf('rest_week_done', { n: week.done, target: week.target })),
     ));
   } else if (planned) {
     const parts = planned.name.split(' — ');

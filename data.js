@@ -830,12 +830,33 @@ const UPPER_LOWER_SESSION_META = {
   upper_b: { name: 'Upper B', warmup_type: 'upper', mood: 'Incline first while fresh. More pulling than pressing today.' },
   lower_b: { name: 'Lower B', warmup_type: 'lower', mood: 'Squat and hips lead today. The rest completes, not exhausts.' },
 };
+// All three platforms, because the picker offers all three.
+//
+// v15 carried spotify / youtube_music / apple_music per session. v16 ported only
+// Spotify, and the Settings picker kept offering the other two — so choosing
+// Apple Music or YouTube Music silently fell back to Spotify. Raed found this
+// himself: "إذا غيرت مصدر الموسيقى بالإعدادات ما يتغير". A control that offers a
+// choice and ignores it is worse than not offering it.
+//
+// Spotify keeps its curated playlist links, which are stable public Spotify
+// editorial IDs. The other two use SEARCH urls on purpose: v15's Apple Music
+// entries were hardcoded playlist GUIDs that nobody has verified since, and a
+// dead link in a gym is worse than a search that always resolves. Same reasoning
+// as D8 for videos — an honest search beats a confident broken link.
 const UPPER_LOWER_PLAYLISTS = {
   spotify: [
     { label: 'Beast Mode', url: 'https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP', vibe: 'Hip-hop heavy' },
     // These are the two v15 Spotify chips Raed approved for the Home card.
     // Keep Spotify's literal title and link, rather than translating either.
     { label: 'Power Workout', url: 'https://open.spotify.com/playlist/37i9dQZF1DX35oM5SPECmN', vibe: 'High BPM' },
+  ],
+  youtube_music: [
+    { label: 'Heavy Lifting', url: 'https://music.youtube.com/search?q=heavy+lifting+workout+playlist', vibe: 'Hip-hop heavy' },
+    { label: 'Hard Rap Workout', url: 'https://music.youtube.com/search?q=hard+rap+workout+playlist', vibe: 'High BPM' },
+  ],
+  apple_music: [
+    { label: 'Pure Workout', url: 'https://music.apple.com/sa/search?term=pure%20workout', vibe: 'Hip-hop heavy' },
+    { label: 'Pump Up', url: 'https://music.apple.com/sa/search?term=pump%20up%20workout', vibe: 'High BPM' },
   ],
 };
 

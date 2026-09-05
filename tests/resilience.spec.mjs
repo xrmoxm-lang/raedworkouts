@@ -760,3 +760,93 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
   expect(w3.sets).toBe(3);
   expect(w3.goal, 'week 3 is Block A as printed').toContain('صعب');
 });
+
+// ---------------------------------------------------------------------------
+// "Today training / tomorrow rest, at a glance, before I leave the house" is
+// something Raed asked for four separate times and never got. The rest branch
+// existed in the code but was UNREACHABLE: it required `planned` to be falsy,
+// and getTodayPlannedSession() always returns the next session in the rotation.
+// Every single day said «يوم نادٍ», including days he had already finished his
+// week on.
+//
+// The rotation is history-driven on purpose — a missed Tuesday must not break it
+// — so the app cannot claim Tuesday is Upper A. What it can say honestly is
+// whether he still owes the week a session, counted against `weekly_layout`,
+// which had sat in data.js consumed by nothing.
+test('home tells him whether today is a training day or a rest day', async ({ page }) => {
+  // Pinned to a Wednesday so earlier days of the same Saudi week exist to fill.
+  await page.clock.setFixedTime(new Date('2026-09-09T08:00:00+03:00'));
+  await boot(page);
+
+  const withSessionsOn = async (dates) => {
+    await page.evaluate((ds) => {
+      const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+      const parsed = JSON.parse(localStorage[key]);
+      parsed.history = ds.map((d, i) => ({
+        date: d, session_id: ['upper_a', 'lower_a', 'upper_b', 'lower_b'][i % 4],
+        started_at: `${d}T09:00:00Z`, ended_at: `${d}T10:00:00Z`, uid: `w${i}`,
+        exercises: {}, prs: [], stats: {},
+      }));
+      parsed.active_session = null;
+      localStorage[key] = JSON.stringify(parsed);
+    }, dates);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(1000);
+    return page.evaluate(() => document.querySelector('[data-home-overview]')?.textContent?.trim() || '');
+  };
+
+  // Week starts Saturday 2026-09-05. Two done, two still owed.
+  const midWeek = await withSessionsOn(['2026-09-05', '2026-09-06']);
+  expect(midWeek, 'with sessions still owed it is a gym day').toContain('يوم نادٍ');
+
+  // All four done — the week is complete and nothing was trained today.
+  const weekDone = await withSessionsOn(['2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08']);
+  expect(weekDone, 'the rest branch must actually be reachable').toContain('يوم راحة');
+  expect(weekDone, 'and it says what is waiting').toContain('الجاي');
+  // The session name must be localised BEFORE interpolation, or the line renders
+  // half-English — the trap the week strip already documents.
+  expect(weekDone, 'no raw English session name').not.toMatch(/Upper|Lower/);
+});
+
+// ---------------------------------------------------------------------------
+// Raed caught this one himself: "إذا غيرت مصدر الموسيقى بالإعدادات ما يتغير" —
+// and it worked in v15.
+//
+// v15 carried spotify / youtube_music / apple_music per session. v16 ported only
+// Spotify while the Settings picker kept offering all three, and the resolver
+// falls back to Spotify when a platform has no data — so the control looked like
+// it worked and silently ignored him. A picker that offers a choice and drops it
+// is worse than one that offers nothing.
+test('changing the music source changes the links', async ({ page }) => {
+  await boot(page);
+
+  const linksFor = async (platform) => {
+    await page.evaluate((p) => {
+      const key = Object.keys(localStorage).find((k) => /\.settings\./.test(k) && /raed/i.test(k));
+      const settings = JSON.parse(localStorage[key]);
+      settings.music_platform = p;
+      localStorage[key] = JSON.stringify(settings);
+    }, platform);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(900);
+    return page.evaluate(() => [...document.querySelectorAll('#page-home a')]
+      .map((a) => a.getAttribute('href') || '')
+      .filter((h) => /spotify|youtube|apple/.test(h)));
+  };
+
+  const spotify = await linksFor('spotify');
+  expect(spotify.length).toBeGreaterThan(0);
+  expect(spotify.every((h) => h.includes('spotify'))).toBe(true);
+
+  const youtube = await linksFor('youtube_music');
+  expect(youtube.length, 'YouTube Music must have its own links').toBeGreaterThan(0);
+  expect(youtube.every((h) => h.includes('music.youtube.com')),
+    `picking YouTube Music must not fall back to Spotify — got ${youtube.join(', ')}`).toBe(true);
+
+  const apple = await linksFor('apple_music');
+  expect(apple.length, 'Apple Music must have its own links').toBeGreaterThan(0);
+  expect(apple.every((h) => h.includes('music.apple.com')),
+    `picking Apple Music must not fall back to Spotify — got ${apple.join(', ')}`).toBe(true);
+
+  expect(await linksFor('none'), 'choosing no music must show none').toEqual([]);
+});
