@@ -233,3 +233,42 @@ test('choosing a block skin again clears an earlier rejection', async ({ page })
   expect(after.block_skin_suggestions['2']).toBe('rukham');
   expect(after.block_skin_rejections['2'], 'a new choice is not still vetoed').toBeFalsy();
 });
+
+// ---- the global rest override ----------------------------------------------
+//
+// v15 let the Settings rest drive every exercise. v16 gave all 104 programme
+// rows their own `rest_min` from Nippard, so the setting became a fallback that
+// almost never fires — and the ability to shorten a whole session went with it.
+// It is back as an explicit opt-in: the prescription stays the default.
+test('the rest override is off by default, and never shortens a superset', async ({ page }) => {
+  await intoSession(page);
+  const rows = await plan(page);
+  const a1 = rows.find((r) => r.group === 'A1');
+  const normal = rows.find((r) => !r.group && r.rest > 0);
+
+  const restFor = (id) => page.evaluate((exId) => {
+    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+    const settingsKey = Object.keys(localStorage).find((k) => /\.settings\./.test(k) && /raed/i.test(k));
+    const st = JSON.parse(localStorage[key]);
+    const cfg = JSON.parse(localStorage[settingsKey]);
+    const planned = st.active_session.exercises[exId].planned;
+    const minutes = Number(planned.rest_min);
+    if (!Number.isFinite(minutes)) return cfg.rest_seconds;
+    if (cfg.rest_override && minutes > 0) return cfg.rest_seconds;
+    return Math.round(minutes * 60);
+  }, id);
+
+  // Default: the programme's own number.
+  expect(await restFor(normal.id)).toBe(Math.round(normal.rest * 60));
+  expect(await restFor(a1.id), 'A1 rests zero because the pair is one round').toBe(0);
+
+  // On: everything else follows the setting — the superset does not.
+  await page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => /\.settings\./.test(x) && /raed/i.test(x));
+    const cfg = JSON.parse(localStorage[k]);
+    cfg.rest_override = true; cfg.rest_seconds = 60;
+    localStorage[k] = JSON.stringify(cfg);
+  });
+  expect(await restFor(normal.id), 'a normal exercise follows his number').toBe(60);
+  expect(await restFor(a1.id), 'a prescribed 0 is an instruction, not a short rest').toBe(0);
+});

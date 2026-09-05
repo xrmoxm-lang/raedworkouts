@@ -103,7 +103,14 @@ test('warm-up phase has a 5–10 minute treadmill, ten-rep drills, 15-minute cap
 test('session UI keeps the removal list out and wires one-thumb logging and the warm-up gate', () => {
   assert.match(appSource, /renderWarmupPhase/);
   assert.match(appSource, /isFinalWorkingSet && !set\.effort/);
-  assert.match(appSource, /Finish this exercise’s ramp set first/);
+  // The GATE, not a copy of its wording. This matched a raw English literal that
+  // lived inside toggleRunnerSet — a duplicate of the rule that was removed with
+  // the other eleven dead functions on 2026-09-05. The rule itself never moved:
+  // the live set-check handler refuses a working set while a ramp is unticked
+  // and toasts t('finish_ramp_first'). Asserting the English string meant this
+  // test would also have passed on a dead copy while the live path was broken.
+  assert.match(appSource, /finish_ramp_first/);
+  assert.match(appSource, /prior\.is_warmup && !prior\.completed/);
   assert.doesNotMatch(appSource, /Last session not fully logged/);
   assert.doesNotMatch(appSource, /Focus mode/);
   assert.doesNotMatch(appSource, /Cues on/);

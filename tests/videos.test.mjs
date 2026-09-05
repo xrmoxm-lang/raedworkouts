@@ -131,19 +131,13 @@ test('locale.js defines each key exactly once, and defines everything app.js ask
 // The suite fails if a THIRTEENTH appears, which is the moment the next
 // superset_group is created and the only moment it is cheap to notice.
 const KNOWN_DEAD_FUNCTIONS = new Set([
-  // Superseded by the inline handlers on the v15-style card that shipped in
-  // Phase 6. The card carries its own copies of this logic.
-  'toggleRunnerSet', 'addRunnerSet', 'resetCurrentRunnerSet', 'moveRunnerExercise',
-  'completeRunnerWarmup', 'runnerLongPress',
-  // The session preview was retired 2026-08-28 at Raed's request; the plan is
-  // already on home.
-  'previewedSession', 'discardActiveSessionFromHome',
-  // Help moved into the collapsed Settings groups in Phase 6 to free its tab for
-  // the coach; router() redirects 'help' to 'settings'. #page-help in index.html
-  // is the matching leftover.
-  'renderHelp',
-  // Helpers whose callers were replaced by domain/runner-session.js equivalents.
-  'isPRSet', 'isLoggableWeight', 'currentPlaylistPlatform',
+  // Emptied 2026-09-05. All twelve were removed at Raed's word — «إذا ما تستاهل
+  // خلاص نشيلها». Each was genuinely superseded, and moveRunnerExercise was
+  // checked by hand first because he had just asked for exercise reordering:
+  // it navigated the CURSOR between exercises and was replaced by Prev/Next, so
+  // it is not the feature he wants.
+  //
+  // The test below still runs. Its job now is to stop the NEXT one appearing.
 ]);
 
 test('no NEW function is left defined but never called', async () => {

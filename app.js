@@ -811,12 +811,6 @@ function detectPR(exercise_id, kg, reps) {
   }
   return false;
 }
-function isPRSet(exercise_id, kg, reps) {
-  const pr = state.prs[exercise_id];
-  if (!pr) return false;
-  return Math.abs(pr.kg - kg) < 0.01 && pr.reps === reps;
-}
-
 const defaultState = () => ({
   schema_version: 2,
   // Independent of the event-log schema: D6 only migrates invalid planned
@@ -853,6 +847,7 @@ const defaultSettings = () => ({
   skin: 'hadid',               // hadid | waraq | rukham
   weight_unit: 'kg',           // kg | lb
   rest_seconds: 120,
+  rest_override: false,        // opt-in: use rest_seconds instead of the programme's per-exercise rest
   vibrate: true,
   notifications: true,         // browser notifications when rest ends (req permission)
   // `focus_mode` and `show_cues` lived here for months as dead state: no reader
@@ -2199,6 +2194,10 @@ function fmtLoadKg(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
 }
 
+// One money formatter. It lived inside the usage panel as a local `money`, and
+// the over-budget notice needs the same rounding — two of them would drift.
+const fmtUsd = (n) => '$' + Number(n || 0).toFixed(Number(n) >= 1 ? 2 : 4);
+
 function fmtKgTotal(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(value) || 0);
 }
@@ -2208,10 +2207,6 @@ function fmtKgValue(value) {
 }
 // Zero is a legitimate load: plenty of machines carry their own stack, and Raed
 // logs 0 for those. It used to be rejected, which forced him to invent a 1.
-function isLoggableWeight(value) {
-  const weight = typeof value === 'number' ? value : parseFloat(value);
-  return Number.isFinite(weight) && weight >= 0;
-}
 function hasWorkingWeight(value) {
   const weight = Number(value);
   return Number.isFinite(weight) && weight > 0;
@@ -3592,8 +3587,20 @@ let restTimer = { interval: null, end: 0 };
 //
 // The setting stays as the fallback for anything the programme does not specify.
 function prescribedRestSeconds(planned) {
+  // The override, off by default.
+  //
+  // v15 let the Settings value drive every rest. v16 gave all 104 programme rows
+  // their own `rest_min` from Nippard — 2.5 min on a leg press, 0 on the first
+  // half of a superset — so the setting became a fallback that almost never
+  // fires, and the ability to shorten a whole session went with it. That is a
+  // real thing to want on a day he is short of time.
+  //
+  // Opt-in, because the prescription is the programme. A superset's prescribed 0
+  // is never overridden: that 0 is an instruction to move straight into the
+  // partner, not a short rest.
   const minutes = Number(planned?.rest_min);
   if (!Number.isFinite(minutes)) return settings.rest_seconds;
+  if (settings.rest_override && minutes > 0) return settings.rest_seconds;
   return Math.round(minutes * 60);
 }
 
@@ -3724,22 +3731,6 @@ function runnerEntries(activeSession = state.active_session) {
   return Object.entries(activeSession?.exercises || {});
 }
 
-function runnerExerciseIndex(activeSession = state.active_session) {
-  const total = runnerEntries(activeSession).length;
-  if (!total) return 0;
-  return Math.max(0, Math.min(Number(activeSession.runner_exercise_index) || 0, total - 1));
-}
-
-function moveRunnerExercise(delta) {
-  if (!state.active_session) return;
-  const current = runnerExerciseIndex();
-  const next = Math.max(0, Math.min(current + delta, runnerEntries().length - 1));
-  if (next === current) return;
-  state.active_session.runner_exercise_index = next;
-  saveLocal();
-  render();
-}
-
 // Every edit to a weight or a reps box goes through here.
 //
 // This rule used to live in `updateRunnerSet(exerciseId, setIndex, ...)`, which
@@ -3788,95 +3779,6 @@ function flushSetEdit() {
   saveLocal();
 }
 
-function addRunnerSet(exerciseId) {
-  const exerciseState = state.active_session?.exercises?.[exerciseId];
-  if (!exerciseState) return;
-  const lastWorking = [...exerciseState.sets].reverse().find((set) => !set.is_warmup);
-  exerciseState.sets.push({
-    is_warmup: false,
-    weight: editableWeightValue(lastWorking?.weight),
-    reps: lastWorking?.reps ?? workingRepTarget(exerciseState.planned),
-    effort: null,
-    completed: false,
-  });
-  saveLocal();
-  render();
-}
-
-function resetCurrentRunnerSet(exerciseId) {
-  const exerciseState = state.active_session?.exercises?.[exerciseId];
-  if (!exerciseState) return;
-  const set = exerciseState.sets.find((candidate) => !candidate.is_warmup && !candidate.completed && !candidate.skipped)
-    || [...exerciseState.sets].reverse().find((candidate) => !candidate.is_warmup && !candidate.skipped);
-  if (!set) return;
-  // Reset is recovery for the current working row. It deliberately leaves an
-  // explicitly skipped exercise alone: skip is a record, never a zero set.
-  set.weight = '';
-  set.reps = workingRepTarget(exerciseState.planned);
-  set.effort = null;
-  set.completed = false;
-  set.invalid = null;
-  set.invalid_prompted = false;
-  saveLocal();
-  render();
-}
-
-function toggleRunnerSet(exerciseId, setIndex) {
-  const exerciseState = state.active_session?.exercises?.[exerciseId];
-  const set = exerciseState?.sets?.[setIndex];
-  if (!set) return;
-  if (set.skipped) {
-    toast(t('runner_exercise_skipped'));
-    return;
-  }
-  if (set.invalid) {
-    set.invalid = null;
-    set.invalid_prompted = false;
-    saveLocal();
-    render();
-    return;
-  }
-  const actualId = exerciseState.swapped_to || exerciseId;
-  const workingSets = exerciseState.sets.filter((item) => !item.is_warmup);
-  const isFinalWorkingSet = !set.is_warmup && set === workingSets[workingSets.length - 1];
-  if (!set.completed) {
-    if (!set.is_warmup) {
-      const valuesAreValid = hasWorkingWeight(set.weight) && Number.isFinite(Number(set.reps)) && Number(set.reps) >= 1;
-      if (valuesAreValid && isFinalWorkingSet && !set.effort) {
-        toast('Final set: tap easy, medium, or very hard first.');
-        return;
-      }
-      if (valuesAreValid && exerciseState.sets.some((prior, index) => index < setIndex && prior.is_warmup && !prior.completed)) {
-        toast('Finish this exercise’s ramp set first.');
-        return;
-      }
-      const result = applyWorkingSetAttempt(set, new Date().toISOString());
-      Object.assign(set, result.set);
-      if (result.outcome === 'confirm-invalid') {
-        saveLocal();
-        render();
-        toast(t('runner_invalid_prompt'), 4200);
-        return;
-      }
-      if (result.outcome === 'stored-invalid') {
-        saveLocal();
-        render();
-        toast(t('runner_invalid_saved'), 3200);
-        return;
-      }
-      detectPR(actualId, Number(set.weight), Number(set.reps));
-    }
-  }
-  const wasCompleted = set.completed;
-  if (set.is_warmup) set.completed = !set.completed;
-  saveLocal();
-  render();
-  if (!wasCompleted && set.completed && !set.is_warmup) {
-    startRest(settings.rest_seconds);
-    if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
-  }
-}
-
 function nextUnresolvedRunnerExerciseIndex(entries = runnerEntries()) {
   return entries.findIndex(([, exercise]) => !isRunnerExerciseResolved(exercise));
 }
@@ -3896,45 +3798,6 @@ function skipRunnerExercise(exerciseId) {
   toast(t('runner_exercise_skipped'));
 }
 
-function completeRunnerWarmup({ skipped = false } = {}) {
-  const warmup = state.active_session?.warmup;
-  if (!warmup) return;
-  const now = new Date().toISOString();
-  if (skipped) {
-    warmup.skipped = true;
-    warmup.skipped_at = now;
-  }
-  warmup.completed_at = now;
-  state.active_session.phase = 'lifting';
-  saveLocal();
-  render();
-}
-
-
-function runnerLongPress(exerciseId, exerciseState) {
-  let timer = null;
-  const clear = () => { if (timer) clearTimeout(timer); timer = null; };
-  return {
-    onPointerdown: () => {
-      clear();
-      timer = setTimeout(() => {
-        timer = null;
-        showAltModal(exerciseId, exerciseState);
-      }, 600);
-    },
-    onPointerup: clear,
-    onPointercancel: clear,
-    onPointerleave: clear,
-  };
-}
-
-function currentPlaylistPlatform(session) {
-  const chosen = settings.music_platform || 'spotify';
-  if (chosen === 'none') return null;
-  if (Array.isArray(session?.playlists) || session?.playlists?.[chosen]?.length) return chosen;
-  return session?.playlists?.spotify?.length ? 'spotify' : null;
-}
-
 // This is intentionally the v15 hand-off: show the selected platform's real
 // playlist links, open them in a separate tab, and leave playback to Spotify.
 
@@ -3951,14 +3814,6 @@ function showSessionPreview(session) {
   startSession(session);
   return;
 }
-
-function previewedSession() {
-  const programme = getActiveProgramme();
-  return programme.sessions.find((session) => session.id === state.preview_session_id)
-    || getTodayPlannedSession()
-    || getNextPlannedSession().session;
-}
-
 
 // The coach searches the 33 Nippard works Raed owns and answers out of them,
 // showing the passages it used with book and page.
@@ -4373,6 +4228,21 @@ function renderCoach() {
 
   // Three outcomes, three different things on screen. Collapsing them is how a
   // retrieval failure turns into a training answer Raed trusts and shouldn't.
+  // The monthly ceiling was reached. Retrieval is local and free, so his books
+  // still answered — he has the passages, just not the written prose. Saying
+  // which is the point: an answer that silently stops being written reads as the
+  // coach being broken.
+  if (coachState.answer && coachState.answer.status === 'over_budget') {
+    const a = coachState.answer;
+    root.appendChild(h('div', { class: 'card compact warn', 'data-coach-over-budget': 'true' },
+      h('strong', {}, t('coach_over_budget')),
+      h('p', { class: 'tiny muted' }, tf('coach_over_budget_hint', {
+        month: fmtUsd(a.month_usd), cap: fmtUsd(a.cap_usd),
+      })),
+    ));
+    if ((coachState.results || []).length) renderCoachAnswer(root);
+    return;
+  }
   if (coachState.status === 'no_match') {
     root.appendChild(h('div', { class: 'card compact', 'data-coach-no-match': 'true' },
       h('strong', {}, t('coach_no_match')),
@@ -4762,15 +4632,6 @@ function renderCoachAnswer(root) {
 
   root.appendChild(h('p', { class: 'tiny muted', style: 'text-align:center;margin-top:4px;' }, t('coach_footer')));
 }
-
-function discardActiveSessionFromHome() {
-  if (!state.active_session || !confirm(t('discard_current_session'))) return;
-  state.active_session = null;
-  state.forced_next_session = null;
-  saveLocal();
-  render();
-}
-
 
 function renderHome() {
   const root = $('#page-home');
@@ -6724,7 +6585,7 @@ function renderCoachSettingsCard() {
     h('div', { class: 'tiny muted' }, t('coach_searching')));
   card.appendChild(body);
 
-  const money = (n) => '$' + Number(n || 0).toFixed(n >= 1 ? 2 : 4);
+  const money = fmtUsd;
 
   const paint = (usage) => {
     body.innerHTML = '';
@@ -6962,6 +6823,17 @@ function renderSettings() {
       'aria-label': t('rest_fallback'),
       onChange: (e) => { settings.rest_seconds = parseInt(e.target.value, 10) || 120; saveLocal(); }
     }),
+  ));
+  card.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' },
+      h('div', { class: 'name' }, t('rest_override')),
+      h('div', { class: 'desc' }, t('rest_override_desc')),
+    ),
+    h('button', {
+      class: 'btn tiny' + (settings.rest_override ? ' primary' : ''),
+      'data-rest-override': 'true',
+      onClick: () => { settings.rest_override = !settings.rest_override; saveLocal(); renderSettings(); },
+    }, settings.rest_override ? 'On' : 'Off'),
   ));
 
   // Vibrate
@@ -7420,11 +7292,6 @@ function buildHelpCard() {
   card.appendChild(h('h2', {}, 'Install to Home Screen'));
   card.appendChild(h('p', {}, 'iPhone Safari: Share button -> Add to Home Screen. Android Chrome: menu -> Install app or Add to Home screen.'));
   return card;
-}
-
-function renderHelp() {
-  // Legacy deep links remain safe after Help joined Settings.
-  router('settings');
 }
 
 // ---- Boot ---------------------------------------------------

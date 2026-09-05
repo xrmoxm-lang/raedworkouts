@@ -91,6 +91,14 @@ export const LOCALE = Object.freeze({
   why_machine_reps: pair(
     'This machine carries its own weight, so reps are what progress. Last time {reps} — aim for {target}.',
     'هذا الجهاز بأوزانه، فالتقدّم بالتكرارات. آخر مرة {reps} — الهدف {target}.'),
+  coach_over_budget: pair('Written answers are paused this month.', 'الأجوبة المكتوبة موقوفة هذا الشهر.'),
+  coach_over_budget_hint: pair(
+    'The monthly ceiling was reached ({month} of {cap}). Your books still answered — the passages are below. It resets at the start of next month.',
+    'وصلنا سقف الشهر ({month} من {cap}). كتبك جاوبت — المقاطع تحت. يرجع أول الشهر الجاي.'),
+  rest_override: pair('Use my rest time everywhere', 'استعمل وقت راحتي في كل التمارين'),
+  rest_override_desc: pair(
+    'Off, each exercise uses the rest the programme prescribes. On, they all use the number above — for a day you are short of time. Supersets stay at zero either way.',
+    'مطفي: كل تمرين يستعمل الراحة اللي يحددها البرنامج. مشغّل: كلها تستعمل الرقم فوق — ليوم وقتك فيه ضيق. السوبرست يبقى بلا راحة في الحالتين.'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),
