@@ -38,6 +38,7 @@ export const LOCALE = Object.freeze({
     'Stop at {n} — this week is for moving well, not for adding load',
     'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
   coach_asking: pair('Asking…', 'يسأل…'),
+  coach_ask_title: pair('Ask your library', 'اسأل مكتبتك'),
   coach_recent: pair('You asked recently', 'سألت قريباً'),
   // The rest-day banner. Its branch existed but could never be reached, so every
   // day of the week announced itself as a gym day.
@@ -158,7 +159,11 @@ export const LOCALE = Object.freeze({
   // own 33 Nippard works, and it says so when they do not cover the question.
   // The copy promises exactly that and no more: an answer FROM the books, with
   // the passages it used shown underneath.
-  coach_intro: pair('Ask your own library. The answer is built from your books, and the passages it used are shown underneath.', 'اسأل مكتبتك. الجواب مبنيّ على كتبك، والمقاطع التي استُعملت تظهر تحته.'),
+  // The heading above it now says «اسأل مكتبتك», so this no longer repeats it —
+  // it says what happens after you ask.
+  coach_intro: pair(
+    'The answer is built from your books, with the passages it used shown underneath.',
+    'الجواب مبنيّ على كتبك، والمقاطع اللي استُعملت تظهر تحته.'),
   coach_placeholder: pair('Ask about training or nutrition…', 'اسأل عن التمرين أو التغذية…'),
   coach_ask: pair('Ask', 'اسأل'),
   coach_try: pair('Try one of these:', 'جرّب واحدًا من هذه:'),
@@ -567,7 +572,7 @@ export const LOCALE = Object.freeze({
   no_exercises_match: pair('No exercises match.', 'لا توجد تمارين مطابقة.'),
   no_exercise_available: pair('No exercise is available in this session.', 'لا يوجد تمرين متاح في هذه الجلسة.'),
   no_saved_video: pair('No saved video for this exercise.', 'لا يوجد شرح محفوظ لهذا التمرين.'),
-  add_custom_exercise: pair('➕ Add Custom Exercise', '➕ أضف تمريناً مخصصاً'),
+  add_custom_exercise: pair('Add Custom Exercise', 'أضف تمريناً مخصصاً'),
   add_video: pair('+ Add video', '+ أضف شرحاً'),
   custom_exercise_intro: pair('Adds a new exercise to your library. Saved permanently. You can delete it anytime.', 'يضيف تمريناً جديداً إلى مكتبتك. يُحفظ دائماً ويمكنك حذفه متى شئت.'),
   name_english: pair('Name (English)', 'الاسم بالإنجليزية'),
@@ -690,7 +695,9 @@ export const LOCALE = Object.freeze({
   showing_video: pair('Showing — tap to hide from session', 'ظاهر — اضغط لإخفائه من التمرين'),
   clear_custom: pair('Clear custom', 'امسح المخصص'),
   remove_videos: pair('Remove all custom videos for this exercise?', 'هل تمسح كل الشروح المخصصة لهذا التمرين؟'),
-  delete_custom_exercise: pair('🗑 Delete this custom exercise', '🗑 احذف هذا التمرين المخصص'),
+  delete_custom_exercise: pair('Delete this custom exercise', 'احذف هذا التمرين المخصص'),
+  // Same label without the emoji: the button now carries a drawn icon instead.
+  delete_custom_exercise_plain: pair('Delete this custom exercise', 'احذف هذا التمرين المخصص'),
   deleted: pair('Deleted.', 'تم الحذف.'),
   paste_youtube: pair('Paste a YouTube link to add to this exercise:', 'الصق رابط يوتيوب لإضافته لهذا التمرين:'),
   jn_url_updated: pair('JN URL updated.', 'تم تحديث رابط JN.'),
@@ -701,7 +708,7 @@ export const LOCALE = Object.freeze({
     'Deletes "{name}" from your library. This cannot be undone.',
     'يحذف «{name}» من مكتبتك. ما فيه رجعة.'),
 
-  profile: pair('👤 Profile', '👤 الملف'),
+  profile: pair('Profile', 'الملف'),
   display_name: pair('Display name', 'اسم العرض'),
   shown_profile_tiles: pair('Shown on profile tiles.', 'يظهر في بطاقات الملفات.'),
   training_split: pair('Training split', 'تقسيم التمرين'),
@@ -715,8 +722,8 @@ export const LOCALE = Object.freeze({
   notifications: pair('Background notifications', 'إشعارات في الخلفية'),
   on: pair('On', 'مفعّل'),
   off: pair('Off', 'متوقف'),
-  cloud_sync: pair('☁️ Cloud sync', '☁️ المزامنة السحابية'),
-  cloud_data: pair('☁️ Cloud & Data', '☁️ السحابة والبيانات'),
+  cloud_sync: pair('Cloud sync', 'المزامنة السحابية'),
+  cloud_data: pair('Cloud & Data', 'السحابة والبيانات'),
   test: pair('Test', 'اختبر'),
   restore_backup: pair('Restore from backup...', 'استعد من نسخة احتياطية…'),
   download_data: pair('Download my data', 'نزّل بياناتي'),

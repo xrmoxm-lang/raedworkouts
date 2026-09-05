@@ -1633,6 +1633,101 @@ function renderWelcome() {
   }
   root.appendChild(wrap);
 }
+// A real icon set, in the app's own hand.
+//
+// Settings shipped with emoji standing in for icons. Raed's verdict: «حتى
+// الإيموجي ما تسوي شي بالنسبة لي» — and he is right. Emoji are somebody else's
+// drawings at somebody else's weight, they render differently on every OS, they
+// carry colour the palette never chose, and next to the tab bar's own line icons
+// they read as a placeholder that was never replaced.
+//
+// These match that tab bar exactly: 24x24, no fill, currentColor, 1.8 stroke,
+// round caps and joins. They inherit the skin's accent and text colours, they
+// sit on the same optical weight as the navigation, and they look like one hand
+// drew the whole app.
+//
+// The ⚙️ on the exercise card is deliberately NOT here: Raed asked for that one
+// back as an emoji by name (item C6).
+const ICON_PATHS = {
+  profile: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z', 'M4.5 20a7.5 7.5 0 0 1 15 0'],
+  programme: ['M8 4h8a1 1 0 0 1 1 1v0a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v0a1 1 0 0 1 1-1Z',
+              'M7 5H5.6A1.6 1.6 0 0 0 4 6.6v12.8A1.6 1.6 0 0 0 5.6 21h12.8a1.6 1.6 0 0 0 1.6-1.6V6.6A1.6 1.6 0 0 0 18.4 5H17',
+              'M8 11h8', 'M8 15h5'],
+  coach: ['M12 5.5a3 3 0 0 0-5.9-.7A2.8 2.8 0 0 0 4 7.4c0 .7.3 1.4.7 1.9A2.9 2.9 0 0 0 4 11.5c0 1 .5 1.9 1.3 2.4A2.8 2.8 0 0 0 8 18c.9 0 1.7-.4 2.2-1',
+           'M12 5.5a3 3 0 0 1 5.9-.7A2.8 2.8 0 0 1 20 7.4c0 .7-.3 1.4-.7 1.9A2.9 2.9 0 0 1 20 11.5c0 1-.5 1.9-1.3 2.4A2.8 2.8 0 0 1 16 18c-.9 0-1.7-.4-2.2-1',
+           'M12 5.5V20'],
+  sliders: ['M10 6H3', 'M21 6h-7', 'M7 12H3', 'M21 12h-9', 'M13 18H3', 'M21 18h-3'],
+  music: ['M9 18V6l10-2v12', 'M9 18a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z', 'M19 16a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z'],
+  cloud: ['M7 18a4 4 0 0 1 .6-8A5.5 5.5 0 0 1 18 11.2 3.4 3.4 0 0 1 17.5 18H7Z', 'M12 12v6', 'M9.5 15.5 12 18l2.5-2.5'],
+  info: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', 'M12 11v5', 'M12 7.6h.01'],
+  spark: ['M12 3.5 13.7 9l5.3 1.7-5.3 1.7L12 18l-1.7-5.6L5 10.7 10.3 9 12 3.5Z'],
+  plus: ['M12 5v14', 'M5 12h14'],
+  trash: ['M4.5 7h15', 'M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7', 'M6.5 7l.8 12A1.5 1.5 0 0 0 8.8 20.5h6.4a1.5 1.5 0 0 0 1.5-1.5l.8-12'],
+};
+// The home hero was 125px tall with every word pinned to the right edge and the
+// left 55% empty — measured, not eyeballed. Nothing filled it because nothing
+// on Home said where he stands in the week; that number lived only in a
+// paragraph further down. A ring says it in one glance and gives the screen the
+// single focal object it was missing.
+//
+// The arc is --accent, but the numeral inside is --accent-label: in the ورق
+// dark skin --accent is #743d4a, which is a fine stroke and an unreadable
+// letter. scripts/lint-contrast.mjs enforces that distinction.
+function progressRing(done, target, caption) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const R = 26, C = 2 * Math.PI * R;
+  const filled = target > 0 ? Math.min(1, Math.max(0, done / target)) : 0;
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('ring-svg');
+  const circle = (cls, dash) => {
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', '32'); c.setAttribute('cy', '32'); c.setAttribute('r', String(R));
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke-width', '5.5');
+    c.setAttribute('stroke-linecap', 'round');
+    c.classList.add(cls);
+    if (dash) { c.setAttribute('stroke-dasharray', dash); c.setAttribute('transform', 'rotate(-90 32 32)'); }
+    return c;
+  };
+  svg.appendChild(circle('ring-track'));
+  // A zero-length arc still paints a round cap — a dot on an empty ring reads as
+  // "one done". Draw the arc only when there is something to draw.
+  if (filled > 0) svg.appendChild(circle('ring-arc', `${(C * filled).toFixed(2)} ${C.toFixed(2)}`));
+  return h('div', { class: 'hero-ring' },
+    svg,
+    // «0/4» is a fraction, and a fraction is LTR in Arabic too. Laid out by the
+    // page's RTL it printed «4/0» — a different number.
+    h('div', { class: 'ring-face', dir: 'ltr' },
+      h('span', { class: 'ring-num' + (done > 0 ? '' : ' zero') }, String(done)),
+      h('span', { class: 'ring-of' }, `/${target}`),
+    ),
+    caption ? h('div', { class: 'ring-cap' }, caption) : null,
+  );
+}
+
+function icon(name, size = 18) {
+  const paths = ICON_PATHS[name];
+  if (!paths) return null;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.8');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('ui-icon');
+  for (const d of paths) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
 // ---- Theme --------------------------------------------------
 const SKINS = {
   hadid: { label: 'حديد', sw_light: '#b8451a', sw_dark: '#e8622d', theme_dark: '#17130f' },
@@ -3778,8 +3873,18 @@ function renderCoach() {
     ));
   }
 
-  root.appendChild(h('div', { class: 'card compact', 'data-coach-ask': 'true' },
-    h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_intro')),
+  // The ask box is the subject of this screen, so it is built like one: a single
+  // composed block with the icon, the promise and the field, instead of a
+  // "compact card" identical to the two beneath it. Three stacked cards of the
+  // same weight is what made the page read as unfinished.
+  root.appendChild(h('section', { class: 'coach-ask', 'data-coach-ask': 'true' },
+    h('div', { class: 'coach-ask-head' },
+      h('span', { class: 'coach-ask-mark' }, icon('coach', 22)),
+      h('div', {},
+        h('div', { class: 'coach-ask-title' }, t('coach_ask_title')),
+        h('div', { class: 'coach-ask-sub' }, t('coach_intro')),
+      ),
+    ),
     h('div', { class: 'coach-row' },
       input,
       h('button', {
@@ -3790,8 +3895,8 @@ function renderCoach() {
   ));
 
   if (coachState.status === 'idle') {
-    root.appendChild(h('div', { class: 'card compact' },
-      h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_try')),
+    root.appendChild(h('div', { class: 'coach-block' },
+      h('div', { class: 'coach-block-label' }, t('coach_try')),
       // The chips go through the same path as the typed question, context and
       // all. They used to call askCoach() bare, so tapping a chip mid-session
       // silently ignored the switch he had just left on.
@@ -3808,17 +3913,17 @@ function renderCoach() {
     // HIS books and says so.
     const recent = (state.coach_recent || []).filter(Boolean);
     if (recent.length) {
-      root.appendChild(h('div', { class: 'card compact', 'data-coach-recent': 'true' },
-        h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' }, t('coach_recent')),
+      root.appendChild(h('div', { class: 'coach-block', 'data-coach-recent': 'true' },
+        h('div', { class: 'coach-block-label' }, t('coach_recent')),
         h('div', { class: 'coach-chips' }, recent.map((question) => h('button', {
           class: 'btn tiny ghost',
           onClick: () => { input.value = question; submit(); },
         }, question))),
       ));
     }
-    root.appendChild(h('div', { class: 'card compact coach-scope', 'data-coach-scope': 'true' },
+    root.appendChild(h('footer', { class: 'coach-scope', 'data-coach-scope': 'true' },
       h('div', { class: 'coach-scope-line' }, t('coach_scope_books')),
-      h('div', { class: 'tiny muted' }, t('coach_scope_note')),
+      h('div', { class: 'coach-scope-note' }, t('coach_scope_note')),
     ));
     return;
   }
@@ -4249,26 +4354,41 @@ function renderHome() {
     // week a session. Once the week's training days are done, today is rest, and
     // the card says what is waiting rather than pretending it is due now.
     const parts = planned.name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner rest', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('rest_day_plain')),
-      // The kicker already says «يوم راحة»; the heading says what it is FOR.
-      h('h2', {}, t('rest_day_earned')),
-      // t() the name BEFORE interpolating. Passing it raw puts "Upper A" inside
-      // the template, and the combined string matches no locale key — so the
-      // line renders half-English. The week strip carries the same warning
-      // twenty lines away, and I walked into it anyway.
-      h('p', {}, tf('rest_next_up', { name: t(parts[0]) })),
-      h('div', { class: 'tb-meta' }, tf('rest_week_done', { n: week.done, target: week.target })),
+    root.appendChild(h('div', { class: 'today-banner rest hero', 'data-home-overview': 'true' },
+      h('div', { class: 'tb-main' },
+        h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('rest_day_plain')),
+        // The kicker already says «يوم راحة»; the heading says what it is FOR.
+        h('h2', {}, t('rest_day_earned')),
+        // t() the name BEFORE interpolating. Passing it raw puts "Upper A" inside
+        // the template, and the combined string matches no locale key — so the
+        // line renders half-English. The week strip carries the same warning
+        // twenty lines away, and I walked into it anyway.
+        h('p', {}, tf('rest_next_up', { name: t(parts[0]) })),
+        h('div', { class: 'tb-meta' }, tf('rest_week_done', { n: week.done, target: week.target })),
+        h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
+      ),
+      // A rest day is the ring's best moment — it is the only day it is full.
+      progressRing(week.done, week.target, t('this_week_plain')),
     ));
   } else if (planned) {
     const parts = planned.name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
-      h('h2', {}, parts[0]),
-      // No subtitle when the name has no " — " half. The fallback was the FULL
-      // name, so a session called just «سفلي أ» printed its own title twice.
-      parts[1] ? h('p', {}, parts[1]) : null,
-      h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ~', tf('home_minutes', { n: estimateSessionMinutes(planned) })),
+    root.appendChild(h('div', { class: 'today-banner hero', 'data-home-overview': 'true' },
+      h('div', { class: 'tb-main' },
+        h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
+        h('h2', {}, parts[0]),
+        // No subtitle when the name has no " — " half. The fallback was the FULL
+        // name, so a session called just «سفلي أ» printed its own title twice.
+        parts[1] ? h('p', {}, parts[1]) : null,
+        h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ',
+          // «~» is neutral, so it took its direction from the Arabic around it and
+          // landed AFTER the number: «65 ~ دقيقة». Isolated, it stays a prefix.
+          isolate('~', tf('home_minutes', { n: estimateSessionMinutes(planned) }))),
+        // Where he is in the programme, on the screen he opens — until now this
+        // existed only inside Settings, and it is the fact that shows the
+        // 12-month progression is actually moving on its own.
+        h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
+      ),
+      progressRing(week.done, week.target, t('this_week_plain')),
     ));
   } else {
     // data-home-overview marks "home drew its banner", not "a session is running",
@@ -4296,7 +4416,12 @@ function renderHome() {
   const context = h('div', { class: 'home-context', 'data-home-context': 'true' });
   root.appendChild(context);
 
-  context.appendChild(buildWeekStrip());
+  // Order matters more than any of the styling below it. The one button he came
+  // to this screen to press was at y=462 on an 844px phone, under a week strip
+  // and three stat tiles — 482px of context ahead of the action. The strip and
+  // the tiles are things he reads; the button is the thing he does. Everything
+  // appended to `context` before this point now goes after it.
+  const belowAction = h('div', { class: 'home-below' });
 
   // A stat tile's number, sized so it can never leave the tile.
   //
@@ -4307,13 +4432,21 @@ function renderHome() {
   //
   // Digits, not characters: the separators are narrow and the caption is what
   // sets the tile's width, so counting 0-9 is what predicts the overflow.
+  //
+  // A zero is drawn in the muted colour, not the accent. Saturday morning, two
+  // of these three tiles read 0 — correct, and at 31px in brand orange they were
+  // the loudest thing on the screen. The number he has not earned yet should not
+  // shout; the moment it becomes 1 it takes the accent.
   const statNum = (text) => {
     const digits = (String(text).match(/\d/g) || []).length;
     const size = digits >= 7 ? ' s7' : digits >= 6 ? ' s6' : digits >= 5 ? ' s5' : '';
-    return h('div', { class: 'stat-num' + size, 'data-digits': String(digits) }, String(text));
+    const zero = /^0(\.0+)?$/.test(String(text).replace(/[,\s]/g, '')) ? ' zero' : '';
+    return h('div', { class: 'stat-num' + size + zero, 'data-digits': String(digits) }, String(text));
   };
 
-  context.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
+  belowAction.appendChild(buildWeekStrip());
+
+  belowAction.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
     h('div', { class: 'stat-tile' },
       statNum(String(streak)),
       h('div', { class: 'stat-cap' }, t('home_streak')),
@@ -4381,6 +4514,9 @@ function renderHome() {
       context.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
     }
   }
+
+  // Week strip + stat tiles, now that the action is above them.
+  context.appendChild(belowAction);
 
   // This is deliberately the v15 block rather than a new music treatment.
   // Raed explicitly approved its glyph, wording, card and playlist chips.
@@ -5460,7 +5596,7 @@ function renderLibrary() {
   root.appendChild(h('button', {
     class: 'btn primary full', style: 'margin-bottom:14px;',
     onClick: () => openAddCustomExerciseModal(),
-  }, '➕ Add Custom Exercise'));
+  }, icon('plus', 16), h('span', {}, 'Add Custom Exercise')));
 
   // Filter exercises by search (applied globally, then re-grouped)
   const matchesSearch = (ex) => {
@@ -5534,7 +5670,7 @@ function renderLibExerciseCard(ex) {
       h('div', { class: 'ex-status' }, '▸'),
     );
     const body = h('div', { class: 'ex-body' });
-    if (ex.cue) body.appendChild(h('div', { class: 'cue' }, h('strong', {}, '💡 '), ex.cue));
+    if (ex.cue) body.appendChild(h('div', { class: 'cue' }, icon('spark', 15), h('span', {}, ex.cue)));
     const customVids = state.custom_videos[ex.id] || [];
     const allVideos = buildExerciseVideos(ex.id, ex, { includeHidden: true });
     if (allVideos.length) {
@@ -5611,7 +5747,7 @@ function renderLibExerciseCard(ex) {
             toastSaved('Deleted.');
           });
         }
-      }, '🗑 Delete this custom exercise'));
+      }, icon('trash', 16), h('span', {}, t('delete_custom_exercise_plain'))));
     }
     card.appendChild(head);
     card.appendChild(body);
@@ -5661,7 +5797,7 @@ function openAddCustomExerciseModal() {
   const muscleOptions = Object.entries(RW.MUSCLES).map(([k]) =>
     h('option', { value: k, ...(form.primary === k ? { selected: '' } : {}) }, muscleLabel(k))
   );
-  m.appendChild(h('h3', {}, '➕ Add Custom Exercise'));
+  m.appendChild(h('h3', { class: 'h3-icon' }, icon('plus', 17), h('span', {}, 'Add Custom Exercise')));
   m.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:12px;' },
     'Adds a new exercise to your library. Saved permanently. You can delete it anytime.'));
 
@@ -6126,7 +6262,7 @@ function renderSettings() {
   ));
   // Profile
   const profileCard = h('div', { class: 'card' });
-  profileCard.appendChild(h('h3', {}, '👤 Profile'));
+  profileCard.appendChild(h('h3', { class: 'h3-icon' }, icon('profile', 17), h('span', {}, 'Profile')));
   const displayName = h('input', {
     type: 'text',
     // The label is a sibling <div>, not a <label>, so nothing associated the
@@ -6186,7 +6322,7 @@ function renderSettings() {
     isolate(state.profile?.display_name || settings.user_id),
     bw ? h('span', {}, ' · ', isolate(`${fmtLoadKg(bw)} ${t('kg')}`)) : null,
   );
-  root.appendChild(disclosure('الملف', profileCard, { icon: '👤', hint: profileHint }));
+  root.appendChild(disclosure('الملف', profileCard, { icon: icon('profile'), hint: profileHint }));
 
   // Programme — D6 has one adopted, history-driven Upper/Lower rotation.
   // There is intentionally no old 2/3-day variant switch to reinterpret a
@@ -6203,7 +6339,7 @@ function renderSettings() {
     ),
   );
   root.appendChild(disclosure('البرنامج', programmeCard, {
-    icon: '📋',
+    icon: icon('programme'),
     hint: tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() }),
   }));
 
@@ -6280,7 +6416,7 @@ function renderSettings() {
 
   // Music platform
   const musicCard = h('div', { class: 'card' });
-  musicCard.appendChild(h('h3', {}, '🎧 Music'));
+  musicCard.appendChild(h('h3', { class: 'h3-icon' }, icon('music', 17), h('span', {}, 'Music')));
   musicCard.appendChild(h('div', { class: 'tiny muted', style: 'margin-bottom:8px;' },
       t('pick_music_platform')
   ));
@@ -6300,7 +6436,7 @@ function renderSettings() {
   const configured = !!(settings.sync_url && settings.sync_key);
   const cloudCard = h('div', { class: 'card', style: 'padding:10px 14px;' },
     h('div', { style: 'display:flex; justify-content:space-between; align-items:center;' },
-      h('div', { class: 'tiny muted' }, '☁️ Cloud sync'),
+      h('div', { class: 'tiny muted' }, 'Cloud sync'),
       h('span', { id: 'sync-status', class: 'sync-status off' },
         configured ? t('checking') : 'Not connected'),
     ),
@@ -6310,7 +6446,7 @@ function renderSettings() {
 
   // Cloud + data
   const dataCard = h('div', { class: 'card' });
-  dataCard.appendChild(h('h3', {}, '☁️ Cloud & Data'));
+  dataCard.appendChild(h('h3', { class: 'h3-icon' }, icon('cloud', 17), h('span', {}, 'Cloud & Data')));
   dataCard.appendChild(cloudCard.firstChild);
   dataCard.appendChild(h('div', { class: 'cloud-actions' },
     h('button', { class: 'btn tiny', onClick: testCloudConnection }, 'Test'),
@@ -6549,11 +6685,11 @@ function renderSettings() {
   const themeName = t(settings.theme === 'light' ? 'theme_light' : settings.theme === 'dark' ? 'theme_dark' : 'theme_auto');
   const platform = PLATFORM_INFO[settings.music_platform || 'spotify']?.label || '';
   const lastSync = state.last_sync ? fmtDateShort(state.last_sync) : t('sync_never');
-  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard(), { icon: '🧠', hint: t('coach_hint_settings') }));
-  root.appendChild(disclosure('تفضيلات', preferencesContent, { icon: '🎛', hint: `${skinName} · ${themeName}` }));
-  root.appendChild(disclosure('الموسيقى', musicCard, { icon: '🎧', hint: isolate(platform) }));
-  root.appendChild(disclosure('سحب البيانات', dataCard, { icon: '☁️', hint: tf('last_sync_hint', { when: lastSync }), danger: true }));
-  root.appendChild(disclosure('المساعدة', buildHelpCard(), { icon: 'ℹ️' }));
+  root.appendChild(disclosure(t('coach_settings'), renderCoachSettingsCard(), { icon: icon('coach'), hint: t('coach_hint_settings') }));
+  root.appendChild(disclosure('تفضيلات', preferencesContent, { icon: icon('sliders'), hint: `${skinName} · ${themeName}` }));
+  root.appendChild(disclosure('الموسيقى', musicCard, { icon: icon('music'), hint: isolate(platform) }));
+  root.appendChild(disclosure('سحب البيانات', dataCard, { icon: icon('cloud'), hint: tf('last_sync_hint', { when: lastSync }), danger: true }));
+  root.appendChild(disclosure('المساعدة', buildHelpCard(), { icon: icon('info') }));
 }
 
 

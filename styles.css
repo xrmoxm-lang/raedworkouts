@@ -2108,8 +2108,139 @@ body.session-active #page-home > .home-context { display: none; }
    the effort is the qualifier on it. */
 .reps-goal-effort { color: var(--text-muted); font-weight: 700; }
 
-/* The idle coach screen was 57% empty — measured at 481px of 844. These two
-   blocks give that space a job: what he asked before, and where the answers
-   come from. Quiet by construction; this is a screen he passes through. */
-.coach-scope { border-style: dashed; }
-.coach-scope-line { font-weight: 750; font-size: 13px; margin-bottom: 4px; }
+/* The coach screen, recomposed. Raed: «شكله مو كويس».
+   It was three cards of identical weight stacked down the page, which is what
+   made it read as unfinished — nothing said which one was the subject. Now the
+   ask box IS the subject: it carries the accent, the mark and the promise, and
+   everything under it steps down to quiet text on the page ground with no card
+   of its own. One strong element and two quiet ones, instead of three equals. */
+.coach-ask {
+  padding: 18px 16px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 22px;
+}
+.coach-ask-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.coach-ask-mark {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 12px;
+  color: var(--accent-fg);
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  box-shadow: var(--shadow-accent);
+}
+.coach-ask-title { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.25; }
+.coach-ask-sub { font-size: 12px; color: var(--text-muted); line-height: 1.4; margin-top: 3px; }
+
+/* Everything below the ask box is quiet: no card, no border, no shadow. */
+.coach-block { margin-bottom: 20px; }
+.coach-block-label {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 9px;
+}
+.coach-scope {
+  margin-top: 26px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.coach-scope-line { font-weight: 750; font-size: 12.5px; margin-bottom: 3px; }
+.coach-scope-note { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+
+/* Drawn icons, not emoji. They inherit the skin's colour and sit at the same
+   optical weight as the tab bar, so the app reads as one hand rather than a
+   pane of somebody else's stickers. */
+.ui-icon { display: block; flex: 0 0 auto; }
+.sd-icon { display: flex; align-items: center; color: var(--text-muted); }
+.settings-disclosure[open] > summary .sd-icon,
+.settings-disclosure > summary:active .sd-icon { color: var(--accent); }
+.h3-icon { display: flex; align-items: center; gap: 8px; }
+.cue { display: flex; align-items: flex-start; gap: 7px; }
+.cue .ui-icon { margin-top: 1px; color: var(--accent); }
+
+/* Recent questions read as text without this — they are buttons that re-ask, so
+   they need to look pressable without competing with the ask box above them. */
+.coach-block .btn.tiny.ghost {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-weight: 650;
+}
+@media (hover: hover) { .coach-block .btn.tiny.ghost:hover { border-color: var(--accent); color: var(--accent); } }
+
+/* ===== Home hero =========================================
+   Measured before touching it: the banner was 125px with 19px of bottom padding
+   — vertically it was fine. The waste was HORIZONTAL: every word pinned to the
+   right edge, ~55% of the width blank, and nothing on Home said where he stood
+   in the week. The ring is that missing fact, and it is what turns the banner
+   from a text block into a composition. */
+.today-banner.hero {
+  display: flex; align-items: center; gap: 16px;
+  /* A little more air than the plain banner: this is now the one object the
+     screen is built around, and it has something in it to give air to. */
+  padding: 20px 18px;
+  /* Depth, so it reads as the hero rather than as card #1 of five identical
+     slabs. Radial rather than a flat linear fade — an even 45° gradient is the
+     stock look. The tint is the accent at 22%, which stays inside the contrast
+     budget in all six skin/theme pairs. */
+  background:
+    radial-gradient(120% 90% at 92% 0%, color-mix(in srgb, var(--accent-soft) 55%, transparent), transparent 62%),
+    var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+.today-banner.hero .tb-main { flex: 1 1 auto; min-width: 0; }
+.today-banner.hero h2 { overflow-wrap: anywhere; }
+/* The programme clock — where he is in the 12-week block and which cycle. Until
+   now this lived only inside Settings, and it is the line that shows the
+   progression is moving on its own without him touching anything. */
+.today-banner .tb-clock {
+  margin-top: 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-muted); opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-ring {
+  position: relative; flex: 0 0 auto;
+  width: 76px; display: flex; flex-direction: column; align-items: center;
+}
+.hero-ring .ring-svg { width: 76px; height: 76px; display: block; }
+.hero-ring .ring-track { stroke: var(--border); }
+.hero-ring .ring-arc { stroke: var(--accent); transition: stroke-dasharray var(--dur, .2s) ease; }
+/* Centred on the ring's circle, not on the whole element — the caption below
+   would otherwise drag the "centre" down and it reads as a 2px misalignment. */
+.hero-ring .ring-face {
+  position: absolute; top: 0; left: 0; right: 0; height: 76px;
+  display: flex; align-items: center; justify-content: center; gap: 1px;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.hero-ring .ring-num { font-size: 25px; font-weight: 840; letter-spacing: -0.04em; color: var(--accent-label); }
+.hero-ring .ring-of { font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.hero-ring .ring-cap {
+  margin-top: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em;
+  color: var(--text-muted); text-transform: uppercase; white-space: nowrap;
+}
+/* Under ~340px the title and a 76px ring stop coexisting. The text keeps the
+   width; the ring is context, not the message. */
+@media (max-width: 344px) { .hero-ring { display: none; } }
+
+/* A tile reading 0 is telling the truth, but not in brand orange at 31px. */
+.stat-tile .stat-num.zero { color: var(--text-muted); opacity: 0.55; font-weight: 780; }
+/* Same rule as the stat tiles: a zero he has not earned yet is not accent-loud. */
+.hero-ring .ring-num.zero { color: var(--text-muted); opacity: 0.5; }
+
+/* ===== Week strip — no longer a card =====================
+   Home was five white slabs at one elevation stacked down the page: hero, week,
+   tiles, plan rows. This one carries the least and was styled the same as the
+   most. Stripped of its chrome the page gets a rhythm — elevated hero, accent
+   action, quiet strip, tiles, plan — instead of a wall. */
+.week-card {
+  background: none; border: 0; box-shadow: none;
+  padding: 2px 2px 0; margin-bottom: 14px;
+}
+/* Seven filled pills said seven equal things. Only the days that carry a fact —
+   he trained, or it is today — get a surface now; the rest are just labels. */
+.week-day { background: none; padding: 7px 0; }
+.week-day.trained { background: var(--accent-soft); }
+.week-day.today { background: var(--bg-card); border-color: var(--accent); }
+.week-day.today .wd-name { color: var(--text); font-weight: 800; }
