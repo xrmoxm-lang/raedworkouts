@@ -184,3 +184,52 @@ test('a row whose sets share a target still reads as one word', async ({ page })
   // no longer testing what it claims.
   expect(counts.some((c) => c.distinct > 1), 'this session must contain a varying row').toBe(true);
 });
+
+// ---- block-skin controls ----------------------------------------------------
+//
+// Declining a skin proposal writes block_skin_rejections[block] = true and the
+// domain refuses that block forever after. Changing the mapping wrote only the
+// suggestion, so the select could display a skin the app had already decided
+// never to offer again. And the list was hard-coded [1, 2, 3] while the
+// mesocycle gained a fourth block — the deload, the one week whose whole point
+// is that it feels different.
+test('choosing a block skin again clears an earlier rejection', async ({ page }) => {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (r) => r.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
+  await page.goto(APP, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const t = [...document.querySelectorAll('.profile-tile')].find((e) => /Raed/.test(e.textContent));
+    if (t) t.click();
+  });
+  await page.waitForTimeout(900);
+
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.settings\./.test(k) && /raed/i.test(k));
+    const parsed = JSON.parse(localStorage[key]);
+    parsed.block_skin_rejections = { 2: true };
+    localStorage[key] = JSON.stringify(parsed);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  await page.locator('.tab-bar .tab[data-route="settings"]').click();
+  await page.waitForTimeout(600);
+  // Advanced lives inside the Preferences disclosure; open everything.
+  await page.evaluate(() => document.querySelectorAll('#page-settings details').forEach((d) => { d.open = true; }));
+  await page.waitForTimeout(400);
+
+  const selects = page.locator('.block-skin-select select');
+  const count = await selects.count();
+  // Every block the programme has, not a hard-coded three.
+  const blocks = await page.evaluate(() => new Set((window.RW.PROGRAMME.blocks || []).map((b) => b.block)).size);
+  expect(count, 'one select per real block, deload included').toBe(blocks);
+
+  await selects.nth(1).selectOption('rukham');
+  await page.waitForTimeout(500);
+  const after = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => /\.settings\./.test(k) && /raed/i.test(k));
+    return JSON.parse(localStorage[key]);
+  });
+  expect(after.block_skin_suggestions['2']).toBe('rukham');
+  expect(after.block_skin_rejections['2'], 'a new choice is not still vetoed').toBeFalsy();
+});

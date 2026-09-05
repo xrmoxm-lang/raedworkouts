@@ -7097,6 +7097,17 @@ function renderSettings() {
         settings.block_skin_suggestions = { ...(settings.block_skin_suggestions || {}) };
         if (event.target.value) settings.block_skin_suggestions[block] = event.target.value;
         else delete settings.block_skin_suggestions[block];
+        // Choosing again clears the veto.
+        //
+        // Declining a proposal writes block_skin_rejections[block] = true, and
+        // the domain refuses that block forever after. Changing the mapping
+        // wrote only the suggestion — so the select would sit there displaying a
+        // skin the app had already decided never to offer him again. A rejection
+        // is «not that one», not «never ask about this block».
+        if (settings.block_skin_rejections?.[block]) {
+          settings.block_skin_rejections = { ...settings.block_skin_rejections };
+          delete settings.block_skin_rejections[block];
+        }
         saveLocal();
       },
     },
@@ -7105,9 +7116,15 @@ function renderSettings() {
     select.value = settings.block_skin_suggestions?.[block] || '';
     return h('label', { class: 'block-skin-select' }, tf('block_number', { n: block }), select);
   };
+  // Every block the programme actually has, read from the programme rather than
+  // hard-coded. It listed [1, 2, 3] while the mesocycle gained a fourth block —
+  // the deload — so the one week whose whole point is that it feels different
+  // was the one week he could not give a skin to.
+  const configurableBlocks = [...new Set(((state.programme_overrides || RW.PROGRAMME).blocks || [])
+    .map((entry) => entry.block).filter(Number.isFinite))].sort((a, b) => a - b);
   adv.appendChild(h('div', { class: 'block-skin-config' },
     h('div', { class: 'tiny muted' }, 'Suggestion mapping — intentionally unset by default.'),
-    [1, 2, 3].map(suggestionOptions),
+    (configurableBlocks.length ? configurableBlocks : [1, 2, 3]).map(suggestionOptions),
   ));
 
 

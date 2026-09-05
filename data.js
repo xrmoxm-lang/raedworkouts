@@ -1069,7 +1069,12 @@ const ATHLETE = {
   name: 'Raed',
   goal: 'Body recomposition — muscle gain + fat loss',
   experience: 'Detrained lifter returning after a 2-year layoff',
-  schedule: 'Tuesday + Saturday AM',
+  // Carried over from v15 unchanged, where it matched a selectable two-day
+  // full-body programme. v16 runs Nippard's 4-day Upper/Lower and the rotation
+  // is driven by completed history, never by weekday — getTodayPlannedSession()
+  // has no weekday lookup at all. Nothing reads this field today; correcting it
+  // so a future reader is not handed a schedule the app has never followed.
+  schedule: '4 days/week Upper/Lower — no fixed weekdays',
   session_cap_min: 80,
   bodyweight_kg: 82,
   protein_target_g: '130–160',
