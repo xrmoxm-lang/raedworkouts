@@ -2288,3 +2288,59 @@ body.session-active #page-home > .home-context { display: none; }
    sequence carries the weight — it is one word per set, in set order. */
 .reps-goal.effort-line { margin-top: 4px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .reps-goal.effort-line .effort-line-label { color: var(--text-muted); font-weight: 700; }
+
+/* ===== Coach, second pass ================================
+   He asked for the whole page changed. The first pass made the ask box the
+   subject, which was right for an EMPTY screen and wrong the moment there was
+   an answer: 250px of icon, title and promise sat above the thing he came for,
+   every time. */
+
+/* Answered: the field stays, the invitation goes. Losing the input entirely was
+   the first attempt and it cost him one-tap follow-ups. */
+.coach-ask.answered {
+  padding: 10px; margin-bottom: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.coach-asked {
+  display: flex; align-items: center; gap: 9px;
+  margin-bottom: 12px; padding: 9px 12px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.coach-asked-mark { display: inline-flex; color: var(--text-muted); flex: 0 0 auto; }
+.coach-asked-q {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.coach-asked .btn.tiny { flex: 0 0 auto; }
+
+/* The answer IS the screen. It was a plain white card indistinguishable from
+   the two passage cards under it — the same "everything at one elevation"
+   problem Home had. */
+.coach-answer {
+  background:
+    radial-gradient(130% 100% at 96% 0%, color-mix(in srgb, var(--accent-soft) 50%, transparent), transparent 60%),
+    var(--bg-card);
+  box-shadow: var(--shadow-md);
+  border-inline-start: 3px solid var(--accent);
+}
+.coach-answer .coach-answer-text { font-size: 16px; line-height: 1.75; }
+.coach-answer-label {
+  display: inline-flex; align-items: center; gap: 5px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+/* A passage is evidence, so it steps down from the answer rather than matching
+   it. Two full-width text links per card, four on a two-source answer, was the
+   noisiest thing on the page. */
+.coach-passage { box-shadow: none; background: var(--bg-elev); }
+.coach-passage .coach-source { flex-wrap: wrap; gap: 4px 8px; }
+.coach-passage .coach-tag {
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.05em;
+  padding: 2px 6px; border-radius: 999px;
+  background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border);
+}
+.coach-passage .coach-actions { gap: 14px; }
+.coach-passage .coach-actions button { font-size: 11.5px; }

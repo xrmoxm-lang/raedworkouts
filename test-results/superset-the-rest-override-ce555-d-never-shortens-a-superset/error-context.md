@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: superset.spec.mjs >> the alternation stops once the partner owes nothing
-- Location: tests/superset.spec.mjs:113:1
+- Name: superset.spec.mjs >> the rest override is off by default, and never shortens a superset
+- Location: tests/superset.spec.mjs:243:1
 
 # Error details
 

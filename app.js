@@ -4258,12 +4258,25 @@ function renderCoach() {
     ));
   }
 
-  // The ask box is the subject of this screen, so it is built like one: a single
-  // composed block with the icon, the promise and the field, instead of a
-  // "compact card" identical to the two beneath it. Three stacked cards of the
-  // same weight is what made the page read as unfinished.
-  root.appendChild(h('section', { class: 'coach-ask', 'data-coach-ask': 'true' },
-    h('div', { class: 'coach-ask-head' },
+  // The ask box is the subject of this screen ONLY while the screen is empty.
+  //
+  // It was built as the hero and then stayed the hero after answering — 250px of
+  // icon, title and promise sitting above the thing he actually came for, on
+  // every single answer. «أبغى أغيّر الصفحة حقة المدرب كاملة.» Once there is an
+  // answer the question is context, not an invitation: it collapses to one line
+  // carrying what he asked, with a tap to ask something else.
+  // What collapses is the CHROME, never the field.
+  //
+  // The first version of this replaced the whole box with a pill showing his
+  // question, which cost him the input: asking a follow-up became tap «سؤال
+  // جديد», then type. He asks follow-ups. Two coach tests caught it by failing
+  // to find [data-coach-input] — the right failure for the right reason.
+  //
+  // So the icon, the title and the promise are what go. They are an invitation,
+  // and an invitation is only worth 250px while the screen is empty.
+  const answered = coachState.status !== 'idle';
+  root.appendChild(h('section', { class: 'coach-ask' + (answered ? ' answered' : ''), 'data-coach-ask': 'true' },
+    answered ? null : h('div', { class: 'coach-ask-head' },
       h('span', { class: 'coach-ask-mark' }, icon('coach', 22)),
       h('div', {},
         h('div', { class: 'coach-ask-title' }, t('coach_ask_title')),
@@ -4368,6 +4381,33 @@ function coachPassageCard(passage, index, cited) {
   const arabic = passage.text_ar;
   const showEnglish = coachEnglish.has(index) || !arabic;
   const open = coachOpen.has(index);
+  // The fade only belongs on text that is actually cut off.
+  //
+  // `clipped` was applied whenever the card was collapsed, regardless of length,
+  // so a two-line passage got a mask over its last 35% and a finished sentence
+  // read as truncated — while «اقرأ المقطع كاملاً» sat under it offering to
+  // reveal nothing. CSS cannot ask "did this overflow", so it is measured after
+  // layout and the class is added only if it did.
+  const textNode = h('p', {
+    class: 'coach-text' + (showEnglish ? ' ltr-run' : ''),
+    ...(showEnglish ? { dir: 'ltr' } : {}),
+  }, showEnglish ? passage.text : arabic);
+  if (!open) {
+    requestAnimationFrame(() => {
+      if (!textNode.isConnected) return;
+      // The max-height the .clipped rule imposes, checked against the real
+      // content height before committing to it.
+      const limit = parseFloat(getComputedStyle(textNode).fontSize) * 8.5;
+      if (textNode.scrollHeight > limit + 2) {
+        textNode.classList.add('clipped');
+      } else {
+        // Nothing is hidden, so «اقرأ المقطع كاملاً» would reveal nothing.
+        textNode.dataset.coachFits = 'true';
+        expandBtn.hidden = true;
+      }
+    });
+  }
+
   const card = h('article', {
     class: 'card compact coach-passage' + (cited ? ' cited' : ''),
     'data-coach-passage': 'true',
@@ -4385,15 +4425,12 @@ function coachPassageCard(passage, index, cited) {
         ? h('span', { class: 'coach-tag' }, t('coach_translated'))
         : null,
     ),
-    h('p', {
-      class: 'coach-text' + (showEnglish ? ' ltr-run' : '') + (open ? '' : ' clipped'),
-      ...(showEnglish ? { dir: 'ltr' } : {}),
-    }, showEnglish ? passage.text : arabic),
+    textNode,
   );
   // Two small actions on one row. Both are about reading the evidence, so they
   // belong together rather than stacked.
   const actions = h('div', { class: 'coach-actions' });
-  actions.appendChild(h('button', {
+  const expandBtn = h('button', {
     class: 'btn tiny ghost coach-more-text',
     'data-coach-expand': String(index),
     onClick: () => {
@@ -4401,7 +4438,8 @@ function coachPassageCard(passage, index, cited) {
       else coachOpen.add(index);
       renderCoach();
     },
-  }, t(open ? 'coach_read_less' : 'coach_read_full')));
+  }, t(open ? 'coach_read_less' : 'coach_read_full'));
+  actions.appendChild(expandBtn);
   if (arabic) {
     actions.appendChild(h('button', {
       class: 'btn tiny ghost coach-lang',
