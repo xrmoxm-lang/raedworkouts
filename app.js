@@ -849,6 +849,7 @@ const defaultSettings = () => ({
   weight_unit: 'kg',           // kg | lb
   rest_seconds: 120,
   rest_override: false,        // opt-in: use rest_seconds instead of the programme's per-exercise rest
+  tap_log: false,              // opt-in: record which controls he presses, locally, for a review with Claude
   superset_mode: 'auto',       // auto | manual | off — how A1/A2 pairs behave
   vibrate: true,
   notifications: true,         // browser notifications when rest ends (req permission)
@@ -1121,6 +1122,13 @@ function loadLocal() {
   coachOpen = new Set();
   restoreCoachAnswer();
   migrateVideoHiddenKeys();
+  // «Off» is enforced here, not only by the button that turns it off.
+  //
+  // The toggle deletes the log when he switches recording off, but the setting
+  // can also arrive off from somewhere else — a restored backup, a sync from his
+  // other device, an imported profile — and a record of his taps sitting on the
+  // phone while the switch reads Off is not what Off means.
+  if (settings.tap_log !== true && state[TAP_LOG_KEY]) delete state[TAP_LOG_KEY];
   // D6 replaces the selectable v15 programme variants. Stored values are
   // deliberately retired rather than interpreted as new programme choices.
   delete settings.programme_variant;
@@ -1774,6 +1782,51 @@ function progressRing(done, target, caption) {
     ),
     caption ? h('div', { class: 'ring-cap' }, caption) : null,
   );
+}
+
+// Interaction log — his idea, and a better one than describing a problem in
+// words: «وش رأيك تصير أنت تراقب الضغطات وأزراري ونجلس نسجل كم جلسة، وبعدين بعد
+// كل جلسة أقول لك ها وش رأيك».
+//
+// Deliberately narrow, because this records a person:
+//  - OFF by default, and only he can turn it on.
+//  - Never leaves the phone. No sync, no server, no automatic anything. It sits
+//    in localStorage until he taps export and hands it over himself.
+//  - Records WHAT was pressed and WHEN, never what he typed. A question to the
+//    coach, a weight, a device name — none of it is his interface, and none of
+//    it belongs in a log about buttons.
+//  - Capped, and it drops the oldest first. An unbounded log on a phone whose
+//    storage already has a headroom warning is a way to lose a workout.
+const TAP_LOG_KEY = 'tap_log';
+const TAP_LOG_MAX = 1200;
+function tapLogOn() { return settings.tap_log === true; }
+function recordTap(target) {
+  if (!tapLogOn() || !target) return;
+  try {
+    // The most specific hook that names the CONTROL, in the order that says the
+    // most about intent. data-* attributes are the app's own vocabulary, which
+    // is why they beat class names for reading a session back.
+    const el = target.closest('button, a, input, select, [role="button"]');
+    if (!el) return;
+    const named = el.closest('[data-runner-weight-input],[data-runner-reps-input]') ? null : el;
+    const attr = named && [...named.attributes].find((a) => a.name.startsWith('data-') && a.name !== 'data-i18n');
+    const label = attr ? attr.name.replace(/^data-/, '') : (el.className || el.tagName).toString().split(' ')[0];
+    const log = state[TAP_LOG_KEY] = Array.isArray(state[TAP_LOG_KEY]) ? state[TAP_LOG_KEY] : [];
+    log.push({
+      t: new Date().toISOString(),
+      what: String(label).slice(0, 48),
+      where: (window.location.hash || '#home').replace('#', ''),
+      // Whether a workout was running tells him more about a tap than anything
+      // else on the screen.
+      live: Boolean(state.active_session),
+    });
+    if (log.length > TAP_LOG_MAX) log.splice(0, log.length - TAP_LOG_MAX);
+    // Rides the SAME debounce a weight edit uses. saveLocal() serialises the
+    // whole state twice, and a log entry is never worth that between him and the
+    // next set — scheduleSetEditPersist already coalesces at 400ms and every
+    // flush point (ticking a set, hiding the app, ending the session) writes it.
+    scheduleSetEditPersist();
+  } catch (_) { /* a log that throws is worse than no log */ }
 }
 
 function icon(name, size = 18) {
@@ -6978,6 +7031,33 @@ function renderSettings() {
     ));
   }
 
+  const taps = Array.isArray(state[TAP_LOG_KEY]) ? state[TAP_LOG_KEY] : [];
+  card.appendChild(h('div', { class: 'setting-row' },
+    h('div', { class: 'label' },
+      h('div', { class: 'name' }, t('tap_log')),
+      h('div', { class: 'desc' }, taps.length ? tf('tap_log_count', { n: taps.length }) : t('tap_log_desc')),
+    ),
+    h('div', { style: 'display:flex; gap:6px; align-items:center;' },
+      taps.length
+        ? h('button', {
+            class: 'btn tiny', 'data-tap-log-export': 'true',
+            onClick: () => exportTapLog(),
+          }, t('tap_log_export'))
+        : null,
+      h('button', {
+        class: 'btn tiny' + (tapLogOn() ? ' primary' : ''), 'data-tap-log': 'true',
+        onClick: () => {
+          settings.tap_log = !tapLogOn();
+          // Turning it off clears what was collected. Leaving a record of his
+          // taps sitting on the phone after he has switched recording off is
+          // not what "off" means.
+          if (!settings.tap_log) delete state[TAP_LOG_KEY];
+          saveLocal(); renderSettings();
+        },
+      }, tapLogOn() ? 'On' : 'Off'),
+    ),
+  ));
+
   card.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
       h('div', { class: 'name' }, t('rest_override')),
@@ -7449,9 +7529,38 @@ function buildHelpCard() {
 }
 
 // ---- Boot ---------------------------------------------------
+// Hands the log over as a file HE shares, deliberately: no upload, no endpoint,
+// nothing automatic. A Blob download rather than a copy-to-clipboard because a
+// thousand lines do not survive a paste on a phone.
+function exportTapLog() {
+  const rows = Array.isArray(state[TAP_LOG_KEY]) ? state[TAP_LOG_KEY] : [];
+  if (!rows.length) return;
+  const payload = {
+    exported_at: new Date().toISOString(),
+    // The service worker's version is what identifies the build he was running
+    // when he recorded this, and it is the only place that number lives.
+    app_version: (navigator.serviceWorker?.controller?.scriptURL || '').split('?v=').pop() || '',
+    // No question text, no weights, no device names — the log is about controls.
+    taps: rows,
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  const a = h('a', { href: url, download: `raedworkouts-taps-${todayISO()}.json` });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoked on a turn of the event loop; revoking immediately can cancel the
+  // download on some builds of Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 function init() {
   loadLocal();
   applyLang();
+
+  // One capture-phase listener for the whole app rather than a hook on every
+  // control: it cannot be forgotten on a new button, and it costs nothing while
+  // the setting is off, because recordTap returns on its first line.
+  document.addEventListener('click', (event) => recordTap(event.target), true);
 
   // ?user=abdullah — profile picker preselect only; it only selects a profile.
   const urlUser = new URLSearchParams(window.location.search).get('user');

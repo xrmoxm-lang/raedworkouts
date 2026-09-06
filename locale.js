@@ -113,6 +113,12 @@ export const LOCALE = Object.freeze({
   order_position: pair('Now {n} of {total}. Kept for next time.', 'الآن {n} من {total}. محفوظ للمرات الجاية.'),
   order_reset: pair('Reset to the programme order', 'رجّع ترتيب البرنامج'),
   order_reset_done: pair('Back to the programme order from the next session.', 'يرجع ترتيب البرنامج من الجلسة الجاية.'),
+  tap_log: pair('Record my taps', 'سجّل ضغطاتي'),
+  tap_log_desc: pair(
+    'For a review session. Records which control you pressed and when — never what you typed. Stays on this phone until you export it. Turning it off erases it.',
+    'لجلسة مراجعة. يسجّل أي زر ضغطت ومتى — ما يسجّل اللي تكتبه أبداً. يبقى في جوالك حتى تصدّره بنفسك. وإذا طفيته ينمسح.'),
+  tap_log_count: pair('{n} taps recorded. Export and send them over.', '{n} ضغطة مسجّلة. صدّرها وأرسلها.'),
+  tap_log_export: pair('Export', 'صدّر'),
   clips_section: pair('Clips', 'المقاطع'),
   show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
   clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),

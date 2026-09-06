@@ -455,3 +455,87 @@ test('a saved order survives into a NEW session', async ({ page }) => {
   });
   expect(built, 'a NEW session must open in his order').toEqual(ids);
 });
+
+// ---- the interaction log ----------------------------------------------------
+//
+// His idea: «وش رأيك تصير أنت تراقب الضغطات وأزراري ونجلس نسجل كم جلسة، وبعدين
+// بعد كل جلسة أقول لك ها وش رأيك». Better than describing a problem in words —
+// but it records a person, so the constraints matter more than the feature.
+async function openApp(page) {
+  await page.route('https://raed-hp.tail53bd35.ts.net/**', (r) => r.abort());
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
+  await page.goto(APP, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const t = [...document.querySelectorAll('.profile-tile')].find((e) => /Raed/.test(e.textContent));
+    if (t) t.click();
+  });
+  await page.waitForTimeout(900);
+}
+const tapLog = (page) => page.evaluate(() => {
+  const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
+  return JSON.parse(localStorage[key]).tap_log || [];
+});
+const setTapLog = async (page, on) => {
+  await page.evaluate((v) => {
+    const k = Object.keys(localStorage).find((x) => /\.settings\./.test(x) && /raed/i.test(x));
+    const cfg = JSON.parse(localStorage[k]); cfg.tap_log = v;
+    localStorage[k] = JSON.stringify(cfg);
+  }, on);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+};
+
+test('nothing is recorded until he turns it on', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.tab-bar .tab[data-route="history"]').click();
+  await page.waitForTimeout(400);
+  await page.locator('.tab-bar .tab[data-route="home"]').click();
+  await page.waitForTimeout(600);
+  expect(await tapLog(page), 'off must mean off').toHaveLength(0);
+});
+
+test('once on, it records which control was pressed — and never what he typed', async ({ page }) => {
+  await openApp(page);
+  await setTapLog(page, true);
+
+  await page.locator('.tab-bar .tab[data-route="history"]').click();
+  await page.waitForTimeout(500);
+  await page.locator('.tab-bar .tab[data-route="home"]').click();
+  await page.waitForTimeout(800);
+
+  const log = await tapLog(page);
+  expect(log.length, 'taps are recorded').toBeGreaterThan(0);
+  for (const entry of log) {
+    expect(Object.keys(entry).sort()).toEqual(['live', 't', 'what', 'where']);
+    // The whole privacy contract in one assertion: the log is about controls.
+    expect(JSON.stringify(entry)).not.toMatch(/value|question|weight|reps|kg/i);
+  }
+
+  // Turning it off erases what was collected — that is what "off" has to mean.
+  // Asserted through the SETTING rather than the button on purpose: the setting
+  // can also arrive off from a restore, a sync or an import, and the log must
+  // not survive any of those either.
+  await setTapLog(page, false);
+  await page.locator('.tab-bar .tab[data-route="history"]').click();
+  await page.waitForTimeout(600);
+  expect(await tapLog(page), 'off erases and stops').toHaveLength(0);
+});
+
+test('typing into a weight box is not logged as a control', async ({ page }) => {
+  await openApp(page);
+  await setTapLog(page, true);
+  await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
+  await page.waitForTimeout(900);
+  await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
+  await page.waitForTimeout(900);
+  const input = page.locator('[data-runner-weight-input]').first();
+  await input.click();
+  await input.fill('42.5');
+  await page.waitForTimeout(700);
+
+  const log = await tapLog(page);
+  const dump = JSON.stringify(log);
+  expect(dump, 'a load he entered is not interface telemetry').not.toContain('42.5');
+  expect(dump).not.toContain('runner-weight-input');
+});

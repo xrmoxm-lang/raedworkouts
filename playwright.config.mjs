@@ -21,6 +21,18 @@ export default defineConfig({
   retries: 1,
   // Half the cores, leaving room for the dev server and everything else on the
   // machine. Unbounded parallelism is what caused the timeouts.
+  //
+  // Measured again on 2026-09-06, with the suite now at 126 tests rather than
+  // the ~90 it had when this was written: 4 workers gave 3 flaky on a settled
+  // machine, 3 workers gave 4 flaky and took a minute longer. So parallelism is
+  // NOT the lever any more — the remaining flakiness is per-test, from fixed
+  // waitForTimeout sleeps that miss under any load, and it varies run to run.
+  //
+  // `npm run verify` exits 0 because `retries: 1` absorbs it. That is a real
+  // mitigation, not a fix: the honest reading of a green run today is «every
+  // test passed, some on the second attempt». Converting those sleeps to proper
+  // waits is its own piece of work and is written down rather than pretended
+  // away.
   workers: 4,
   fullyParallel: false,
   reporter: [['line']],
