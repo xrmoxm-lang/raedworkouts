@@ -307,3 +307,53 @@ test('a hidden clip is remembered by which clip it is, not by where it sat', asy
   assert.match(src, /function migrateVideoHiddenKeys\(\)/);
   assert.match(src, /migrateVideoHiddenKeys\(\);/);
 });
+
+// Added 2026-09-06. The coach access key shipped inside app.js — every browser
+// that opened the site received a credential for a service that spends real
+// money per question. A $25/month server ceiling bounds the damage; not shipping
+// the secret is the actual fix. api/coach.js holds it now.
+//
+// Asserted at source level because this is the kind of thing a well-meaning
+// "restore the direct call, the proxy is slow" change puts straight back.
+test('no service credential is shipped to the browser', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+
+  // The literal that used to be here, and any sibling of it. Long opaque
+  // base64-ish runs in an assignment are what a key looks like.
+  //
+  // SYNC_KEY is exempt, and the exemption is the finding rather than a
+  // convenience. It is a 48-character credential in public JavaScript that
+  // guards his training HISTORY — a bigger prize than the books the coach key
+  // guarded. Raed accepted that trade when sync was built and it is recorded in
+  // the project notes, so it is not being changed quietly at the end of a long
+  // session: rerouting sync means putting a proxy on the path that SAVES HIS
+  // SETS, and two silent data-loss paths were found on that path this week.
+  // It needs its own pass, with its own measurements. Listed for him.
+  const ACCEPTED = new Set(['SYNC_KEY']);
+  // Match on the VALUE's shape, not on the name containing "KEY". The first cut
+  // flagged SYNC_OVERRIDE_KEY, which is the NAME of a localStorage entry
+  // ('raedworkouts_sync_override') and not a secret at all. A credential here is
+  // a long unbroken alphanumeric run; an identifier has separators and no
+  // entropy.
+  const looksLikeSecret = (value) => /^[A-Za-z0-9]{24,}$/.test(value) && /\d/.test(value);
+  const assignments = [...app.matchAll(/const\s+(\w+)\s*=\s*'([^']*)'/g)];
+  for (const [, name, value] of assignments) {
+    if (ACCEPTED.has(name)) continue;
+    assert.ok(!looksLikeSecret(value),
+      `${name} looks like a credential (${value.length} chars) and app.js is public`);
+  }
+  // The exemption must stay honest: if SYNC_KEY ever leaves app.js, delete it
+  // from ACCEPTED rather than leaving a licence behind for the next one.
+  assert.match(app, /const SYNC_KEY = '/, 'SYNC_KEY moved — drop it from ACCEPTED');
+
+  // And the coach is reached through the proxy, not the funnel directly.
+  assert.match(app, /const COACH_URL = '\/api\/coach'/);
+  assert.doesNotMatch(app, /fetch\([^)]*ts\.net\/coach/);
+  assert.doesNotMatch(app, /'X-Coach-Key'/);
+
+  // The proxy exists, forwards only the routes the app uses, and takes its key
+  // from the environment rather than carrying one.
+  const proxy = await readFile(new URL('../api/coach.js', import.meta.url), 'utf8');
+  assert.match(proxy, /process\.env\.COACH_KEY/);
+  assert.doesNotMatch(proxy, /oQq1nm/);
+});

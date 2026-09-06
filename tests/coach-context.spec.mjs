@@ -27,10 +27,14 @@ test('the coach is told which exercise he is on, and the switch turns it off', a
     const real = window.fetch;
     window.fetch = function (url, opts) {
       try {
-        // Matched on the path, not the host or port. This spy was pinned to
-        // "8444/search" and kept passing after the coach moved to /coach on 443
-        // and then to /answer — it was spying on a URL nothing called any more.
-        if (/\/coach\/(?:search|answer)$/.test(String(url)) && opts?.body) {
+        // Matched on "a coach call that carries a body", not on a path shape.
+        //
+        // Third time this spy has gone blind to a move: it was pinned to
+        // "8444/search", then to "/coach/answer", and the access key moving off
+        // the client turned the URL into "/api/coach?route=answer". Each time it
+        // kept PASSING while watching a URL nothing called. A spy that cannot
+        // see the call reports zero calls, which reads as a broken feature.
+        if (/coach/.test(String(url)) && opts?.body) {
           window.__coachCalls.push(JSON.parse(opts.body));
         }
       } catch (_) { /* a body we cannot parse is not this spy's problem */ }

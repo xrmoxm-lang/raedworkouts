@@ -6,11 +6,18 @@ const appUrl = process.env.APP_URL || 'http://localhost:8877';
 // switched on. It rides the 443 funnel on /coach now, and the path is /answer:
 // the server runs the same retrieval and then writes the answer from what it
 // found, so the OpenAI key never reaches this page.
-const COACH = 'https://raed-hp.tail53bd35.ts.net/coach/answer';
+// Same-origin since the access key moved off the client into api/coach.js on
+// Vercel. The app no longer knows the upstream URL or the key at all, so the
+// thing to intercept is the proxy route it actually calls.
+const COACH = 'http://localhost:8877/api/coach?route=answer';
 
 const answer = (text, used) => ({ status: 'ok', answered: true, text, used, model: 'gpt-5.6-luna' });
 const refusal = (text) => ({ status: 'ok', answered: false, text, used: [] });
 
+// domcontentloaded, not networkidle: this app registers a service worker whose
+// own requests keep the network busy, so under parallel workers networkidle
+// sometimes never settles and a test that passes alone every time fails the full
+// run on a 20s goto timeout. The waits below are explicit anyway.
 async function openCoach(page) {
   // The sync host, blocked host-wide.
   //
@@ -27,7 +34,7 @@ async function openCoach(page) {
   // matches the most recently added route first, so the specific COACH route
   // registered in the test body still wins over this catch-all.
   await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
-  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
@@ -51,7 +58,7 @@ async function openCoach(page) {
       } catch (_) { /* a value we cannot parse is not a session */ }
     }
   });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
@@ -524,17 +531,27 @@ test('a refused key reads as a refusal, not as a dead server or an empty answer'
   console.log('COACH_UNAUTHORIZED_DISTINGUISHED');
 });
 
-test('every request carries the access key', async ({ page }) => {
-  let sentKey = null;
+// This test used to assert the OPPOSITE — that every request carried the access
+// key — because the key lived in app.js and the coach was called directly. It
+// does not any more: api/coach.js on Vercel holds it and the browser never sees
+// it. The invariant inverted, so the test did too, and what it protects is the
+// more important half.
+test('the browser never sends the access key, because it no longer has one', async ({ page }) => {
+  let headers = null;
+  let target = null;
   await page.route(COACH, (route) => {
-    sentKey = route.request().headers()['x-coach-key'] || null;
+    headers = route.request().headers();
+    target = route.request().url();
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'no_match', message: 'no match', results: [] }) });
   });
   await openCoach(page);
   await ask(page);
-  // Without it the public endpoint answers 401 and the coach is simply dead.
-  expect(sentKey).toBeTruthy();
-  expect(sentKey.length).toBeGreaterThan(20);
+
+  expect(headers, 'the app must still be calling the coach').toBeTruthy();
+  expect(headers['x-coach-key'], 'a key in the browser is a key anyone can read').toBeFalsy();
+  // Same-origin, so the secret stays on the server that holds it.
+  expect(target).toContain('/api/coach');
+  expect(target, 'the client must not know the upstream host either').not.toContain('ts.net');
 });
 
 // The sequence he actually performs in the gym: ask, go log the set the answer
@@ -564,7 +581,7 @@ test('the last answer survives leaving the app, and says it is the last one', as
 
   // Leave and come back the hard way — a full reload, which is what closing the
   // PWA and reopening it does.
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
@@ -597,7 +614,7 @@ test('a failed answer is not the thing that comes back tomorrow', async ({ page 
   await ask(page, 'متى أسوي ديلود');
   await expect(page.locator('[data-coach-error]')).toBeVisible();
 
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));

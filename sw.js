@@ -10,7 +10,7 @@
  * index.html. The new SW installs in the background, calls skipWaiting(), and
  * the page (see app.js) reloads itself once to apply — no manual force-refresh.
  */
-const VERSION = 'v104';
+const VERSION = 'v105';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is
@@ -89,6 +89,16 @@ function isCoreAsset(url) {
 function isSyncHost(url) {
   return url.hostname.endsWith('.ts.net') || url.hostname === 'raed-hp.tail53bd35.ts.net';
 }
+// The coach proxy. SAME-ORIGIN since the access key moved off the client, which
+// means it stopped being caught by the cross-origin network-only rule at the
+// bottom and became eligible for the shell logic instead. A cached answer would
+// be wrong; worse, an /api failure could have been served the app's HTML, and
+// `res.json()` on a page of markup throws — which the coach reports as «the
+// library is unreachable». That exact mistake is already documented one file
+// over, in askCoach's status-before-body note.
+function isApiRequest(url) {
+  return url.origin === location.origin && url.pathname.startsWith('/api/');
+}
 function isYoutubeThumb(url) {
   return url.hostname === 'img.youtube.com';
 }
@@ -113,8 +123,9 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // 1) Sync API → network-only. Offline callers should receive a real failure.
-  if (isSyncHost(url)) {
+  // 1) Sync API and the coach proxy → network-only. Offline callers should
+  //    receive a real failure, never a cached or substituted body.
+  if (isSyncHost(url) || isApiRequest(url)) {
     e.respondWith(fetch(req));
     return;
   }

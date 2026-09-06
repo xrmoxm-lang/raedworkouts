@@ -3877,14 +3877,26 @@ function showSessionPreview(session) {
 // It now rides the 443 funnel on a path, beside the P180 dashboard already
 // there. Verified from the public ingress IP with Tailscale DNS bypassed:
 // /coach/health returns 200 and /coach/search returns real passages.
-const COACH_URL = 'https://raed-hp.tail53bd35.ts.net/coach';
-// The endpoint is reachable from the open internet now, not only the tailnet,
-// because Raed asked for the Tailscale requirement gone. That makes a key
-// mandatory: without one anyone who found the URL could read the text of books
-// he paid for. A key shipped in the app's JS is extractable by someone who
-// looks — that is the stated trade — but it stops crawlers and scanners dead
-// and can be rotated in one place on the server.
-const COACH_KEY = 'oQq1nmXFMvfZ1M6A2gyiGWQeLB9h6xCW1e5DQW5ARWk';
+// Same-origin, and the key is NOT here any more.
+//
+// It used to be: `const COACH_KEY = '…'` in this file, shipped to every browser
+// that opened the site, on a service that spends real money per question. The
+// comment that stood here called it a stated trade. It stopped being one when
+// /answer became metered — anyone who viewed source could spend his credit.
+//
+// api/coach.js on Vercel holds the key now and forwards to the same funnel.
+// A browser app cannot keep a secret: it either carries a credential the user
+// can read, or it goes through a server. This is the server.
+//
+// Measured before adopting it, because he asked for exactly this not to slow
+// him down: the extra leg costs ~500ms, against a model that takes 2–8s to
+// write an answer. Nothing joins a tailnet and nothing about starting a workout
+// changes — his two conditions, «ما يكون تليسكيل» and «ما يعقد علي الـprocess».
+//
+// There is deliberately NO fallback to the direct URL. A fallback would mean
+// shipping the key again for the case where the proxy is down.
+const COACH_URL = '/api/coach';
+const coachRoute = (name) => `${COACH_URL}?route=${name}`;
 const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
 let coachState = { status: 'idle', question: '', results: [], answer: null, error: '' };
 
@@ -4027,9 +4039,9 @@ async function askCoach(question, context = null) {
     // /answer, not /search: the server runs the identical retrieval and then
     // writes the answer from what it found. The OpenAI key never leaves the
     // server, and when retrieval finds nothing the model is never called.
-    const res = await fetch(COACH_URL + '/answer', {
+    const res = await fetch(coachRoute('answer'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Coach-Key': COACH_KEY },
+      headers: { 'Content-Type': 'application/json' },
       // 0.35, down from 0.5. The floor used to be the answerability guard, and
       // measuring it on 26 questions showed it cannot be: real questions his
       // books answer score 0.396 (هل الإحماء ضروري؟), 0.412 (وش هو RIR؟) and
@@ -6757,7 +6769,7 @@ function renderCoachSettingsCard() {
   // something nobody is looking at.
   card.load = () => {
     if (coachUsage && Date.now() - coachUsageAt < 60000) { paint(coachUsage); return; }
-    fetch(COACH_URL + '/usage', { headers: { 'X-Coach-Key': COACH_KEY }, signal: AbortSignal.timeout(15000) })
+    fetch(coachRoute('usage'), { signal: AbortSignal.timeout(15000) })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((usage) => { coachUsage = usage; coachUsageAt = Date.now(); paint(usage); })
       .catch(() => paint(null));
@@ -6770,9 +6782,9 @@ function renderCoachSettingsCard() {
 // it about which model is answering.
 async function setCoachModel(model) {
   try {
-    const res = await fetch(COACH_URL + '/model', {
+    const res = await fetch(coachRoute('model'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Coach-Key': COACH_KEY },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
       signal: AbortSignal.timeout(15000),
     });
