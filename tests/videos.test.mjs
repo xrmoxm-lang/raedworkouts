@@ -3,7 +3,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
-const APP_SOURCE = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+import { appSource, appSourceFiles } from '../scripts/app-source.mjs';
+
+// app.js + core/**/*.js + ui/**/*.js. The client is no longer one file, and a
+// gate that still read app.js alone would be checking the boot file only.
+const APP_SOURCE = await appSource();
 
 async function legacyData() {
   const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
@@ -101,7 +105,7 @@ test('clips confirmed removed from YouTube are retired, not silently left in pla
 // rendered the literal English word "saved" on an Arabic-only screen.
 test('locale.js defines each key exactly once, and defines everything app.js asks for', async () => {
   const src = await readFile(new URL('../locale.js', import.meta.url), 'utf8');
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const app = await appSource();
   const { LOCALE } = await import('../locale.js');
 
   const seen = new Map();
@@ -141,8 +145,10 @@ const KNOWN_DEAD_FUNCTIONS = new Set([
 ]);
 
 test('no NEW function is left defined but never called', async () => {
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
-  const defined = [...app.matchAll(/^(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)].map((m) => m[1]);
+  const app = await appSource();
+  // `export function` counts too, or the split would have made this vacuous for
+  // every function a screen imports.
+  const defined = [...app.matchAll(/^(?:export )?(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)].map((m) => m[1]);
   const dead = defined.filter((name) => {
     const uses = app.match(new RegExp(`\\b${name}\\b`, 'g')) || [];
     return uses.length <= 1; // its own definition and nothing else
@@ -286,7 +292,7 @@ test('no native confirm/prompt/alert survives anywhere reachable', () => {
 // (wMksQXD01K0), retire the first, and 'mohannad_1' names o0Ud3RU59hw instead.
 // A clip he deliberately hid comes back, a different one vanishes, silently.
 test('a hidden clip is remembered by which clip it is, not by where it sat', async () => {
-  const src = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const src = await appSource();
 
   // The stored key is derived from the clip's own identity.
   assert.match(src, /const videoIdentity = \(video\) =>[^\n]*video\.id[^\n]*'yt:'/,
@@ -316,7 +322,7 @@ test('a hidden clip is remembered by which clip it is, not by where it sat', asy
 // Asserted at source level because this is the kind of thing a well-meaning
 // "restore the direct call, the proxy is slow" change puts straight back.
 test('no service credential is shipped to the browser', async () => {
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const app = await appSource();
 
   // The literal that used to be here, and any sibling of it. Long opaque
   // base64-ish runs in an assignment are what a key looks like.

@@ -198,7 +198,7 @@ test('number inputs force Latin digits so no keyboard switch is needed', async (
   await expect(weight).toHaveAttribute('inputmode', 'decimal');
 });
 
-// app.js is an ES module, so `state` and swapExercise() are not on window.
+// The client is a set of ES modules, so `state` and swapExercise() are not on window.
 // These drive the real UI instead, which is the better test: it exercises the
 // swap button, the alternatives list and the scope modal exactly as Raed does.
 async function openSwap(page) {
@@ -870,7 +870,9 @@ test('the PR-summary setting actually controls the PR summary', async ({ page })
   });
   await page.waitForTimeout(800);
   const readsSetting = await page.evaluate(async () => {
-    const source = await (await fetch('./app.js')).text();
+    // renderSessionEnd moved to ui/end.js when the client was split; app.js is
+    // the boot file now and no longer carries a screen.
+    const source = await (await fetch('./ui/end.js')).text();
     // The setting must be READ somewhere that renders, not only written.
     return /settings\.show_pr_summary\s*!==\s*false/.test(source);
   });

@@ -36,6 +36,23 @@ export default defineConfig({
   workers: 4,
   fullyParallel: false,
   reporter: [['line']],
+  // Nothing used to start a server, so every browser spec failed on connection
+  // refused. The specs hard-code two origins — localhost:8877 and 127.0.0.1:8899
+  // — so both are served. reuseExistingServer keeps a hand-started one usable.
+  webServer: [
+    {
+      command: 'python3 -m http.server 8877 --bind 127.0.0.1',
+      port: 8877,
+      reuseExistingServer: true,
+      timeout: 15000,
+    },
+    {
+      command: 'python3 -m http.server 8899 --bind 127.0.0.1',
+      port: 8899,
+      reuseExistingServer: true,
+      timeout: 15000,
+    },
+  ],
   use: {
     // His actual phone. Individual specs still override where they need to.
     viewport: { width: 390, height: 844 },

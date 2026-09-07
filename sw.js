@@ -6,11 +6,12 @@
  *   - Images + YouTube thumbnails → cache-first (rarely change).
  *   - Sync API → network-only. API failures must reject; never return HTML.
  *
- * IMPORTANT: bump VERSION on every deploy that changes app.js / styles.css /
- * index.html. The new SW installs in the background, calls skipWaiting(), and
- * the page (see app.js) reloads itself once to apply — no manual force-refresh.
+ * IMPORTANT: bump VERSION on every deploy that changes app.js, core/*, ui/*,
+ * styles.css or index.html. The new SW installs in the background, calls
+ * skipWaiting(), and the page (see app.js) reloads itself once to apply — no
+ * manual force-refresh.
  */
-const VERSION = 'v107';
+const VERSION = 'v108';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is
@@ -23,6 +24,28 @@ const SHELL = [
   './styles.css',
   './data.js',
   './app.js',
+  './core/coach.js',
+  './core/dom.js',
+  './core/engine.js',
+  './core/gym.js',
+  './core/i18n.js',
+  './core/rest.js',
+  './core/session.js',
+  './core/shell.js',
+  './core/store.js',
+  './core/sync.js',
+  './core/theme.js',
+  './core/videos.js',
+  './ui/coach.js',
+  './ui/end.js',
+  './ui/exercise-card.js',
+  './ui/history.js',
+  './ui/home.js',
+  './ui/kit.js',
+  './ui/library.js',
+  './ui/settings.js',
+  './ui/warmup.js',
+  './ui/welcome.js',
   './locale.js',
   './domain/skin-suggestions.mjs',
   './domain/substitutions.js',

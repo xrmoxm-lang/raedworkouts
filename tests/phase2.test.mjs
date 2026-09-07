@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import { loadCatalogue } from '../domain/catalogue.js';
 import { initialiseProgressionState, progressExercise } from '../domain/progression.js';
 import { assessSubstitution } from '../domain/substitutions.js';
+import { appSource as readAppSource } from '../scripts/app-source.mjs';
 
 async function legacyData() {
   const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
@@ -15,7 +16,7 @@ async function legacyData() {
 }
 
 const rawData = await legacyData();
-const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+const appSource = await readAppSource();
 const styleSource = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const catalogue = loadCatalogue(rawData.EXERCISES);
 const legPress = catalogue.get('leg_press');

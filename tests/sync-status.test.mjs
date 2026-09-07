@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { text } from '../locale.js';
+import { appSource } from '../scripts/app-source.mjs';
 
 // Raed reported «فشلت المزامنة، تم نسخ محليًا» and the message could not tell
 // him why. The cause was that his server had become unreachable from outside
@@ -39,8 +39,8 @@ test('no two sync statuses read the same', () => {
     'two statuses are indistinguishable on screen: ' + values.join(' | '));
 });
 
-test('the sync status line holds no hardcoded English', () => {
-  const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+test('the sync status line holds no hardcoded English', async () => {
+  const source = await appSource();
 
   // Extract each call with balanced parentheses. A lazy [^)]* stops at the
   // first ')' — which lands inside t('…') — and then reads the locale key
@@ -68,8 +68,8 @@ test('the sync status line holds no hardcoded English', () => {
   }
 });
 
-test('sync failures are told apart by cause, not lumped together', () => {
-  const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+test('sync failures are told apart by cause, not lumped together', async () => {
+  const source = await appSource();
   const fn = source.slice(source.indexOf('function syncFailureReason'));
   const body = fn.slice(0, fn.indexOf('\n}'));
   for (const key of ['sync_pending_offline', 'sync_rejected', 'sync_server_error', 'sync_unreachable']) {
@@ -88,8 +88,8 @@ test('sync failures are told apart by cause, not lumped together', () => {
 // can never match an entry and always reaches Raed in English. Two of these
 // were live: the connection-failure toast, and the announcement when he reaches
 // a new block, which is a milestone he sees once a month at most.
-test('no toast is assembled before it can be localised', () => {
-  const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+test('no toast is assembled before it can be localised', async () => {
+  const source = await appSource();
   const offenders = [];
 
   for (const m of source.matchAll(/toast\(\s*(['"])((?:[^'"\\]|\\.)*)\1\s*\+/g)) {
@@ -103,7 +103,7 @@ test('no toast is assembled before it can be localised', () => {
 });
 
 test('every plain toast literal has an Arabic translation', async () => {
-  const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const source = await appSource();
   const missing = [];
   for (const m of source.matchAll(/toast\(\s*'((?:[^'\\]|\\.)+)'/g)) {
     const english = m[1].replace(/\\'/g, "'");
