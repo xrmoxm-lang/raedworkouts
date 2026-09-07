@@ -24,7 +24,7 @@ import { buildVideoTile } from '../ui/kit.js';
 // Was a native prompt(): English, unstyled, and suppressible by an installed PWA
 // shell. Missed by the earlier sweep because it interpolates the exercise name
 // instead of taking a quoted literal.
-export function editJNUrlPrompt(exerciseId) {
+function editJNUrlPrompt(exerciseId) {
   const ex = getAllExercises().find(e => e.id === exerciseId);
   if (!ex) return;
   const modal = $('#modal');
@@ -144,7 +144,7 @@ export function renderLibrary() {
 }
 
 // Per-exercise card builder, shared between Library renders
-export function renderLibExerciseCard(ex) {
+function renderLibExerciseCard(ex) {
     const bodyUrl = RW.bodyImg ? RW.bodyImg(ex.primary) : '';
     const card = h('div', { class: 'ex' });
     const head = h('div', { class: 'ex-head', onClick: () => card.classList.toggle('expanded') },
@@ -244,7 +244,7 @@ export function renderLibExerciseCard(ex) {
 }
 
 // ---- Add custom exercise modal -------------------------------
-export function openAddCustomExerciseModal() {
+function openAddCustomExerciseModal() {
   const m = $('#modal');
   m.innerHTML = '';
   // Form state captured locally

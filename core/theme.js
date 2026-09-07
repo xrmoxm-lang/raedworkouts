@@ -59,7 +59,7 @@ export function applyTheme() {
   // set-once preference, not something to spend header real estate on.
 }
 
-export function closeSkinSuggestion() {
+function closeSkinSuggestion() {
   const el = $('#toast');
   el.classList.remove('show', 'skin-suggestion');
 }

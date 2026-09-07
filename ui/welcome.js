@@ -19,7 +19,7 @@ import {
   welcomeSelectedProfile,
 } from '../core/sync.js';
 
-export function renderRegisterPanel(profile) {
+function renderRegisterPanel(profile) {
   const bw = h('input', { type: 'number', inputmode: 'decimal', step: '0.1', placeholder: 'Bodyweight kg (optional)', value: profile.bodyweight_kg ?? '' });
   const exp = h('select', {},
     ['beginner','returning','experienced'].map(v => h('option', { value: v, ...(profile.experience === v ? { selected: '' } : {}) },
@@ -53,7 +53,7 @@ export function renderRegisterPanel(profile) {
     }}, 'Create profile')
   );
 }
-export function renderSomeoneElsePanel() {
+function renderSomeoneElsePanel() {
   const name = h('input', { type: 'text', placeholder: 'Name' });
   const status = h('div', { class: 'tiny muted' }, 'Only Raed-approved names can register.');
   return h('div', { class: 'register-panel card' },

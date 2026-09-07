@@ -64,7 +64,7 @@ import { SKINS, activeSkin, applyTheme } from '../core/theme.js';
 import { PLATFORM_INFO, getAllExercises } from '../core/videos.js';
 import { openRestoreModal } from '../ui/history.js';
 
-export function renderCoachSettingsCard() {
+function renderCoachSettingsCard() {
   const card = h('div', { class: 'card', 'data-coach-settings': 'true' });
   const body = h('div', { 'data-coach-usage-body': 'true' },
     h('div', { class: 'tiny muted' }, t('coach_searching')));
@@ -652,7 +652,7 @@ export function renderSettings() {
 }
 
 
-export function buildHelpCard() {
+function buildHelpCard() {
   const prog = getActiveProgramme();
   const sessions = prog.sessions || [];
   const firstSession = sessions[0];
@@ -692,7 +692,7 @@ export function buildHelpCard() {
 
 // Hands the log over as a file HE shares, deliberately: no upload, no
 // endpoint, nothing automatic.
-export function exportTapLog() {
+function exportTapLog() {
   const rows = Array.isArray(state[TAP_LOG_KEY]) ? state[TAP_LOG_KEY] : [];
   if (!rows.length) return;
   const payload = {

@@ -58,7 +58,7 @@ import {
 import { hasValidWorkingValues, isRunnerExerciseResolved } from '../domain/runner-session.js';
 import { buildVideoTile, effortPicker, explainMark } from '../ui/kit.js';
 
-export function showSubstitutionScopeModal(exercise_id, exState, alt) {
+function showSubstitutionScopeModal(exercise_id, exState, alt) {
   const modal = $('#modal');
   let scope = 'this_session';
   const draw = () => {
@@ -442,7 +442,7 @@ export function renderExerciseCard(ex_id, exState) {
 // Raed: "الـexercise هذا ما تبدل، أضف لي exercise على نهاية التمرين".
 // Swapping REPLACES a prescribed movement and charges the volume ledger
 // against it.
-export function showAddExerciseModal() {
+function showAddExerciseModal() {
   const inSession = new Set(Object.keys(state.active_session?.exercises || {}));
   const options = getAllExercises()
     .filter((item) => !inSession.has(item.id))
@@ -483,7 +483,7 @@ export function showAddExerciseModal() {
 }
 
 // The per-exercise settings sheet.
-export function showExerciseSettings(ex_id, exState) {
+function showExerciseSettings(ex_id, exState) {
   const actualId = exState.swapped_to || ex_id;
   const ex = getAllExercises().find((e) => e.id === actualId);
   const planned = exState.planned;
@@ -732,7 +732,7 @@ export function showExerciseSettings(ex_id, exState) {
   $('#modal-overlay').classList.add('show');
 }
 
-export function showAltModal(ex_id, exState) {
+function showAltModal(ex_id, exState) {
   const allEx = getAllExercises();
   const ex = allEx.find(e => e.id === (exState.swapped_to || ex_id));
   const m = $('#modal');

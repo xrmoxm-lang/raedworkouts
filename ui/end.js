@@ -20,7 +20,7 @@ import { getAllExercises } from '../core/videos.js';
 // Five taps and «كله تمام». The sixth sign, «persistent loss of strength», is
 // not asked — the app reads it out of his own logs, because asking someone
 // whether they are weaker is asking them to guess at something recorded.
-export function buildWellbeingCheck() {
+function buildWellbeingCheck() {
   const chosen = new Set();
   const wrap = h('section', { class: 'wellbeing', 'data-wellbeing-check': 'true' });
   const finish = (signs) => {

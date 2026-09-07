@@ -12,15 +12,15 @@ import { runProgrammeReferenceMigrations } from '../domain/programme.js';
 // Self-hosted sync — always-on on Raed's HP server (Tailscale Funnel, public
 // HTTPS, secret-key gated). The server owns revisions, backups, and merges.
 // The key is a shared secret in client JS (same trust model as the old anon key).
-export const SYNC_URL = 'https://raed-hp.tail53bd35.ts.net:8443';
+const SYNC_URL = 'https://raed-hp.tail53bd35.ts.net:8443';
 export const SYNC_KEY = 'aa1b222bcdab4b048e7b44d85dca087946a6212314852b4b';
-export const SYNC_OVERRIDE_KEY = 'raedworkouts_sync_override';
+const SYNC_OVERRIDE_KEY = 'raedworkouts_sync_override';
 
-export const LEGACY_STORAGE_KEY = 'raedworkouts.v1';
-export const LEGACY_SETTINGS_KEY = 'raedworkouts.settings.v1';
-export const LEGACY_LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
-export const ACTIVE_USER_KEY = 'raedworkouts.active_user';
-export const PROFILE_INDEX_KEY = 'raedworkouts.profiles.v1';
+const LEGACY_STORAGE_KEY = 'raedworkouts.v1';
+const LEGACY_SETTINGS_KEY = 'raedworkouts.settings.v1';
+const LEGACY_LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
+const ACTIVE_USER_KEY = 'raedworkouts.active_user';
+const PROFILE_INDEX_KEY = 'raedworkouts.profiles.v1';
 
 // ---- Guarded storage ---------------------------------------------------
 // Every write in this file used to call localStorage.setItem bare. There was
@@ -45,7 +45,7 @@ export function safeRemoveItem(key) {
 export function safeGetItem(key) {
   try { return localStorage.getItem(key); } catch (_) { return null; }
 }
-export function onStorageWriteFailed(err) {
+function onStorageWriteFailed(err) {
   const first = !storageFailed;
   storageFailed = true;
   // The in-memory state is still correct, so the server can still save it.
@@ -63,7 +63,7 @@ export function onStorageWriteFailed(err) {
 export function getSyncUrl() {
   return (safeGetItem(SYNC_OVERRIDE_KEY) || '').trim() || SYNC_URL;
 }
-export function encodeUserKey(userId) {
+function encodeUserKey(userId) {
   return encodeURIComponent(String(userId || '').trim());
 }
 export function nsKey(userId, suffix) {
@@ -75,7 +75,7 @@ export function lastWriteKey(userId) { return nsKey(userId, 'lastwrite'); }
 export function lastRevKey(userId) { return nsKey(userId, 'lastrev'); }
 export function preRestoreKey(userId) { return nsKey(userId, 'prerestore'); }
 export function dirtyKey(userId) { return nsKey(userId, 'dirty'); }
-export function programmeMigrationExportKey(userId) { return nsKey(userId, 'programme-migration-export'); }
+function programmeMigrationExportKey(userId) { return nsKey(userId, 'programme-migration-export'); }
 
 export const defaultState = () => ({
   schema_version: 2,
@@ -148,8 +148,8 @@ export let settings = defaultSettings();
 export function replaceSettings(next) { settings = next; }
 export let syncDirty = false;
 export function setSyncDirty(value) { syncDirty = value; }
-export let activeUser = '';
-export let suppressNextPush = false;
+let activeUser = '';
+let suppressNextPush = false;
 export function hasMeaningfulLocalData() {
   return (state.history || []).length > 0 || Boolean(state.active_session) || (state.bodyweight_log || []).length > 0;
 }
@@ -161,7 +161,7 @@ export function familyProfileSeeds() {
     { user_id: 'abdullah', display_name: 'Abdullah', experience: 'beginner', allowlisted: true },
   ];
 }
-export function fallbackProfile(userId) {
+function fallbackProfile(userId) {
   const seed = familyProfileSeeds().find(p => String(p.user_id).toLowerCase() === String(userId || '').toLowerCase());
   return {
     display_name: seed?.display_name || userId || '',
@@ -178,7 +178,7 @@ export function ensureProfile() {
   if (!state.profile.experience) state.profile.experience = 'detrained';
   if (!state.profile.created_at) state.profile.created_at = new Date().toISOString();
 }
-export function registerLocalProfile(profile) {
+function registerLocalProfile(profile) {
   const list = getLocalProfiles().filter(p => String(p.user_id).toLowerCase() !== String(profile.user_id).toLowerCase());
   list.push({
     user_id: profile.user_id,
@@ -193,7 +193,7 @@ export function getLocalProfiles() {
     return JSON.parse(safeGetItem(PROFILE_INDEX_KEY) || '[]').map(({ has_pin: _retired, ...profile }) => profile);
   } catch (_) { return []; }
 }
-export function getActiveUser() {
+function getActiveUser() {
   return safeGetItem(ACTIVE_USER_KEY) || '';
 }
 export function setActiveUser(userId) {
@@ -270,12 +270,12 @@ export function profileProteinRange() {
   const high = Math.round(kg * 2.2);
   return `${low}-${high} g`;
 }
-export function migrationUserFromLegacy(legacySettings) {
+function migrationUserFromLegacy(legacySettings) {
   if (legacySettings?.user_id) return legacySettings.user_id;
   const urlUser = new URLSearchParams(window.location.search).get('user');
   return urlUser || '';
 }
-export function migrateLegacyStorage() {
+function migrateLegacyStorage() {
   const legacyStateRaw = safeGetItem(LEGACY_STORAGE_KEY);
   const legacySettingsRaw = safeGetItem(LEGACY_SETTINGS_KEY);
   if (!legacyStateRaw && !legacySettingsRaw) return;
@@ -300,7 +300,7 @@ export function migrateLegacyStorage() {
  * required timestamped JSON export.  The pure runner guarantees this adapter
  * receives untouched state before it can migrate anything.
  */
-export function exportProgrammeMigration(record, userId) {
+function exportProgrammeMigration(record, userId) {
   const payload = {
     kind: 'programme_reference_migration',
     user_id: userId,
@@ -403,10 +403,10 @@ export function persistLocal() {
   registerLocalProfile({ user_id: settings.user_id, ...state.profile });
 }
 // Headroom, NOT pruning.
-export const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
-export const STORAGE_WARN_RATIO = 0.7;
-export let storageWarned = false;
-export function appStorageBytes() {
+const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
+const STORAGE_WARN_RATIO = 0.7;
+let storageWarned = false;
+function appStorageBytes() {
   let total = 0;
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -443,7 +443,7 @@ export function saveLocal(opts = {}) {
 // words: «وش رأيك تصير أنت تراقب الضغطات وأزراري ونجلس نسجل كم جلسة، وبعدين
 // بعد كل جلسة أقول لك ها وش رأيك».
 export const TAP_LOG_KEY = 'tap_log';
-export const TAP_LOG_MAX = 1200;
+const TAP_LOG_MAX = 1200;
 export function tapLogOn() { return settings.tap_log === true; }
 export function recordTap(target) {
   if (!tapLogOn() || !target) return;

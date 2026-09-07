@@ -3,8 +3,8 @@
 import { settings } from '../core/store.js';
 
 // Tries the user's override first, then a URL scheme.
-export const EXECUTING_SCHEMES = /^\s*(?:javascript|data|vbscript|blob|file)\s*:/i;
-export function safeLaunchUrl(value) {
+const EXECUTING_SCHEMES = /^\s*(?:javascript|data|vbscript|blob|file)\s*:/i;
+function safeLaunchUrl(value) {
   const url = String(value || '').trim();
   if (!url || EXECUTING_SCHEMES.test(url)) return '';
   // A scheme-relative URL inherits the page's scheme and is fine; a bare path is

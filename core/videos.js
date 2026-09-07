@@ -325,7 +325,7 @@ export function isSafeHttpUrl(value) {
 // ---- Clip classification -------------------------------------------------
 // Raed: "بعض مقاطع الفيديو تكون special لتمرين... بالمشين، بالدمبل،
 // بالكابل... نحتاج نلاقي طريقة نصنف كل واحدة منها".
-export const EQUIPMENT_PATTERNS = [
+const EQUIPMENT_PATTERNS = [
   [/hammer strength/i, 'machine'],
   [/\bsmith\b/i, 'machine'],
   [/\bmachine\b|\bpec deck\b|\bleg press\b|\bhack squat\b/i, 'machine'],
@@ -334,14 +334,14 @@ export const EQUIPMENT_PATTERNS = [
   [/\bdb\b|\bdumbbell\b|\bgoblet\b/i, 'dumbbell'],
   [/\bassisted\b|\bpull-?up\b|\bdip\b|\bhanging\b|\bcrunch\b|\bpush-?up\b/i, 'bodyweight'],
 ];
-export const EQUIPMENT_WORDS = /\b(machine|cable|db|dumbbell|barbell|smith|ez[- ]?bar|hammer strength|assisted|plate-?weighted|bayesian|roman chair)\b/gi;
+const EQUIPMENT_WORDS = /\b(machine|cable|db|dumbbell|barbell|smith|ez[- ]?bar|hammer strength|assisted|plate-?weighted|bayesian|roman chair)\b/gi;
 
-export function exerciseEquipment(name) {
+function exerciseEquipment(name) {
   for (const [pattern, kind] of EQUIPMENT_PATTERNS) if (pattern.test(name || '')) return kind;
   return '';
 }
 
-export function movementFamily(exercise) {
+function movementFamily(exercise) {
   const bare = String(exercise?.name || '')
     .replace(EQUIPMENT_WORDS, ' ')
     .replace(/[^A-Za-z ]/g, ' ')

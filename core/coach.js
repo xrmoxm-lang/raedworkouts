@@ -13,7 +13,7 @@ import { getAllExercises } from '../core/videos.js';
 // Same-origin, through api/coach.js on Vercel. The access key used to ship in
 // this file and /answer is metered, so anyone who viewed source could spend his
 // credit. There is deliberately NO fallback to the direct funnel URL.
-export const COACH_URL = '/api/coach';
+const COACH_URL = '/api/coach';
 export const coachRoute = (name) => `${COACH_URL}?route=${name}`;
 export const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
 export let coachState = { status: 'idle', question: '', results: [], answer: null, error: '' };
@@ -21,7 +21,7 @@ export let coachState = { status: 'idle', question: '', results: [], answer: nul
 export function setCoachState(value) { coachState = value; }
 // The last answer survives leaving the tab.
 export const COACH_LAST_KEY = 'coach_last_answer';
-export function rememberCoachAnswer() {
+function rememberCoachAnswer() {
   if (coachState.status !== 'ok') return;
   try {
     state[COACH_LAST_KEY] = {
@@ -50,12 +50,12 @@ export function setCoachEnglish(value) { coachEnglish = value; }
 export let coachOpen = new Set();
 export function setCoachOpen(value) { coachOpen = value; }
 // Monotonic, so a slow earlier request cannot overwrite a newer answer.
-export let coachRequestId = 0;
-export let coachAbort = null;
+let coachRequestId = 0;
+let coachAbort = null;
 
 // Raed's library deliberately keeps both editions of two Nippard programmes,
 // because their bytes differ and no supersession was ever proven.
-export function dedupePassages(results) {
+function dedupePassages(results) {
   const seen = new Map();
   const passages = [];
   const moved = new Map();
@@ -213,7 +213,7 @@ export function activeCoachContext() {
 // The web answer arrives as markdown. Inline links are DROPPED rather than
 // rendered: every one is already in `citations` below the answer, so keeping
 // them inline would be the same source twice, once unreadably.
-export function webAnswerInline(text) {
+function webAnswerInline(text) {
   const nodes = [];
   const pattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
   let cursor = 0;
@@ -229,7 +229,7 @@ export function webAnswerInline(text) {
   return nodes;
 }
 
-export function webAnswerSentences(text) {
+function webAnswerSentences(text) {
   const sentences = [];
   let start = 0;
   for (let i = 0; i < text.length; i += 1) {

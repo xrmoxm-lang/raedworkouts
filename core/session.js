@@ -30,21 +30,21 @@ import {
 export let focusExerciseIdx = null;
 export function setFocusExerciseIdx(value) { focusExerciseIdx = value; }
 // Holds the session just finished so the undo toast can put it back.
-export let lastFinishedSession = null;
+let lastFinishedSession = null;
 // Lets Raed go back into the cards after the done panel appears, without
 // undoing the completion. Reset whenever a session starts, so a new workout
 // never opens straight into the review state.
 export let sessionDoneDismissed = false;
 
 export function setSessionDoneDismissed(value) { sessionDoneDismissed = value; }
-export function warmupTypeForSession(session) {
+function warmupTypeForSession(session) {
   // D12 is data-led: both Upper sessions use the merged push+pull warm-up;
   // both Lower sessions use the leg warm-up. The explicit fallback keeps an
   // already-started archival session usable without inventing leg drills.
   if (session?.warmup_type === 'lower' || ['lower_a', 'lower_b'].includes(session?.id)) return 'lower';
   return 'upper';
 }
-export function createSessionWarmup(session) {
+function createSessionWarmup(session) {
   const type = warmupTypeForSession(session);
   const source = RW.SESSION_WARMUPS?.[type] || { cap_minutes: 15, treadmill_minutes: [5, 7, 10], drills: [] };
   // A hard source-level guard: the merged Upper warm-up can never contain leg drills.
@@ -63,7 +63,7 @@ export function generalWarmupComplete(warmup) {
   return Boolean(warmup?.treadmill_done) && (warmup.drills || []).every((drill) => drill.completed);
 }
 // ---- Active session lifecycle ------------------------------
-export function startSession(session) {
+function startSession(session) {
   // confirmAction(), not confirm(): a standalone PWA shell can suppress the
   // native dialog, in which case the tap did nothing at all. Async, so the
   // caller re-enters once he has answered.
@@ -209,11 +209,11 @@ export function reopenSession(sess) {
 
 // Set only while re-entering endSession() from its own confirmation, so the
 // guard below asks once instead of looping on itself.
-export let endSessionConfirmed = false;
+let endSessionConfirmed = false;
 // Deletes the whole session. It used to be inline in two places, labelled
 // «تجاهل التمرين» — "skip the exercise" — behind a native confirm() whose
 // body was that same misleading label, with no undo afterwards.
-export function noteActiveCleared(session) {
+function noteActiveCleared(session) {
   if (!session) return;
   const key = `${session.started_at || session.date || ''}|${session.session_id || ''}`;
   state.active_cleared = { key, at: new Date().toISOString() };
@@ -326,7 +326,7 @@ export function endSession() {
   });
 }
 
-export function computeSessionPRs(session) {
+function computeSessionPRs(session) {
   // Look for sets in this session that match the current PR for each exercise
   const out = [];
   for (const [ex_id, ex] of Object.entries(session.exercises || {})) {
@@ -340,7 +340,7 @@ export function computeSessionPRs(session) {
   return out;
 }
 
-export function computeSessionStats(session) {
+function computeSessionStats(session) {
   let totalSets = 0, totalReps = 0, totalVol = 0, totalWeightLifted = 0;
   for (const ex of Object.values(session.exercises || {})) {
     for (const s of (ex.sets || [])) {
@@ -357,7 +357,7 @@ export function computeSessionStats(session) {
 }
 
 export let _endScreenSession = null;
-export function showSessionEnd(session) {
+function showSessionEnd(session) {
   _endScreenSession = session;
   window.location.hash = 'end';
   render();
@@ -379,7 +379,7 @@ export function swapExercise(exercise_id, alt_id) {
   toast(tf('swapped_to', { name: getAllExercises().find(e => e.id === alt_id)?.name || alt_id }));
 }
 
-export function runnerEntries(activeSession = state.active_session) {
+function runnerEntries(activeSession = state.active_session) {
   return Object.entries(activeSession?.exercises || {});
 }
 
@@ -400,7 +400,7 @@ export function applySetEdit(set, property, value) {
   // twice, once for state and once for settings that did not change.
   scheduleSetEditPersist();
 }
-export let setEditTimer = null;
+let setEditTimer = null;
 export function scheduleSetEditPersist() {
   if (setEditTimer) clearTimeout(setEditTimer);
   setEditTimer = setTimeout(() => { setEditTimer = null; saveLocal(); }, 400);
@@ -413,7 +413,7 @@ export function flushSetEdit() {
   saveLocal();
 }
 
-export function nextUnresolvedRunnerExerciseIndex(entries = runnerEntries()) {
+function nextUnresolvedRunnerExerciseIndex(entries = runnerEntries()) {
   return entries.findIndex(([, exercise]) => !isRunnerExerciseResolved(exercise));
 }
 

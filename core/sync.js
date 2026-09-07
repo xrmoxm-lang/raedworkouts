@@ -44,15 +44,15 @@ import { localProfileIdFromV16SyncId, v16SyncUserId } from '../domain/sync-ident
 // Local profile IDs deliberately stay human-facing.  Only this resolver may
 // construct a server identity, and it always suffixes `-v16`; no v16 request
 // can therefore address Raed's v15 row by accident.
-export function syncUserId(localUserId = settings.user_id) {
+function syncUserId(localUserId = settings.user_id) {
   return v16SyncUserId(localUserId);
 }
 export function syncUserQuery(localUserId = settings.user_id) {
   return encodeURIComponent(syncUserId(localUserId));
 }
-export let syncTimer = null;
-export let syncInFlight = false;
-export let syncInFlightPromise = null;
+let syncTimer = null;
+let syncInFlight = false;
+let syncInFlightPromise = null;
 export let welcomeProfiles = null;
 export let welcomeLoading = false;
 export let welcomePreselectUser = '';
@@ -66,16 +66,16 @@ export function schedulePush(delay = 2500) {
   clearScheduledPush();
   syncTimer = setTimeout(() => flushSync().catch(() => {}), delay);
 }
-export function clearScheduledPush() {
+function clearScheduledPush() {
   clearTimeout(syncTimer);
   syncTimer = null;
 }
-export async function quiesceSyncPipeline() {
+async function quiesceSyncPipeline() {
   clearScheduledPush();
   if (syncInFlightPromise) await syncInFlightPromise.catch(() => false);
   clearScheduledPush();
 }
-export function applyRemotePayload(remote, localUserId = settings.user_id) {
+function applyRemotePayload(remote, localUserId = settings.user_id) {
   // The server correctly echoes its row id (`raed-v16`), but that is never a
   // local profile id. Keeping the local identity here prevents remote sync
   // metadata from leaking into localStorage, profile names, or later requests.
@@ -105,7 +105,7 @@ export function applyRemotePayload(remote, localUserId = settings.user_id) {
   clearDirtyMarker(settings.user_id);
   persistLocal();
 }
-export function syncAuthBody() {
+function syncAuthBody() {
   return {
     _auth_token: settings.sync_key,
   };
@@ -287,7 +287,7 @@ export function syncFailureReason(err) {
 
 // Chromium-family detection, deliberately narrow: Chrome on iOS is WebKit
 // underneath and is NOT affected, so a plain /Chrome/ test would misdiagnose it.
-export function isChromiumLike() {
+function isChromiumLike() {
   const ua = navigator.userAgent || '';
   // Chrome on iOS is WebKit underneath and is NOT affected, so a bare /Chrome/
   // test would misdiagnose the browser he most likely trains with.
@@ -368,7 +368,7 @@ export async function selectProfile(profile) {
 }
 // Adopt a profile on THIS device without ever discarding what the device
 // already holds for it.
-export function adoptProfileLocally(userId, profile) {
+function adoptProfileLocally(userId, profile) {
   setActiveUser(userId);
   loadLocal();
   settings.user_id = userId;
@@ -383,14 +383,14 @@ export function adoptProfileLocally(userId, profile) {
     created_at: existing.created_at || new Date().toISOString(),
   };
 }
-export function finishLocalProfile(userId, profile) {
+function finishLocalProfile(userId, profile) {
   adoptProfileLocally(userId, profile);
   persistLocal();
   setSyncDirty(false);
   clearDirtyMarker(userId);
   render();
 }
-export async function openProfile(profile) {
+async function openProfile(profile) {
   const userId = profile.user_id || profile.display_name;
   // See adoptProfileLocally: this line used to be a defaultState() assignment,
   // and the persistLocal() a few lines down then wrote that empty state over
@@ -429,7 +429,7 @@ export async function createProfile(profile, bodyweight) {
   applyTheme();
   render();
 }
-export function stashPreRestore(reason) {
+function stashPreRestore(reason) {
   if (!settings.user_id) return;
   const snapshot = {
     created_at: new Date().toISOString(),
@@ -439,7 +439,7 @@ export function stashPreRestore(reason) {
   };
   safeSetItem(preRestoreKey(settings.user_id), JSON.stringify(snapshot));
 }
-export async function undoPreRestore() {
+async function undoPreRestore() {
   if (!settings.user_id) return;
   let snapshot;
   try { snapshot = JSON.parse(safeGetItem(preRestoreKey(settings.user_id)) || 'null'); } catch (_) {}
@@ -455,7 +455,7 @@ export async function undoPreRestore() {
   render();
   toast(pushed ? 'Restored previous local snapshot.' : 'Restored locally. Cloud sync is pending.');
 }
-export function notifyUndoRestore() {
+function notifyUndoRestore() {
   toast(t('snapshot_restored'), 7000, t('undo'), undoPreRestore);
 }
 export function exportPayload() {

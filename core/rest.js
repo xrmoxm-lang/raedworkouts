@@ -8,7 +8,7 @@ import { nsKey, safeGetItem, safeRemoveItem, safeSetItem, settings, state } from
 // ---- Rest timer --------------------------------------------
 export const restTimer = { interval: null, end: 0 };
 // The deadline is persisted, not just held in `restTimer`.
-export function persistRestDeadline(endMs) {
+function persistRestDeadline(endMs) {
   if (!settings.user_id) return;
   if (endMs) safeSetItem(nsKey(settings.user_id, 'restend'), String(endMs));
   else safeRemoveItem(nsKey(settings.user_id, 'restend'));
@@ -21,7 +21,7 @@ export function startRest(seconds) {
   if (settings.notifications) requestNotifPermissionIfNeeded();
   runRestCountdown();
 }
-export function runRestCountdown() {
+function runRestCountdown() {
   const el = $('#rest-timer');
   if (!el) return;
   el.style.display = 'flex';
@@ -83,7 +83,7 @@ export function requestNotifPermissionIfNeeded() {
   }
   return Notification.requestPermission();
 }
-export async function fireRestEndNotification() {
+async function fireRestEndNotification() {
   if (!settings.notifications) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const opts = {

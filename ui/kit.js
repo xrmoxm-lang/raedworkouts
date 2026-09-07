@@ -8,7 +8,7 @@ import { isSafeHttpUrl, youtubeThumbUrl, ytIdFromUrl } from '../core/videos.js';
 import { isCountableWorkingSet } from '../domain/runner-session.js';
 
 // D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
-export const EFFORT_LEVELS = [
+const EFFORT_LEVELS = [
   { value: 'easy', emoji: '😌' },
   { value: 'medium', emoji: '💪' },
   { value: 'very_hard', emoji: '🥵' },

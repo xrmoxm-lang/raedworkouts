@@ -28,7 +28,7 @@ import { isCountableWorkingSet } from '../domain/runner-session.js';
 import { assessSubstitution } from '../domain/substitutions.js';
 
 // ---- PR detection (silent) -----------------------------------
-export function prScore(kg, reps) { return kg * (1 + reps / 30); }  // Epley 1RM estimate
+function prScore(kg, reps) { return kg * (1 + reps / 30); }  // Epley 1RM estimate
 export function detectPR(exercise_id, kg, reps) {
   if (!kg || !reps) return false;
   const score = prScore(kg, reps);
@@ -42,7 +42,7 @@ export function detectPR(exercise_id, kg, reps) {
 // ---- Programme resolver --------------------------------------
 // The week is DERIVED from logged sessions, never stored, and only sessions
 // from THIS rotation move the clock — an import must not skip him to week 9.
-export function completedSessionCount() {
+function completedSessionCount() {
   const rotation = new Set((RW.PROGRAMME?.rotation_order) || []);
   if (!rotation.size) return (state.history || []).length;
   return (state.history || []).filter((entry) => {
@@ -51,10 +51,10 @@ export function completedSessionCount() {
   }).length;
 }
 // The mesocycle REPEATS. It used to stop.
-export function programmeCycleLength(programme = state.programme_overrides || RW.PROGRAMME) {
+function programmeCycleLength(programme = state.programme_overrides || RW.PROGRAMME) {
   return Math.max(...(programme.blocks || []).map((block) => block.week_end || 0), 1);
 }
-export function weeksElapsed() {
+function weeksElapsed() {
   return Math.floor(completedSessionCount() / 4);
 }
 // 1-based: his first twelve weeks are cycle 1.
@@ -86,9 +86,9 @@ export const DELOAD_SIGN_LABEL = {
   poor_sleep: () => t('sign_poor_sleep'),
 };
 
-export function trainingWeekId() { return makeWeekId(derivedCycle(), derivedWeek()); }
+function trainingWeekId() { return makeWeekId(derivedCycle(), derivedWeek()); }
 
-export function deloadSignsThisWeek() {
+function deloadSignsThisWeek() {
   const check = (state.wellbeing_checks || []).find((row) => row.week_id === trainingWeekId());
   return signsThisWeek({
     reported: check?.signs,
@@ -145,7 +145,7 @@ export function getActiveProgramme() {
     currentBlock: derivedBlock(),
   });
 }
-export function getActiveProgrammeId() {
+function getActiveProgrammeId() {
   return getActiveProgramme().id;
 }
 
@@ -203,10 +203,10 @@ export function rememberDevice(exerciseId, name) {
 
 // A session stores a swapped exercise under the ORIGINAL programme id, with
 // the replacement recorded in `swapped_to`.
-export function performedId(key, entry) {
+function performedId(key, entry) {
   return entry?.swapped_to || key;
 }
-export function findPerformedEntry(session, exercise_id) {
+function findPerformedEntry(session, exercise_id) {
   const exercises = session?.exercises || {};
   const direct = exercises[exercise_id];
   // The common case, and the cheap one: an unswapped entry under its own id.
@@ -216,7 +216,7 @@ export function findPerformedEntry(session, exercise_id) {
   }
   return undefined;
 }
-export function getLastTwoPerformances(exercise_id) {
+function getLastTwoPerformances(exercise_id) {
   const device = exercisePrefs(exercise_id).device;
   const collect = (matchDevice) => {
     const out = [];
@@ -237,7 +237,7 @@ export function getLastTwoPerformances(exercise_id) {
   }
   return collect(false);
 }
-export function effectiveStartKg(planned) {
+function effectiveStartKg(planned) {
   const base = Number(planned.start_kg);
   if (!Number.isFinite(base) || base <= 0) return null;
   const exp = state.profile?.experience || 'returning';
@@ -252,7 +252,7 @@ export function effectiveStartKg(planned) {
 // Clamp C3: always round DOWN to the equipment step. Rounding to nearest, as
 // this did before, silently sent a warm-up set ABOVE the prescribed
 // percentage — a 9 kg working weight produced a 5 kg "50%" warm-up.
-export function roundToGymIncrement(value, step) {
+function roundToGymIncrement(value, step) {
   const n = Number(value) || 0;
   const s = Number(step) > 0 ? Number(step) : 2.5;
   return Math.max(s, Math.floor(n / s) * s);
@@ -323,8 +323,8 @@ export function runRampRules(exState, exerciseId) {
   }
 }
 
-export const WARMUP_FEEL_DELTA = 0.075;
-export function applyWarmupFeel(exState, exerciseId) {
+const WARMUP_FEEL_DELTA = 0.075;
+function applyWarmupFeel(exState, exerciseId) {
   if (!exState || exState.warmup_feel_applied) return null;
   // A calibrated exercise already took its number FROM the ramp; adjusting it by
   // the feel of that same ramp would count the signal twice.
@@ -356,7 +356,7 @@ export function applyWarmupFeel(exState, exerciseId) {
   return { effort: last.effort, weight: targets[0].weight };
 }
 
-export function terminalRampPct(rampSets) {
+function terminalRampPct(rampSets) {
   const n = Number(rampSets) || 0;
   if (n <= 0) return 0;
   if (n === 1) return 0.60;
@@ -366,7 +366,7 @@ export function terminalRampPct(rampSets) {
 
 // Fills the working sets of a first exposure from a ramp set that came back
 // easy. Returns the derived weight, or null when the probe does not apply.
-export function applyCalibrationProbe(exState, exerciseId) {
+function applyCalibrationProbe(exState, exerciseId) {
   if (!exState || exState.calibrated_from) return null;
   const sets = exState.sets || [];
   const ramps = sets.filter((set) => set.is_warmup);
@@ -504,7 +504,7 @@ export function getStreak() {
   return state.history.filter(h => (now - new Date(h.date).getTime()) < fourWeeksMs).length;
 }
 // One definition of "this week", and it is his week.
-export function weeklyTrainingTarget() {
+function weeklyTrainingTarget() {
   const layout = (state.programme_overrides || RW.PROGRAMME)?.weekly_layout;
   if (!Array.isArray(layout) || !layout.length) return 4;
   return layout.filter((day) => day && day !== 'rest').length;
@@ -545,7 +545,7 @@ export function getWeeklyVolume() {
 }
 
 // A real estimate instead of the number 70.
-export const WARMUP_MINUTES = 8;
+const WARMUP_MINUTES = 8;
 export function estimateSessionMinutes(session) {
   const rows = session?.exercises || [];
   if (!rows.length) return WARMUP_MINUTES;
@@ -564,13 +564,13 @@ export function estimateSessionMinutes(session) {
 }
 
 // The prescribed effort, in words rather than a number.
-export const effortKeyForRpe = (rpe) => {
+const effortKeyForRpe = (rpe) => {
   if (rpe <= 6) return 'effort_target_easy';
   if (rpe <= 7) return 'effort_target_moderate';
   if (rpe <= 8) return 'effort_target_hard';
   return 'effort_target_near_failure';
 };
-export function prescribedRpeValues(planned) {
+function prescribedRpeValues(planned) {
   const values = [planned?.rpe_set1, planned?.rpe_set2, planned?.rpe_set3]
     .map(Number).filter(Number.isFinite);
   if (values.length) return values;
@@ -578,7 +578,7 @@ export function prescribedRpeValues(planned) {
   return (String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [])
     .map(Number).filter(Number.isFinite);
 }
-export function prescribedEffortKey(planned) {
+function prescribedEffortKey(planned) {
   const all = prescribedRpeValues(planned);
   if (!all.length) return null;
   return effortKeyForRpe(Math.max(...all));
@@ -593,15 +593,15 @@ export function prescribedEffortSequence(planned) {
 }
 
 // The load increment, from the equipment — not from a body-part guess.
-export const EQUIPMENT_STEP_KG = {
+const EQUIPMENT_STEP_KG = {
   machine: 5,      // pin stack
   cable: 2.5,
   dumbbells: 2.5,
   plates: 2.5,     // a 1.25 kg plate per side
   bodyweight: 2.5,
 };
-export const DEFAULT_STEP_KG = 2.5;
-export function learnedStepFromHistory(exerciseId) {
+const DEFAULT_STEP_KG = 2.5;
+function learnedStepFromHistory(exerciseId) {
   const weights = new Set();
   for (const session of state.history || []) {
     const entry = findPerformedEntry(session, exerciseId);
@@ -622,7 +622,7 @@ export function learnedStepFromHistory(exerciseId) {
   if (!Number.isFinite(smallest) || smallest < 0.5 || smallest > 10) return null;
   return smallest;
 }
-export function equipmentStepKg(exerciseId) {
+function equipmentStepKg(exerciseId) {
   const learned = learnedStepFromHistory(exerciseId);
   if (learned) return learned;
   const kind = exercisePrefs(exerciseId).equipment;
@@ -631,7 +631,7 @@ export function equipmentStepKg(exerciseId) {
 
 // ---- Session warm-up phase ---------------------------------
 // The weeks 1-2 re-entry ramp. D19, and it was prose until now.
-export const REENTRY_RPE = {
+const REENTRY_RPE = {
   1: { compound: [6, 6, 6], isolation: [7, 7, 7] },
   2: { compound: [6, 7, 7], isolation: [7, 8, 8] },
 };
@@ -698,7 +698,7 @@ export function assessSessionSubstitution(exercise_id, alt_id, scope) {
     classification: assessed.classification,
   };
 }
-export function newLocalId(prefix) {
+function newLocalId(prefix) {
   return `${prefix}-${window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}`;
 }
 export function recordSubstitution(exercise_id, alt_id, scope, assessment, override = null) {
@@ -777,9 +777,9 @@ export function exerciseHistoryRows(exerciseId, limit = 6) {
 }
 
 // One place that decides what a bodyweight entry means.
-export const BODYWEIGHT_MIN_KG = 25;
-export const BODYWEIGHT_MAX_KG = 300;
-export function isPlausibleBodyweight(kg) {
+const BODYWEIGHT_MIN_KG = 25;
+const BODYWEIGHT_MAX_KG = 300;
+function isPlausibleBodyweight(kg) {
   return Number.isFinite(kg) && kg >= BODYWEIGHT_MIN_KG && kg <= BODYWEIGHT_MAX_KG;
 }
 // Records a weigh-in: one entry per DAY (the last one wins, because a second

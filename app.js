@@ -52,7 +52,7 @@ export { resolveBlockSkinBoundary, resolveSkinSuggestionResponse } from './core/
 // is where the real ones are handed over — at module evaluation, before init().
 registerShell({ render, router, renderWelcome, renderCoach, renderSettings });
 
-export function render() {
+function render() {
   if (!settings.user_id) {
     document.body.classList.remove('runner-mode');
     renderWelcome();
@@ -88,12 +88,12 @@ export function render() {
   if (route === 'help') router('settings');
   if (route === 'end') renderSessionEnd();
 }
-export function router(route) {
+function router(route) {
   window.location.hash = route;
   render();
 }
 
-export function init() {
+function init() {
   loadLocal();
   applyLang();
 
@@ -228,7 +228,7 @@ export function init() {
 }
 
 // Fires once per mesocycle, at boot, and never twice for the same one.
-export function announceCycleIfNew() {
+function announceCycleIfNew() {
   if (!settings.user_id || !state.history?.length) return;
   const cycle = derivedCycle();
   if (cycle <= (state.cycle_announced || 1)) return;
@@ -245,8 +245,8 @@ export function announceCycleIfNew() {
 // ---- Modal keyboard + screen-reader behaviour ----------------
 // This watches the class every call site already toggles, rather than editing a
 // dozen of them: role, aria-modal, focus trap, focus return and Escape.
-export const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-export function initModalA11y() {
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+function initModalA11y() {
   const overlay = $('#modal-overlay');
   const modal = $('#modal');
   if (!overlay || !modal) return;
@@ -309,7 +309,7 @@ export function initModalA11y() {
 }
 
 // ---- Auto-hide bottom nav on scroll --------------------------
-export function initAutoHideNav() {
+function initAutoHideNav() {
   const nav = $('.tab-bar');
   if (!nav) return;
   let lastY = window.scrollY;
@@ -345,8 +345,8 @@ export function initAutoHideNav() {
 // ---- Last resort ---------------------------------------------------------
 // There was no window.onerror and no unhandledrejection handler in this file
 // at all.
-export let _lastErrorToastAt = 0;
-export function reportFatal(source, err) {
+let _lastErrorToastAt = 0;
+function reportFatal(source, err) {
   try {
     console.error('[raedworkouts]', source, err);
     const now = Date.now();

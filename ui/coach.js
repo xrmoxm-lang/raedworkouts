@@ -169,7 +169,7 @@ export function renderCoach() {
 // One passage card. Shows the Arabic translation when the library has one and
 // keeps the English original one tap away, because the Arabic is machine
 // translation of a book he paid for and he should be able to check it.
-export function coachPassageCard(passage, index, cited) {
+function coachPassageCard(passage, index, cited) {
   const arabic = passage.text_ar;
   const showEnglish = coachEnglish.has(index) || !arabic;
   const open = coachOpen.has(index);
@@ -242,7 +242,7 @@ export function coachPassageCard(passage, index, cited) {
 }
 
 // The answer, then the passages it was built from, then the rest.
-export function renderCoachAnswer(root) {
+function renderCoachAnswer(root) {
   const answer = coachState.answer;
   const results = coachState.results;
 
