@@ -1,11 +1,8 @@
 /* Screen pieces used by more than one screen. */
 
 import { h } from '../core/dom.js';
-import { getTodayPlannedSession } from '../core/engine.js';
-import { arabicMinutes, fmtKgTotal, localISODate, t, tf } from '../core/i18n.js';
-import { state } from '../core/store.js';
+import { t } from '../core/i18n.js';
 import { isSafeHttpUrl, youtubeThumbUrl, ytIdFromUrl } from '../core/videos.js';
-import { isCountableWorkingSet } from '../domain/runner-session.js';
 
 // D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
 const EFFORT_LEVELS = [
@@ -104,39 +101,6 @@ export function buildVideoTile(v, opts = {}) {
 }
 // The home hero was 125px tall with every word pinned to the right edge and
 // the left 55% empty — measured, not eyeballed.
-export function progressRing(done, target, caption) {
-  const NS = 'http://www.w3.org/2000/svg';
-  const R = 26, C = 2 * Math.PI * R;
-  const filled = target > 0 ? Math.min(1, Math.max(0, done / target)) : 0;
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 64 64');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.classList.add('ring-svg');
-  const circle = (cls, dash) => {
-    const c = document.createElementNS(NS, 'circle');
-    c.setAttribute('cx', '32'); c.setAttribute('cy', '32'); c.setAttribute('r', String(R));
-    c.setAttribute('fill', 'none'); c.setAttribute('stroke-width', '5.5');
-    c.setAttribute('stroke-linecap', 'round');
-    c.classList.add(cls);
-    if (dash) { c.setAttribute('stroke-dasharray', dash); c.setAttribute('transform', 'rotate(-90 32 32)'); }
-    return c;
-  };
-  svg.appendChild(circle('ring-track'));
-  // A zero-length arc still paints a round cap — a dot on an empty ring reads as
-  // "one done". Draw the arc only when there is something to draw.
-  if (filled > 0) svg.appendChild(circle('ring-arc', `${(C * filled).toFixed(2)} ${C.toFixed(2)}`));
-  return h('div', { class: 'hero-ring' },
-    svg,
-    // «0/4» is a fraction, and a fraction is LTR in Arabic too. Laid out by the
-    // page's RTL it printed «4/0» — a different number.
-    h('div', { class: 'ring-face', dir: 'ltr' },
-      h('span', { class: 'ring-num' + (done > 0 ? '' : ' zero') }, String(done)),
-      h('span', { class: 'ring-of' }, `/${target}`),
-    ),
-    caption ? h('div', { class: 'ring-cap' }, caption) : null,
-  );
-}
-
 // A quiet "?" that explains one term in place. Raed asked for something the
 // size of a copyright mark that opens a plain sentence — "شيء مرة بسيط يطلع"
 // — after the coach gave him a poor answer for "superset".
@@ -153,84 +117,5 @@ export function explainMark(termKey) {
     },
   }, '؟');
   return h('span', { class: 'explain-wrap' }, mark, bubble);
-}
-
-export function buildSessionDonePanel(active, entries) {
-  const started = new Date(active.started_at);
-  const minutes = Math.max(1, Math.round((Date.now() - started.getTime()) / 60000));
-  let sets = 0;
-  let volume = 0;
-  let skipped = 0;
-  for (const [, entry] of entries) {
-    for (const set of entry.sets || []) {
-      if (set.skipped) { skipped += 1; continue; }
-      if (!isCountableWorkingSet(set)) continue;
-      sets += 1;
-      volume += (Number(set.weight) || 0) * (Number(set.reps) || 0);
-    }
-  }
-  return h('section', { class: 'card session-done', 'data-session-done': 'true' },
-    h('h2', {}, t('session_done_title')),
-    h('p', { class: 'session-done-time' }, arabicMinutes(minutes)),
-    h('div', { class: 'session-done-stats tiny muted' },
-      tf('session_done_sets', { n: sets }),
-      ' · ',
-      tf('session_done_volume', { kg: fmtKgTotal(volume) }),
-      skipped ? h('span', {}, ' · ', tf('session_done_skipped', { n: skipped })) : null,
-    ),
-  );
-}
-
-export function buildWeekStrip() {
-  const DAY_KEYS = ['weekday_sunday','weekday_monday','weekday_tuesday','weekday_wednesday','weekday_thursday','weekday_friday','weekday_saturday'];
-  const today = new Date();
-  // Week starts Saturday, as it does in Saudi.
-  const start = new Date(today);
-  start.setDate(today.getDate() - ((today.getDay() + 1) % 7));
-  // Same bug as todayISO had: this function had already worked out the local
-  // Saturday boundary and then converted back through UTC, undoing it.
-  const iso = (date) => localISODate(date);
-
-  const trainedOn = new Map();
-  for (const entry of state.history || []) {
-    if (!entry?.date) continue;
-    trainedOn.set(String(entry.date).slice(0, 10), entry.session_name || entry.session_id || '');
-  }
-
-  const strip = h('div', { class: 'week-strip', 'data-week-strip': 'true' });
-  let doneThisWeek = 0;
-  for (let offset = 0; offset < 7; offset += 1) {
-    const day = new Date(start);
-    day.setDate(start.getDate() + offset);
-    const key = iso(day);
-    const trained = trainedOn.get(key);
-    const isToday = key === iso(today);
-    const isFuture = day > today && !isToday;
-    if (trained) doneThisWeek += 1;
-    strip.appendChild(h('div', {
-      class: 'week-day' + (trained ? ' trained' : '') + (isToday ? ' today' : '') + (isFuture ? ' future' : ''),
-      'data-week-day': key,
-      title: trained || '',
-    },
-      h('span', { class: 'wd-name' }, t(DAY_KEYS[day.getDay()])),
-      h('span', { class: 'wd-mark' }, trained ? '●' : (isFuture ? '' : '·')),
-    ));
-  }
-
-  const planned = getTodayPlannedSession();
-  const trainedToday = trainedOn.has(iso(today));
-  const remaining = Math.max(0, 4 - doneThisWeek);
-  return h('section', { class: 'card compact week-card', 'data-week-card': 'true' },
-    h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' },
-      trainedToday
-        ? t('week_trained_today')
-        // Localise the session name BEFORE interpolating. Passing it raw put
-        // "Lower A" inside the template, and the combined string matches no
-        // locale key, so the whole line rendered half-English.
-        : tf('week_today_is', { name: t((planned?.name || '').split(' — ')[0]) })),
-    strip,
-    h('div', { class: 'tiny muted', style: 'margin-top:6px;' },
-      remaining ? tf('week_remaining', { n: remaining }) : t('week_target_met')),
-  );
 }
 

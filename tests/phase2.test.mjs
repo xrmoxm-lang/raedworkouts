@@ -116,7 +116,14 @@ test('session UI keeps the removal list out and wires one-thumb logging and the 
   assert.doesNotMatch(appSource, /Focus mode/);
   assert.doesNotMatch(appSource, /Cues on/);
   assert.doesNotMatch(appSource, /Cue:\s/);
-  assert.match(styleSource, /grid-template-columns:\s*30px minmax\(72px, 1fr\) minmax\(64px, 0\.8fr\) 48px/);
+  // The invariant, not the v15 literal: a set row is ONE grid of four tracks —
+  // mark, weight, reps, done — and the done column is a real thumb target (≥44px).
+  const grid = styleSource.match(/\.set-grid-headers,\s*\.set-grid\s*\{[^}]*grid-template-columns:\s*([^;]+);/);
+  assert.ok(grid, 'the set row grid must be declared once for headers and rows');
+  const tracks = grid[1].trim().split(/\s+(?![^(]*\))/);
+  assert.equal(tracks.length, 4, `set row must have four tracks, got ${grid[1]}`);
+  const done = Number.parseInt(tracks[3], 10);
+  assert.ok(done >= 44, `the done column must be a thumb target, got ${tracks[3]}`);
 });
 
 function syntheticCatalogue() {

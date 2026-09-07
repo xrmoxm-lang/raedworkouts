@@ -7,9 +7,10 @@ import { replaceSettings, saveLocal, settings } from '../core/store.js';
 import { rejectedSkinSuggestion, suggestionForBlockBoundary } from '../domain/skin-suggestions.mjs';
 
 export const SKINS = {
-  hadid: { label: 'حديد', sw_light: '#b8451a', sw_dark: '#e8622d', theme_dark: '#17130f' },
-  waraq: { label: 'ورق', sw_light: '#7c1f2e', sw_dark: '#743d4a', theme_dark: '#121110' },
-  rukham: { label: 'رخام', sw_light: '#2f4858', sw_dark: '#a8b8c0', theme_dark: '#121618' },
+  // bg_light / bg_dark are the page grounds the status bar should match (styles.css tokens).
+  hadid: { label: 'حديد', sw_light: '#b8451a', sw_dark: '#e8622d', bg_light: '#f3ede4', bg_dark: '#121010', theme_dark: '#121010' },
+  waraq: { label: 'ورق', sw_light: '#7c1f2e', sw_dark: '#743d4a', bg_light: '#f8f5ef', bg_dark: '#121110', theme_dark: '#121110' },
+  rukham: { label: 'رخام', sw_light: '#2f4858', sw_dark: '#a8b8c0', bg_light: '#eaece8', bg_dark: '#111517', theme_dark: '#111517' },
 };
 
 export function activeSkin() {
@@ -42,21 +43,36 @@ export function resolveSkinSuggestionResponse({ settings: persistedSettings, sug
   return persistedSettings;
 }
 
+// The theme attribute is RESOLVED here (never absent): index.html's inline script
+// sets it before first paint from the same settings, and this keeps it in step.
+// `data-theme-mode` records the preference (auto|light|dark) for the UI.
+const darkQuery = typeof window !== 'undefined' && window.matchMedia
+  ? window.matchMedia('(prefers-color-scheme: dark)')
+  : null;
+export function resolvedTheme(mode = settings.theme || 'auto') {
+  if (mode === 'light' || mode === 'dark') return mode;
+  return darkQuery && darkQuery.matches ? 'dark' : 'light';
+}
 export function applyTheme() {
   const mode = settings.theme || 'auto';
-  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', mode);
+  const resolved = resolvedTheme(mode);
+  const root = document.documentElement;
+  root.setAttribute('data-theme', resolved);
+  root.setAttribute('data-theme-mode', mode);
   const skin = activeSkin();
-  document.documentElement.setAttribute('data-skin', skin);
-  // Status-bar values follow the selected skin; block transitions never call this.
+  root.setAttribute('data-skin', skin);
+  // Status bar follows the page ground of the active skin; block transitions never call this.
   const skinInfo = SKINS[skin];
   const metaLight = document.getElementById('theme-color-light');
   const metaDark = document.getElementById('theme-color-dark');
-  if (metaLight) metaLight.setAttribute('content', skinInfo.sw_light);
-  if (metaDark) metaDark.setAttribute('content', skinInfo.theme_dark);
-  // The header no longer carries a theme control — Raed asked for it to live in
-  // Settings only ("خله بالإعدادات... في الصفحة العامة، فشيله"). Appearance is a
-  // set-once preference, not something to spend header real estate on.
+  if (metaLight) metaLight.setAttribute('content', skinInfo.bg_light);
+  if (metaDark) metaDark.setAttribute('content', skinInfo.bg_dark);
+}
+// While the preference is «auto», follow the phone when it switches at sunset.
+if (darkQuery && typeof darkQuery.addEventListener === 'function') {
+  darkQuery.addEventListener('change', () => {
+    if ((settings.theme || 'auto') === 'auto') applyTheme();
+  });
 }
 
 function closeSkinSuggestion() {

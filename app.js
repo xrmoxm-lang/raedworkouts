@@ -90,6 +90,10 @@ function render() {
 }
 function router(route) {
   window.location.hash = route;
+  // A new screen starts at its top, with the tab bar shown — the auto-hide state
+  // belongs to the scroll position of the screen he just left.
+  window.scrollTo(0, 0);
+  $('.tab-bar')?.classList.remove('hidden');
   render();
 }
 

@@ -11,7 +11,7 @@
  * skipWaiting(), and the page (see app.js) reloads itself once to apply — no
  * manual force-refresh.
  */
-const VERSION = 'v108';
+const VERSION = 'v109';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is
@@ -46,6 +46,7 @@ const SHELL = [
   './ui/settings.js',
   './ui/warmup.js',
   './ui/welcome.js',
+  './ui/figure.js',
   './locale.js',
   './domain/skin-suggestions.mjs',
   './domain/substitutions.js',
@@ -67,6 +68,16 @@ const SHELL = [
   './img/body_quads.png',
   './img/body_glutes.png',
   './img/body_calves.png',
+  './fonts/IBMPlexSansArabic-400-arabic.woff2',
+  './fonts/IBMPlexSansArabic-500-arabic.woff2',
+  './fonts/IBMPlexSansArabic-600-arabic.woff2',
+  './fonts/IBMPlexSansArabic-700-arabic.woff2',
+  './fonts/IBMPlexSansArabic-400-latin.woff2',
+  './fonts/IBMPlexSansArabic-500-latin.woff2',
+  './fonts/IBMPlexSansArabic-600-latin.woff2',
+  './fonts/IBMPlexSansArabic-700-latin.woff2',
+  './fonts/IBMPlexMono-500-latin.woff2',
+  './fonts/IBMPlexMono-600-latin.woff2',
 ];
 
 self.addEventListener('install', (e) => {

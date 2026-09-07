@@ -6,7 +6,7 @@ import { t } from '../core/i18n.js';
 import { nsKey, safeGetItem, safeRemoveItem, safeSetItem, settings, state } from '../core/store.js';
 
 // ---- Rest timer --------------------------------------------
-export const restTimer = { interval: null, end: 0 };
+export const restTimer = { interval: null, end: 0, total: 0 };
 // The deadline is persisted, not just held in `restTimer`.
 function persistRestDeadline(endMs) {
   if (!settings.user_id) return;
@@ -16,6 +16,7 @@ function persistRestDeadline(endMs) {
 export function startRest(seconds) {
   if (restTimer.interval) clearInterval(restTimer.interval);
   restTimer.end = Date.now() + seconds * 1000;
+  restTimer.total = seconds * 1000;
   persistRestDeadline(restTimer.end);
   // Ask for notification permission once, on first rest start
   if (settings.notifications) requestNotifPermissionIfNeeded();
@@ -24,16 +25,24 @@ export function startRest(seconds) {
 function runRestCountdown() {
   const el = $('#rest-timer');
   if (!el) return;
-  el.style.display = 'flex';
+  el.style.display = 'grid';
+  document.body.classList.add('resting');
+  const bar = $('#rest-timer-bar');
+  // A resumed rest has no recorded total; the bar then drains from wherever it is.
+  if (!restTimer.total || restTimer.total < restTimer.end - Date.now()) restTimer.total = Math.max(1, restTimer.end - Date.now());
   const tick = () => {
-    const rem = Math.max(0, Math.round((restTimer.end - Date.now()) / 1000));
+    const remMs = Math.max(0, restTimer.end - Date.now());
+    const rem = Math.round(remMs / 1000);
     $('#rest-timer-text').textContent = `${Math.floor(rem/60)}:${String(rem%60).padStart(2,'0')}`;
+    if (bar) bar.style.setProperty('--p', String(Math.min(1, remMs / restTimer.total)));
     if (rem === 0) {
       clearInterval(restTimer.interval);
       restTimer.interval = null;
       restTimer.end = 0;
+      restTimer.total = 0;
       persistRestDeadline(null);
       el.style.display = 'none';
+      document.body.classList.remove('resting');
       if (settings.vibrate && navigator.vibrate) navigator.vibrate([200,100,200]);
       toast(t('rest_done'));
       fireRestEndNotification();
@@ -64,9 +73,11 @@ export function cancelRest() {
   if (restTimer.interval) clearInterval(restTimer.interval);
   restTimer.interval = null;
   restTimer.end = 0;
+  restTimer.total = 0;
   persistRestDeadline(null);
   const el = $('#rest-timer');
   if (el) el.style.display = 'none';
+  document.body.classList.remove('resting');
 }
 
 
