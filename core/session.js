@@ -64,11 +64,9 @@ export function generalWarmupComplete(warmup) {
 }
 // ---- Active session lifecycle ------------------------------
 export function startSession(session) {
-  // Was a native confirm(): English on an Arabic-only screen, and the exact
-  // dialog endSession() already refuses to rely on because a standalone PWA
-  // shell can suppress it — in which case this returned false and the tap did
-  // nothing at all. confirmAction() is the app's own sheet, in Arabic, and it
-  // cannot be suppressed. Async, so the caller re-enters once he has answered.
+  // confirmAction(), not confirm(): a standalone PWA shell can suppress the
+  // native dialog, in which case the tap did nothing at all. Async, so the
+  // caller re-enters once he has answered.
   if (state.active_session) {
     confirmAction({
       title: t('discard_session'),
@@ -85,16 +83,6 @@ export function startSession(session) {
   }
   const exercises = {};
   // His own order for this session, if he has set one.
-  //
-  // «بعض الأحيان الأجهزة تصير تنقل في النادي بشكل مبالغ فيه» — the gym moves
-  // machines and the printed order stops matching the room. Reordering is his
-  // call, it belongs to the SESSION rather than to one workout, and it survives:
-  // move the leg extension ahead of the RDL once and every Lower A after it
-  // opens that way.
-  //
-  // Applied as a sort, never as a replacement list: an id he has ordered that is
-  // no longer in the programme is dropped, and a new one the programme adds
-  // lands at the end instead of vanishing.
   const savedOrder = (state.exercise_order || {})[session.id];
   const orderedRows = Array.isArray(savedOrder) && savedOrder.length
     ? [...session.exercises].sort((a, b) => {
@@ -112,26 +100,16 @@ export function startSession(session) {
     const sug = suggestNextWeight(replacementId, effectivePlan);
     const suggestedWorkingWeight = editableWeightValue(sug.weight);
     const sets = [];
-    // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle`
-    // §8.4 gives every row an explicit `ramp_sets` count: 2 on the openers, 1 on
-    // most, 0 on a few. This used to read `plan.warmup` — a v15 STRING like
-    // "2 sets: 12.5kg×10" — which the Upper/Lower programme does not have, so
-    // the condition was never true and NO ramp sets were built at all. Raed
-    // noticed his warm-up sets had vanished; they had.
+    // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle` §8.4
+    // gives every row an explicit `ramp_sets` count: 2 on the openers, 1 on
+    // most, 0 on a few.
     const rampSets = Number.isFinite(plan.ramp_sets)
       ? plan.ramp_sets
       : (plan.warmup ? (/^2\s+sets/i.test(plan.warmup) ? 2 : 1) : 0);
     if (rampSets > 0) {
-      // Sourced ramp: 50% then 70% of the working load (ML L11160/L11162).
-      // A single ramp set uses the 50% entry, not the 70% one — the point is to
+      // Sourced ramp: 50% then 70% of the working load (ML L11160/L11162). A
+      // single ramp set uses the 50% entry, not the 70% one — the point is to
       // groove the movement, not to pre-fatigue it.
-      //
-      // With no history there is no working weight to take a percentage of, but
-      // the programme still PRESCRIBES the ramp. Dropping the rows entirely
-      // silently discarded that instruction on exactly the sessions where he is
-      // least sure what to do. The rows are built either way; without a
-      // suggestion they carry a blank weight and read «معايرة», like the working
-      // sets on a first exposure.
       const canSuggest = hasWorkingWeight(sug.weight);
       // The COUNT is passed in, so a one-ramp exercise gets its own 60% load
       // rather than the first half of a two-set pair.
@@ -148,11 +126,7 @@ export function startSession(session) {
       sets.push({ is_warmup: false, weight: suggestedWorkingWeight, reps: workingRepTarget(effectivePlan), effort: null, completed: false });
     }
     // Keyed by the ORIGINAL programme id, with swapped_to naming the
-    // replacement — the history lookups depend on that shape. `plan` now holds
-    // the swapped id and the re-entry overlay, so both must come from rawPlan.
-    // Carry the remembered «وزن الجهاز فقط» choice into the new session, and
-    // zero the loads it implies — otherwise the card opens with a blank box on a
-    // machine whose weight he has never had to enter.
+    // replacement — the history lookups depend on that shape.
     const machineOnly = Boolean(exercisePrefs(replacementId).machine_weight);
     if (machineOnly) for (const set of sets) if (!set.is_warmup) set.weight = 0;
     exercises[rawPlan.exercise_id] = {
@@ -178,12 +152,9 @@ export function startSession(session) {
   focusExerciseIdx = null;
   // A block transition may offer a configured skin, but cannot apply one.
   const prevBlock = state._last_toasted_block;
-  // `state.current_block` is written NOWHERE. grep the file: it is initialised to
-  // 1 in defaultState() and read only here, so curBlock was permanently 1,
-  // isBlockTransition was permanently false, and every block announcement — the
-  // "block N begins" toast, the block-boundary skin offer, and the deload week's
-  // own explanation — was unreachable code. The programme's real position comes
-  // from derivedBlock(), which is what resolveProgrammeBlock already uses.
+  // `state.current_block` is written NOWHERE, so curBlock was permanently 1 and
+  // every block announcement was unreachable. The programme's real position
+  // comes from derivedBlock().
   const curBlock = derivedBlock();
   const isBlockTransition = prevBlock != null && prevBlock !== curBlock;
   const skinBoundary = resolveBlockSkinBoundary({
@@ -207,11 +178,8 @@ export function startSession(session) {
         3: 'block_name_peak', 4: 'block_name_deload',
       };
       const blockName = t(blockKeys[curBlock] || 'block_name_new');
-      // The deload week has to explain itself. It is the one block where the
-      // app deliberately asks for LESS, and a lifter who is not told why reads
-      // fewer sets and a lower effort target as the app breaking, or sandbags
-      // it, or ignores it — [LADDER] L9844 warns about exactly that. So it gets
-      // its own sentence rather than the generic "block N begins".
+      // The deload week has to explain itself: it is the one block that asks for
+      // LESS, and a lifter who is not told why reads that as the app breaking.
       const message = curBlock === 4
         ? t('deload_week_begins')
         : tf('block_begins', { block: curBlock, name: blockName });
@@ -243,27 +211,8 @@ export function reopenSession(sess) {
 // guard below asks once instead of looping on itself.
 export let endSessionConfirmed = false;
 // Deletes the whole session. It used to be inline in two places, labelled
-// «تجاهل التمرين» — "skip the exercise" — behind a native confirm() whose body
-// was that same misleading label, with no undo afterwards. Raed asked what it
-// did. He could not tell, which is the whole problem: the most destructive
-// control in the app read like the least.
-//
-// confirmAction, not confirm(): an installed PWA can suppress the native one,
-// and this is the last thing that should silently do nothing — or silently
-// proceed.
-// A tombstone for a session the user deliberately ended.
-//
-// The sync server merges an incoming push against the head row. When the client
-// sends `active_session: null` — because he finished or discarded one — the
-// server could not tell that apart from "this writer simply has no session
-// running", so it restored its own copy. Measured against the real merge:
-// finishing a session put it in history AND brought it back as "in progress",
-// so finishing again duplicated it and double-counted the volume; discarding
-// one simply undid the discard.
-//
-// The server cannot infer intent, so the client states it. Only the exact
-// session named here is cleared; a genuinely concurrent session from another
-// device is untouched.
+// «تجاهل التمرين» — "skip the exercise" — behind a native confirm() whose
+// body was that same misleading label, with no undo afterwards.
 export function noteActiveCleared(session) {
   if (!session) return;
   const key = `${session.started_at || session.date || ''}|${session.session_id || ''}`;
@@ -279,11 +228,9 @@ export function discardSession() {
     danger: true,
   }).then((yes) => {
     if (!yes) return;
-    // Finishing a session offers an undo; discarding one did not, and discard is
-    // the more dangerous of the two — it is a bare tap plus a confirm standing
-    // between him and an hour of work, with no record afterwards anywhere. The
-    // session is kept in memory and put back exactly as it was, the same way
-    // reopenSession restores a finished one.
+    // Discarding is the more dangerous of the two and had no undo. The session is
+    // kept in memory and put back exactly as it was, the way reopenSession
+    // restores a finished one.
     cancelRest();
     const discarded = state.active_session;
     noteActiveCleared(discarded);
@@ -327,14 +274,7 @@ export function endSession() {
     });
     return;
   }
-  // Finishing with exercises still open used to archive silently. The guard
-  // above only fires when NOTHING is resolved, so the realistic case — one
-  // exercise done, six untouched, a mistaken tap on "finish" — went straight
-  // into history as a completed session. My own checklist claimed this was
-  // handled; it was not, and only the empty case ever was.
-  //
-  // Reopening from history exists, so this is recoverable, but it silently
-  // records a session he did not do and feeds the volume ledger a wrong number.
+  // Finishing with exercises still open used to archive silently.
   if (unresolved > 0 && !endSessionConfirmed) {
     confirmAction({
       title: t('end_session'),
@@ -358,11 +298,7 @@ export function endSession() {
     const device = exercisePrefs(entry.swapped_to || exerciseId).device;
     if (device) entry.device = device;
   }
-  // The rest timer is a session-scoped thing and nothing ever stopped it. Tick
-  // the last set (rest starts), tap «إنهاء وحفظ», and the floating ⏱ kept
-  // counting over the summary screen, then vibrated, toasted and fired a system
-  // notification for a workout that was already over. cancelRest was bound to
-  // exactly one thing: the ✕ on the overlay.
+  // The rest timer is a session-scoped thing and nothing ever stopped it.
   cancelRest();
   const finishedSession = { ...a, ended_at: new Date().toISOString(), prs: sessionPRs, stats };
   state.history.push(finishedSession);
@@ -447,17 +383,8 @@ export function runnerEntries(activeSession = state.active_session) {
   return Object.entries(activeSession?.exercises || {});
 }
 
-// Every edit to a weight or a reps box goes through here.
-//
-// This rule used to live in `updateRunnerSet(exerciseId, setIndex, ...)`, which
-// was defined here and called by NOTHING — grep across the whole repo returned
-// its own definition and nothing else. The two <input> handlers on the card
-// assigned `set.weight` / `set.reps` directly and never cleared the flags, so
-// the documented behaviour — "editing is recovery, not a dead end" — had never
-// once run. A row he flagged invalid stayed invalid however he corrected it,
-// and stayed uncountable, so the volume ledger kept ignoring a set he had
-// fixed. Same shape as superset_group: the rule was written, the reader was
-// never connected.
+// Every weight/reps edit goes through here, because editing is recovery: a row
+// he flagged invalid becomes countable again the moment he corrects it.
 export function applySetEdit(set, property, value) {
   if (!set) return;
   set[property] = value;
@@ -468,18 +395,9 @@ export function applySetEdit(set, property, value) {
     set.invalid = null;
     set.invalid_prompted = false;
   }
-  // Debounced, because this fires on every CHARACTER he types into a weight box
-  // and saveLocal() serialises the entire state — history included — twice, once
-  // for state and once for settings that did not change.
-  //
-  // Measured on a fast Mac with real volumes: one year of training is 1.5 MB and
-  // 5 ms a keystroke; three years is 4.5 MB and 9-16 ms. A phone is several times
-  // slower than that, in a gym, mid-set, while he types "42.5".
-  //
-  // The VALUE is already in `state` on the line above, so nothing is at risk
-  // between keystrokes: any later save — ticking the set, ending the session,
-  // leaving the field, hiding the app — writes it. Those flush points are wired
-  // below.
+  // Debounced, because this fires on every CHARACTER he types into a weight
+  // box and saveLocal() serialises the entire state — history included —
+  // twice, once for state and once for settings that did not change.
   scheduleSetEditPersist();
 }
 export let setEditTimer = null;
@@ -514,15 +432,6 @@ export function skipRunnerExercise(exerciseId) {
   toast(t('runner_exercise_skipped'));
 }
 
-// This is intentionally the v15 hand-off: show the selected platform's real
-// playlist links, open them in a separate tab, and leave playback to Spotify.
-
-
-// Phase 6: the old v15 workout card, deliberately retained as a card rather
-// than another full-screen runner concept. State mutations still go through
-// the Phase 4/5 guarded helpers so skip/invalid/weight rules are unchanged.
-
-
 export function showSessionPreview(session) {
   // Preview retired 2026-08-28. Raed: "خلاص ما أبغاه يعرض لي التمارين، على طول،
   // لأنه موجود خطة التمارين" — the plan is already on home, so pressing start
@@ -530,19 +439,6 @@ export function showSessionPreview(session) {
   startSession(session);
   return;
 }
-
-// The coach searches the 33 Nippard works Raed owns and answers out of them,
-// showing the passages it used with book and page.
-//
-// It used to only quote, and this comment used to say "it NEVER writes an answer
-// of its own" — true until 2026-09-03, and dangerous to leave standing once it
-// stopped being true, because it would send the next reader looking for an
-// architecture that is no longer here.
-//
-// What did NOT change is the rule underneath it. A generated training cue that
-// sounds confident and is wrong is the one failure this app cannot absorb, so:
-// no passages means the model is never called, and an answer that names no
-// passage is not shown. Only who assembles the sentence changed.
 
 export function appendExerciseToSession(exerciseId) {
   const active = state.active_session;

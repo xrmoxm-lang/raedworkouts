@@ -137,16 +137,6 @@ export function renderSettings() {
   const root = $('#page-settings');
   root.innerHTML = '';
   // A settings row that answers its own question.
-  //
-  // These were seven identical white slabs: no icon, no subtitle, no grouping,
-  // the chevron floating just left of the label and about two thirds of every
-  // row empty. Nothing could be learned without opening all seven in turn, and
-  // «سحب البيانات» — which can wipe the device — looked exactly like «المساعدة».
-  //
-  // The dead space becomes the answer: each row carries the state he would have
-  // opened it to read. The chevron moves to the far end where a disclosure
-  // indicator belongs, and the icon anchors the start edge so the rows scan as a
-  // list rather than a wall.
   const disclosure = (label, content, opts = {}) => {
     const summary = h('summary', {},
       opts.icon ? h('span', { class: 'sd-icon', 'aria-hidden': 'true' }, opts.icon) : null,
@@ -270,17 +260,9 @@ export function renderSettings() {
     )
   ));
 
-  // Rest timer.
-  //
-  // Raed asked why the timer says 2:30 while this box says 120. Because the
-  // programme prescribes rest PER EXERCISE (rest_min: 2.5 on Machine Chest
-  // Press), and prescribedRestSeconds() rightly prefers it. This value is only
-  // reached for a row that has no prescribed rest.
-  //
-  // The old label said "Default seconds between sets", which reads like the
-  // control for every set. A setting that looks like it governs something and
-  // is quietly overridden is worse than no setting: he changed it, watched
-  // nothing happen, and had to ask.
+  // Only a fallback: prescribedRestSeconds prefers the programme's own rest_min,
+  // so this value is reached for a row that has none. Raed asked why the timer
+  // says 2:30 while this box says 120.
   card.appendChild(h('div', { class: 'setting-row' },
     h('div', { class: 'label' },
       h('div', { class: 'name' }, t('rest_fallback')),
@@ -516,12 +498,6 @@ export function renderSettings() {
         if (event.target.value) settings.block_skin_suggestions[block] = event.target.value;
         else delete settings.block_skin_suggestions[block];
         // Choosing again clears the veto.
-        //
-        // Declining a proposal writes block_skin_rejections[block] = true, and
-        // the domain refuses that block forever after. Changing the mapping
-        // wrote only the suggestion — so the select would sit there displaying a
-        // skin the app had already decided never to offer him again. A rejection
-        // is «not that one», not «never ask about this block».
         if (settings.block_skin_rejections?.[block]) {
           settings.block_skin_rejections = { ...settings.block_skin_rejections };
           delete settings.block_skin_rejections[block];
@@ -534,10 +510,8 @@ export function renderSettings() {
     select.value = settings.block_skin_suggestions?.[block] || '';
     return h('label', { class: 'block-skin-select' }, tf('block_number', { n: block }), select);
   };
-  // Every block the programme actually has, read from the programme rather than
-  // hard-coded. It listed [1, 2, 3] while the mesocycle gained a fourth block —
-  // the deload — so the one week whose whole point is that it feels different
-  // was the one week he could not give a skin to.
+  // Every block the programme actually has, read from the programme rather
+  // than hard-coded.
   const configurableBlocks = [...new Set(((state.programme_overrides || RW.PROGRAMME).blocks || [])
     .map((entry) => entry.block).filter(Number.isFinite))].sort((a, b) => a - b);
   adv.appendChild(h('div', { class: 'block-skin-config' },
@@ -663,13 +637,9 @@ export function renderSettings() {
     ),
   );
   preferencesContent.appendChild(langCard);
-  // The coach's own section, collapsed like every other one. I shipped it open
-  // and full-height at the top of the page — Raed: "المفروض فيه زر زي الزر حق
-  // الإعدادات الباقية... نفس السهم اللي على اليمين". He is right: a settings
-  // page where one card behaves differently from the other six is not a
-  // settings page, it is six settings and an announcement.
-  // Each hint is the thing he would have opened the row to find out. Built
-  // defensively: a settings screen must render even when a value is missing.
+  // The coach's own section, collapsed like every other one. I shipped it
+  // open and full-height at the top of the page — Raed: "المفروض فيه زر زي
+  // الزر حق الإعدادات الباقية... نفس السهم اللي على اليمين".
   const skinName = SKINS[activeSkin()]?.label || "";
   const themeName = t(settings.theme === 'light' ? 'theme_light' : settings.theme === 'dark' ? 'theme_dark' : 'theme_auto');
   const platform = PLATFORM_INFO[settings.music_platform || 'spotify']?.label || '';
@@ -720,10 +690,8 @@ export function buildHelpCard() {
   return card;
 }
 
-// ---- Boot ---------------------------------------------------
-// Hands the log over as a file HE shares, deliberately: no upload, no endpoint,
-// nothing automatic. A Blob download rather than a copy-to-clipboard because a
-// thousand lines do not survive a paste on a phone.
+// Hands the log over as a file HE shares, deliberately: no upload, no
+// endpoint, nothing automatic.
 export function exportTapLog() {
   const rows = Array.isArray(state[TAP_LOG_KEY]) ? state[TAP_LOG_KEY] : [];
   if (!rows.length) return;

@@ -16,7 +16,6 @@ export const SYNC_URL = 'https://raed-hp.tail53bd35.ts.net:8443';
 export const SYNC_KEY = 'aa1b222bcdab4b048e7b44d85dca087946a6212314852b4b';
 export const SYNC_OVERRIDE_KEY = 'raedworkouts_sync_override';
 
-// ---- State / storage layer ----------------------------------
 export const LEGACY_STORAGE_KEY = 'raedworkouts.v1';
 export const LEGACY_SETTINGS_KEY = 'raedworkouts.settings.v1';
 export const LEGACY_LAST_WRITE_KEY = 'raedworkouts.lastwrite.v1';
@@ -24,19 +23,8 @@ export const ACTIVE_USER_KEY = 'raedworkouts.active_user';
 export const PROFILE_INDEX_KEY = 'raedworkouts.profiles.v1';
 
 // ---- Guarded storage ---------------------------------------------------
-//
-// Every write in this file used to call localStorage.setItem bare. There was no
-// try/catch on a single one of the fifteen, and no window.onerror either. A
-// QuotaExceededError — a full origin, Safari with site data blocked, a private
-// window — therefore threw straight out of saveLocal(), out of the tap handler
-// that called it, and died as an uncaught page error. Proven, not theorised: a
-// probe that made setItem throw showed the set still ticked on screen, no toast,
-// no sync status, and nothing written. He would have finished the workout and
-// found it gone.
-//
-// So: writes never throw, and a failed write is LOUD. It also stops pretending
-// the data is safe locally and pushes to the server immediately, because the
-// cloud row is the only place left that can hold it.
+// Every write in this file used to call localStorage.setItem bare. There was
+// no try/catch on a single one of the fifteen, and no window.onerror either.
 export let storageFailed = false;
 export function safeSetItem(key, value) {
   try {
@@ -114,9 +102,8 @@ export const defaultState = () => ({
   last_sync: null,
   forced_next_session: null,   // session id override when user missed a day
   substitutions: [],           // explicit, scoped D24 §5 substitution records
-  // Per-exercise equipment memory. Raed does leg press on a different machine
-  // depending on which is free, and 60 kg on one is not 60 kg on another — so
-  // the machine has to be part of the record, not a note he keeps in his head.
+  // Per-exercise equipment memory: 60 kg on one leg press is not 60 kg on
+  // another, so the machine has to be part of the record.
   // { exercise_id: { equipment, device, known_devices: [] } }
   exercise_prefs: {},
 });
@@ -131,12 +118,9 @@ export const defaultSettings = () => ({
   superset_mode: 'auto',       // auto | manual | off — how A1/A2 pairs behave
   vibrate: true,
   notifications: true,         // browser notifications when rest ends (req permission)
-  // `focus_mode` and `show_cues` lived here for months as dead state: no reader
-  // anywhere in the file and no control in Settings. v15 had a real focus-mode
-  // switch (one exercise vs all); v16 always renders one, which is the low-scroll
-  // runner Raed asked for repeatedly — so the BEHAVIOUR is the one he wants and
-  // only the unused key is gone. If he wants the choice back it is a real
-  // feature to build, not a key to re-add.
+  // `focus_mode` and `show_cues` were dead state: no reader, no control. v16
+  // always renders one exercise, which is the behaviour Raed asked for, so only
+  // the unused keys are gone. Bringing the choice back is a feature, not a key.
   runner_video_open: true,     // persisted per profile; Raed wants the explanation open by default
   // The coach may be told which exercise he is standing at. On by default; the
   // switch is on the Coach screen while a session is running.
@@ -385,11 +369,6 @@ export function loadLocal() {
   restoreCoachAnswer();
   migrateVideoHiddenKeys();
   // «Off» is enforced here, not only by the button that turns it off.
-  //
-  // The toggle deletes the log when he switches recording off, but the setting
-  // can also arrive off from somewhere else — a restored backup, a sync from his
-  // other device, an imported profile — and a record of his taps sitting on the
-  // phone while the switch reads Off is not what Off means.
   if (settings.tap_log !== true && state[TAP_LOG_KEY]) delete state[TAP_LOG_KEY];
   // D6 replaces the selectable v15 programme variants. Stored values are
   // deliberately retired rather than interpreted as new programme choices.
@@ -424,16 +403,6 @@ export function persistLocal() {
   registerLocalProfile({ user_id: settings.user_id, ...state.profile });
 }
 // Headroom, NOT pruning.
-//
-// `state.history` grows forever — about a megabyte a year at four sessions a
-// week, against a localStorage budget of roughly five. That is years away, and
-// deleting his training history to stay under a limit is not a trade this app
-// gets to make on its own. So nothing is ever removed here. The only job is to
-// stop the ceiling arriving as a surprise: measure what this app is actually
-// using, and say so once, early, while there is still plenty of room to act.
-//
-// Cheap enough to run at boot and after a session, nowhere near the keystroke
-// path.
 export const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
 export const STORAGE_WARN_RATIO = 0.7;
 export let storageWarned = false;
@@ -471,18 +440,8 @@ export function saveLocal(opts = {}) {
   if (sync && dirty && !suppressNextPush) schedulePush();
 }
 // Interaction log — his idea, and a better one than describing a problem in
-// words: «وش رأيك تصير أنت تراقب الضغطات وأزراري ونجلس نسجل كم جلسة، وبعدين بعد
-// كل جلسة أقول لك ها وش رأيك».
-//
-// Deliberately narrow, because this records a person:
-//  - OFF by default, and only he can turn it on.
-//  - Never leaves the phone. No sync, no server, no automatic anything. It sits
-//    in localStorage until he taps export and hands it over himself.
-//  - Records WHAT was pressed and WHEN, never what he typed. A question to the
-//    coach, a weight, a device name — none of it is his interface, and none of
-//    it belongs in a log about buttons.
-//  - Capped, and it drops the oldest first. An unbounded log on a phone whose
-//    storage already has a headroom warning is a way to lose a workout.
+// words: «وش رأيك تصير أنت تراقب الضغطات وأزراري ونجلس نسجل كم جلسة، وبعدين
+// بعد كل جلسة أقول لك ها وش رأيك».
 export const TAP_LOG_KEY = 'tap_log';
 export const TAP_LOG_MAX = 1200;
 export function tapLogOn() { return settings.tap_log === true; }
@@ -507,10 +466,9 @@ export function recordTap(target) {
       live: Boolean(state.active_session),
     });
     if (log.length > TAP_LOG_MAX) log.splice(0, log.length - TAP_LOG_MAX);
-    // Rides the SAME debounce a weight edit uses. saveLocal() serialises the
-    // whole state twice, and a log entry is never worth that between him and the
-    // next set — scheduleSetEditPersist already coalesces at 400ms and every
-    // flush point (ticking a set, hiding the app, ending the session) writes it.
+    // Rides the SAME 400ms debounce a weight edit uses: saveLocal() serialises
+    // the whole state twice, and a log entry is never worth that between him and
+    // the next set.
     scheduleSetEditPersist();
   } catch (_) { /* a log that throws is worse than no log */ }
 }

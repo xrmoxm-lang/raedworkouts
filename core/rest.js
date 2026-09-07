@@ -8,17 +8,6 @@ import { nsKey, safeGetItem, safeRemoveItem, safeSetItem, settings, state } from
 // ---- Rest timer --------------------------------------------
 export const restTimer = { interval: null, end: 0 };
 // The deadline is persisted, not just held in `restTimer`.
-//
-// The auto-update path reloads the page the moment the app is hidden while a
-// session is open — which is precisely the moment he pockets the phone to rest.
-// The countdown lived only in this module-level object, so the reload killed the
-// interval, hid the timer, and the alarm that was supposed to end his rest never
-// fired. He looks two minutes later at a phone showing nothing. Same for an iOS
-// tab eviction, which is routine with the screen off.
-//
-// Storing the deadline means any reload resumes the same countdown, and one that
-// expired while the page was gone fires immediately on return instead of
-// vanishing.
 export function persistRestDeadline(endMs) {
   if (!settings.user_id) return;
   if (endMs) safeSetItem(nsKey(settings.user_id, 'restend'), String(endMs));
@@ -80,7 +69,6 @@ export function cancelRest() {
   if (el) el.style.display = 'none';
 }
 
-// ---- Renderers ---------------------------------------------
 
 // ---- Notifications API ---------------------------------------
 export function initNotifications() {
@@ -109,12 +97,8 @@ export async function fireRestEndNotification() {
   };
   const title = t('rest_done');
   try {
-    // `serviceWorker.ready` is specified NEVER to reject: it waits forever until
-    // some registration has an active worker. If register() failed, or install
-    // threw because one shell URL 404'd on a partial deploy, this await simply
-    // never returned — so the `new Notification` fallback, which exists for
-    // exactly that failure, was unreachable in exactly that failure. The alarm
-    // went silent with nothing logged. Race it against a short timeout.
+    // `serviceWorker.ready` is specified NEVER to reject: it waits forever
+    // until some registration has an active worker.
     const reg = await Promise.race([
       navigator.serviceWorker?.ready,
       new Promise((resolve) => setTimeout(() => resolve(null), 1500)),

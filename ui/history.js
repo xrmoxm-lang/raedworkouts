@@ -85,16 +85,7 @@ export function renderHistory() {
       ),
     ));
     // Delete a logged session. Raed: "حط في إمكانية تعديل السجل... بس حذف
-    // الجلسة اللي تفرق". It lives INSIDE the expanded panel, not on the collapsed
-    // card, so removing a session is two deliberate taps and never a mis-tap
-    // while scrolling the list.
-    //
-    // `sess` is the same object as the one in state.history — the reverse() above
-    // copies the array, not its entries — so indexOf finds the real position.
-    // Deleting by the loop's index would delete from the wrong end of the list.
-    // Re-open. Raed: "المفروض السجل أضغط التعديل يفتح لي الجلسة من جديد" — a
-    // session finished by mistake has to be recoverable after the undo toast is
-    // gone, which is when he usually notices.
+    // الجلسة اللي تفرق".
     expanded.appendChild(h('button', {
       class: 'btn full', 'data-reopen-session': 'true', style: 'margin-top:14px;',
       onClick: async (event) => {

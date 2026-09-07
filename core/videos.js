@@ -67,42 +67,25 @@ export function deleteCustomExercise(id) {
 }
 
 // ---- Video visibility helpers --------------------------------
-//
-// A hidden clip is remembered by WHICH CLIP it is, not by where it sits in the
-// list. It used to be the position — 'mohannad_0', 'mohannad_1' — and the list
-// is not stable: videos.test.mjs exists precisely because clips get retired
-// when YouTube takes them down, and retiring one shifts every clip after it.
-//
-// Measured on incline_chest_press, which carries three: hide the second
-// (wMksQXD01K0), retire the first, and 'mohannad_1' now names o0Ud3RU59hw. A
-// clip he deliberately hid comes back and a different one disappears, silently.
-// It is the wrong-video failure D8 is written against, arriving through the
-// back door of a preference.
+// A hidden clip is remembered by WHICH CLIP it is, not by where it sits in
+// the list.
 export const videoIdentity = (video) => (video && video.id) ? 'yt:' + video.id : 'url:' + String(video?.url || '');
 
-// One-time conversion of the positional keys already stored. It is only correct
-// while the lists still match what they were when he made the choice, which is
-// why it runs at load rather than lazily — the moment a clip is retired, the
-// old keys stop meaning anything and there is nothing left to convert.
+// One-time conversion of the positional keys already stored.
 export function migrateVideoHiddenKeys() {
   if (state.video_hidden_key_version >= 2) return;
   const stored = state.video_hidden;
-  // Whether anything actually moved. The first cut called saveLocal() on every
-  // load — including the overwhelmingly common case of an empty video_hidden —
-  // and saveLocal() marks the state dirty for sync, so every boot queued a push.
-  // Twelve browser tests started failing on `page.reload: Timeout 20000ms` and
-  // the suite went from 2.9 to 8.0 minutes. A migration that finds nothing to do
-  // must leave no trace but its own version marker.
+  // Whether anything actually moved. A migration that finds nothing to do must
+  // leave no trace but its own version marker: saveLocal() marks the state dirty,
+  // so an unconditional call queued a sync push on every single boot.
   let changed = false;
   if (stored && typeof stored === 'object') {
     for (const [exerciseId, list] of Object.entries(stored)) {
       if (!Array.isArray(list) || !list.length) continue;
       const exercise = getAllExercises().find((item) => item.id === exerciseId);
       if (!exercise) continue;
-      // buildExerciseVideos still emits the old positional `key` alongside each
-      // clip, so the map comes straight from it. Reconstructing the key by hand
-      // got the custom-video index wrong — those count within their own list,
-      // not the combined one.
+      // buildExerciseVideos still emits the old positional `key` alongside
+      // each clip, so the map comes straight from it.
       const byPosition = new Map(
         buildExerciseVideos(exerciseId, exercise, { includeHidden: true })
           .map((video) => [video.key, videoIdentity(video)]));
@@ -142,20 +125,9 @@ export function getJNUrl(exerciseId) {
 export function jnHasCustomOverride(exerciseId) {
   return Boolean(state.custom_jn_urls?.[exerciseId]);
 }
-// Adding a clip, hardened.
-//
-// Raed is building the library himself, from his phone, one clip at a time:
-// "أنا وأنا أمشي بظيف، أضيف أضيف مقاطع لين أبني مكتبة كويسة". So the whole path
-// has to survive being used on a phone, repeatedly, with a paste.
-//
-// What it replaces was a native prompt() that:
-//   * an installed PWA can suppress outright, which is exactly where he uses it;
-//   * is painful to paste into on iOS;
-//   * stored the raw string, so youtu.be/ID and youtube.com/watch?v=ID became
-//     two different clips of the same video;
-//   * said "added" whether or not the change ever reached the server.
-//
-// His synced state carried ZERO custom videos, which is what sent me looking.
+// Not a native prompt(): an installed PWA can suppress it. Clips are compared by
+// VIDEO ID, so youtu.be/ID and watch?v=ID are one clip, and the status line says
+// it is saved on the phone before it claims the server took it.
 export function addCustomVideo(exerciseId) {
   const ex = getAllExercises().find((item) => item.id === exerciseId);
   const modal = $('#modal');
@@ -268,12 +240,6 @@ export function setJNUrl(exerciseId, url) {
   saveLocal();
 }
 // Anchored to a real http(s) YouTube URL.
-//
-// The pattern was unanchored, so it matched a video id ANYWHERE in the string
-// and `javascript:alert(1)//v=AAAAAAAAAAA` was accepted as a valid clip. That URL
-// is then stored and rendered as `href: v.url` on the exercise card — tapping the
-// tile would execute it. Clips also arrive from a synced or imported state, not
-// only from him typing one in.
 export function ytIdFromUrl(url) {
   if (!url) return null;
   const raw = String(url);
@@ -303,10 +269,9 @@ export function buildExerciseVideos(exerciseId, ex, opts = {}) {
       title: jnHasCustomOverride(exerciseId) ? 'JN (custom)' : 'Jeff Nippard',
       nippard: true,
     }] : []),
-    // Clips Raed chose himself in the link picker. Stored as full URLs, not bare
-    // ids, because three of them carry a ?t= that points at the right exercise
-    // inside a long video — drop the timestamp and it becomes a different
-    // movement, which is the wrong-video case D8 forbids.
+    // Clips Raed chose himself, stored as full URLs and not bare ids: three carry
+    // a ?t= that points at the right exercise inside a long video, and dropping
+    // the timestamp makes it a different movement.
     ...(ex.extra || []).map((url, i) => ({
       key: 'extra_' + i,
       id: ytIdFromUrl(url),
@@ -346,9 +311,7 @@ export function getCurrentPlaylists(session) {
 
 // A citation URL reaches this page from a web search the model ran, so it is
 // untrusted input that ends up in an href. `javascript:` and `data:` hrefs
-// execute on tap; nothing was checking the scheme. Only real http(s) links are
-// offered, and anything else is dropped rather than shown as an inert chip —
-// a source he cannot open is not a source.
+// execute on tap; nothing was checking the scheme.
 export function isSafeHttpUrl(value) {
   if (typeof value !== 'string' || !value) return false;
   try {
@@ -360,19 +323,8 @@ export function isSafeHttpUrl(value) {
 }
 
 // ---- Clip classification -------------------------------------------------
-// Raed: "بعض مقاطع الفيديو تكون special لتمرين... بالمشين، بالدمبل، بالكابل...
-// نحتاج نلاقي طريقة نصنف كل واحدة منها".
-//
-// Two exercises may share a clip only when they are the SAME movement on
-// different equipment. That is a narrow claim and it has to stay narrow:
-// stripping words too eagerly put a standing shoulder press in the same family
-// as a decline chest press, and a clip of one is a WRONG clip for the other —
-// which is the case D8 exists to prevent.
-//
-// So equipment words are stripped and nothing else. Angle (incline/decline/
-// flat), posture, grip and side are movement-defining and stay in the key, and
-// the primary muscle is part of the key as well. Six families survive that,
-// which is the point: a small honest set beats a large wrong one.
+// Raed: "بعض مقاطع الفيديو تكون special لتمرين... بالمشين، بالدمبل،
+// بالكابل... نحتاج نلاقي طريقة نصنف كل واحدة منها".
 export const EQUIPMENT_PATTERNS = [
   [/hammer strength/i, 'machine'],
   [/\bsmith\b/i, 'machine'],

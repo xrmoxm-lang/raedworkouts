@@ -66,10 +66,9 @@ export function renderSessionEnd() {
   root.innerHTML = '';
   const s = _endScreenSession;
   if (!s) {
-    // Was a hand-written innerHTML string, and the only one in the file: English
-    // («Session saved.» / «Home») on an Arabic-only screen, and markup where
-    // every other screen builds nodes. The Arabic-leak scan could not see it
-    // because it looked at toast() and t() calls, not at raw markup.
+    // Was a hand-written innerHTML string, and the only one in the file:
+    // English («Session saved.» / «Home») on an Arabic-only screen, and
+    // markup where every other screen builds nodes.
     root.appendChild(h('div', { class: 'empty' },
       h('div', { class: 'big' }, '✓'),
       h('p', { class: 'muted' }, t('session_saved')),
@@ -84,10 +83,9 @@ export function renderSessionEnd() {
 
   const wrap = h('div', { class: 'session-end' },
     h('div', { class: 'hero' }, '💪'),
-    // 'Session done.' — with the full stop — was in no locale entry, so this
-    // one heading rendered English on the screen shown after every workout.
-    // session_done_title is keyed to 'Workout finished'; the two strings were
-    // never the same, which is why the Arabic gate did not catch it.
+    // session_done_title, not a literal: 'Session done.' — with the full stop —
+    // matched no locale entry, so this one heading rendered English on the
+    // screen shown after every workout.
     h('h2', {}, t('session_done_title')),
     h('div', { class: 'subtitle' }, fmtDate(s.started_at) + ' · ' + s.session_name),
 
@@ -122,10 +120,7 @@ export function renderSessionEnd() {
 
     h('div', { class: 'reminder' }, msg),
 
-    // The once-a-week check that research/06 §7.3 turns on. It appears here
-    // because he has just trained and knows exactly how the week has felt, and
-    // it appears ONCE a week — the source measures these signs over a week, and
-    // he does not want the app asking him things.
+    // The once-a-week check that research/06 §7.3 turns on.
     wellbeingCheckDue() ? buildWellbeingCheck() : null,
 
     h('div', { class: 'next-up' },

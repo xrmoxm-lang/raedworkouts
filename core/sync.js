@@ -222,18 +222,12 @@ export async function flushSync(opts = {}) {
         ok = await syncToCloud(opts);
         return ok;
       } catch (err) {
-        // Name the likely cause instead of echoing a raw error. Unreachable and
-        // rejected are different problems with different fixes, and telling them
-        // apart on screen is what turns "فشلت المزامنة" into something he can act
-        // on — or report to me precisely.
+        // Name the likely cause instead of echoing a raw error.
         setSyncStatus('err', syncFailureReason(err));
         if (!saveLocal._toastShown) {
           saveLocal._toastShown = true;
           // «حُفظت محلياً» is only true when the phone actually accepted the
-          // write. With storage failing too there is no copy anywhere, and
-          // saying "saved locally" would be the single most misleading sentence
-          // the app could show him. A probe caught this one overwriting the
-          // storage warning three seconds after it appeared.
+          // write.
           toast(storageFailed ? t('nothing_saved_anywhere') : t('cloud_sync_failed'), storageFailed ? 8000 : 3500);
         }
         return false;
@@ -273,10 +267,9 @@ export async function pullFromCloud() {
 }
 
 
-// Turns a fetch failure into something Raed can act on. A network-level failure
-// and a rejected request are different problems: one means the server cannot be
-// reached at all, the other means it answered and said no. Reporting them the
-// same way is what made a real outage take an investigation to diagnose.
+// Turns a fetch failure into something Raed can act on. A network-level
+// failure and a rejected request are different problems: one means the server
+// cannot be reached at all, the other means it answered and said no.
 export function syncFailureReason(err) {
   const message = String(err?.message || err || '');
   const status = Number(err?.status || (message.match(/\b(\d{3})\b/) || [])[1]);
@@ -285,15 +278,7 @@ export function syncFailureReason(err) {
   if (status >= 500) return t('sync_server_error');
   if (/failed to fetch|networkerror|load failed|timeout|abort/i.test(message)) {
     // Chrome 147 blocks a public page from reaching the "local address space"
-    // behind a permission. On a machine running Tailscale, MagicDNS resolves the
-    // sync host to its 100.x CGNAT address, so Chrome classifies it as local and
-    // refuses — while Safari, which does not implement Local Network Access,
-    // works on the same machine against the same server. Diagnosed 2026-09-02:
-    // every request failed with net::ERR_FAILED and "Permission was denied for
-    // this request to access the `local` address space".
-    //
-    // Naming it matters: "cannot reach your server" sends him to check the
-    // server, which is healthy. The problem is one browser's permission.
+    // behind a permission.
     if (isChromiumLike()) return t('sync_blocked_by_browser');
     return t('sync_unreachable');
   }
@@ -383,17 +368,6 @@ export async function selectProfile(profile) {
 }
 // Adopt a profile on THIS device without ever discarding what the device
 // already holds for it.
-//
-// This and openProfile below both used to do `state = { ...defaultState() }`
-// and then persistLocal(). Nothing read the stored state first. So tapping your
-// own name on the welcome screen with the server unreachable — gym wifi, HP
-// off, aeroplane mode — wrote a blank state straight over your training log.
-// Proven with a probe: three sessions and a personal record seeded, tile
-// tapped, both gone. There was no undo and no warning, and the suite was green.
-//
-// Now the stored state is loaded first and only genuinely missing profile
-// fields are filled in. A brand-new profile has nothing stored, so it still
-// starts empty — the same result, reached without destroying anything.
 export function adoptProfileLocally(userId, profile) {
   setActiveUser(userId);
   loadLocal();

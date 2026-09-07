@@ -4,10 +4,7 @@ import { $, $$ } from '../core/dom.js';
 import { settings } from '../core/store.js';
 import { format as localeFormat, text as localeText } from '../locale.js';
 
-// ---- i18n ---------------------------------------------------
 // Every renderer supplies an English source/key to this single locale map.
-// Arabic text is the default; English exercise names and numeric runs are
-// isolated below so punctuation cannot jump across an RTL sentence.
 export const activeLanguage = () => settings?.lang || 'ar';
 export const t = (key) => localeText(key, activeLanguage());
 export const tf = (key, values) => localeFormat(key, values, activeLanguage());
@@ -55,30 +52,11 @@ export const fmtTime = (d) => {
   return `${hour}:${minute} ${period || ''}`.trim();
 };
 // His local calendar date, not UTC's.
-//
-// This was `new Date().toISOString().slice(0,10)`, which is the date in UTC.
-// Riyadh is UTC+3, so between local midnight and 03:00 the app stamped
-// YESTERDAY. Proven live at 01:37 on 5 September: the app wrote 2026-09-04.
-// Raed trains late — an earlier screenshot shows a session started 12:05 ص — and
-// this date stamps his workouts, his personal records, his bodyweight log and
-// his exports. A late session landed on the wrong day in every one of them, and
-// the week strip then drew it on the wrong square.
-//
-// Device-local rather than a hardcoded Asia/Riyadh, so it stays right if he
-// travels. 'en-CA' is the locale whose short date is already YYYY-MM-DD.
 export const localISODate = (date = new Date()) => date.toLocaleDateString('en-CA');
 export const todayISO = () => localISODate();
-// Weekly volume runs to thousands of kg, so it gets a grouping separator and no
-// decimal — whole kilos are plenty at that scale, and dropping the fraction
-// kills the ambiguity entirely.
-//
-// The bug this replaces: the locale-less formatter followed the DEVICE, so the
-// same app rendered "267.2" on one phone and "267,2" on another, and neither
-// matched fmtKgValue below, which always uses a dot. Pinning the locale makes
-// the number mean the same thing on every phone.
-// A single lifted load, kept exact. Gym plates land on halves, so rounding to
-// whole kilos misreports what he did; trailing zeros are dropped so 60 stays
-// "60" rather than "60.0".
+// Weekly volume runs to thousands of kg, so it gets a grouping separator and
+// no decimal — whole kilos are plenty at that scale, and dropping the
+// fraction kills the ambiguity entirely.
 export function fmtLoadKg(value) {
   const n = Number(value) || 0;
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
@@ -111,29 +89,13 @@ export function suggestedWeightPlaceholder(value) {
   return hasWorkingWeight(value) ? fmtKgValue(value) : t('calibrate');
 }
 // Blank and zero are different things, and this used to collapse them.
-//
-// It was `hasWorkingWeight(value) ? Number(value) : ''`, and hasWorkingWeight is
-// `> 0` — so an explicit 0, which the app supports on purpose for a machine that
-// carries its own stack, came back as ''. Consequences, all proven on screen:
-// a completed 0 kg set re-rendered with an EMPTY weight box, so work he had
-// logged looked unrecorded and tapping the tick again answered «مطلوب»; and
-// «+ مجموعة» after a 0 kg set created a row holding '' rather than 0, which on
-// a readOnly machine-weight card he could never fill in and never complete.
-//
-// domain/runner-session.js already draws this distinction correctly in
-// hasValidWorkingValues. This is the same rule: absent is blank, 0 is a number.
 export function editableWeightValue(value) {
   if (value === '' || value === null || value === undefined) return '';
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : '';
 }
-// Shown once every exercise is resolved. Raed asked for the elapsed time —
-// "أبغى بصفحة التمارين يقول لي إنه خلصت التمرين خلال كم" — and the duration is
-// worth more than the volume number here: it is the one thing he cannot
-// reconstruct later from the log.
-// Arabic counts again: 1 singular, 2 dual, 3-10 plural, 11+ back to singular.
-// A workout is usually 30-90 minutes so «دقيقة» is right most of the time, but a
-// short session lands squarely in the 3-10 band where it is wrong.
+// Arabic counts: 1 singular, 2 dual, 3-10 plural, 11+ back to singular. A short
+// session lands squarely in the 3-10 band, where «دقيقة» is wrong.
 export function arabicMinutes(n) {
   if (activeLanguage() !== 'ar') return tf('session_done_minutes', { n });
   if (n === 1) return t('minutes_one_ar');

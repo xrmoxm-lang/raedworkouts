@@ -10,12 +10,9 @@ import { buildVideoTile } from '../ui/kit.js';
 
 export function renderWarmupPhase(activeSession) {
   const warmup = activeSession.warmup;
-  // Three lines of preamble used to sit above the first thing he does: an
-  // eyebrow («المرحلة الأولى · الإحماء»), a heading repeating it with a time
-  // cap, and a sentence describing the two steps that are listed immediately
-  // below in full. Raed: "أول شيل هذا على طول... ما لها سنة". He is right —
-  // the screen only ever has two steps, both numbered and named, and nothing
-  // above them said anything the steps did not.
+  // Three lines of preamble used to sit above the first thing he does. Raed:
+  // «أول شيل هذا على طول... ما لها سنة» — the screen only ever has two steps,
+  // both numbered and named.
   const card = h('div', { class: 'card warmup-phase' });
   const treadmillDone = warmup.treadmill_done;
   card.appendChild(h('div', { class: 'warmup-step' },
@@ -25,13 +22,9 @@ export function renderWarmupPhase(activeSession) {
       onClick: () => { warmup.treadmill_minutes = minutes; warmup.treadmill_done = true; saveLocal(); render(); },
     }, h('bdi', { class: 'ltr-run' }, String(minutes)), ' ', t('minutes'))))
   ));
-  // Each drill carries ITS OWN clip, on its own row. They used to be collected
-  // into one "warm-up clips" strip underneath, which is what Raed objected to:
-  // "المفروض تكون لكل تمرين مقطع خاص... حاطني إنت كل المقاطع سوا". The strip
-  // existed because the row is a tick button and a link cannot live inside a
-  // button — tapping to watch would also have marked the drill done. The answer
-  // is not to move the clip away from its drill; it is to give the row two
-  // targets: the tick, and the thumbnail beside it.
+  // Each drill carries ITS OWN clip, on its own row. They used to be
+  // collected into one "warm-up clips" strip underneath, which is what Raed
+  // objected to: "المفروض تكون لكل تمرين مقطع خاص...
   card.appendChild(h('div', { class: 'warmup-step' },
     h('div', {}, h('strong', {}, t('drills')), h('div', { class: 'tiny muted' }, t('ten_reps_each'))),
     h('div', { class: 'warmup-drill-list' }, warmup.drills.map((drill) => {

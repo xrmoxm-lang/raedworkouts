@@ -6,7 +6,6 @@ import { renderSettings } from '../core/shell.js';
 import { replaceSettings, saveLocal, settings } from '../core/store.js';
 import { rejectedSkinSuggestion, suggestionForBlockBoundary } from '../domain/skin-suggestions.mjs';
 
-// ---- Theme --------------------------------------------------
 export const SKINS = {
   hadid: { label: 'حديد', sw_light: '#b8451a', sw_dark: '#e8622d', theme_dark: '#17130f' },
   waraq: { label: 'ورق', sw_light: '#7c1f2e', sw_dark: '#743d4a', theme_dark: '#121110' },

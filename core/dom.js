@@ -4,7 +4,6 @@
 import { activeLanguage, localizeText, t } from '../core/i18n.js';
 import { storageFailed } from '../core/store.js';
 
-// ---- Tiny utility helpers -----------------------------------
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 export const h = (tag, attrs = {}, ...children) => {
@@ -21,11 +20,9 @@ export const h = (tag, attrs = {}, ...children) => {
   }
   for (const c of children.flat()) {
     if (c == null || c === false) continue;
-    // A <bdi> already isolates everything inside it, so splitting its own string
-    // children into further <bdi class="ltr-run"> runs produces <bdi><bdi>…</bdi></bdi>.
-    // Renderers wrap Latin names manually AND localizedTextNode wraps them
-    // automatically, so every such call site was doubling. Translate the string
-    // here, but leave the isolation to the <bdi> we are already building.
+    // A <bdi> already isolates everything inside it, so splitting its own
+    // string children into further <bdi class="ltr-run"> runs produces
+    // <bdi><bdi>…</bdi></bdi>.
     if (typeof c === 'string') {
       el.appendChild(tag === 'bdi' ? document.createTextNode(localizeText(c)) : localizedTextNode(c));
       continue;
@@ -47,9 +44,6 @@ export const brandMark = () => h('svg', {
 // Keep an approved technical URI together. The general run deliberately
 // leaves sentence punctuation outside <bdi>; the URI alternative prevents a
 // scheme such as scope.bit:// from being split into a false English fragment.
-// The comma belongs in the run class. Without it "4,658" split into two runs —
-// "4" and "658" — with the separator loose between them, and RTL reordered the
-// whole thing into "658,4" on screen. A grouped number is ONE token.
 export const LTR_RUN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[A-Za-z0-9:/?&=._%+-]*|[A-Za-z0-9][A-Za-z0-9 .,:×x/()+_-]*[A-Za-z0-9)]|[A-Za-z0-9]/g;
 export const localizedTextNode = (value) => {
   const localized = localizeText(value);
@@ -88,32 +82,12 @@ export const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
 };
 
 // Confirming a save that did not happen is worse than saying nothing.
-//
-// When a local write fails, onStorageWriteFailed() puts an eight-second warning
-// on screen. Every one of these success toasts fires in the same tick, straight
-// afterwards, and replaces it — so the last thing he sees is «انحفظ» about data
-// that is not saved anywhere. Exactly the bug already fixed for the sync toast.
-// If storage is failing, the warning is left standing.
 export function toastSaved(message) {
   if (storageFailed) return;
   toast(message);
 }
 
 // A real icon set, in the app's own hand.
-//
-// Settings shipped with emoji standing in for icons. Raed's verdict: «حتى
-// الإيموجي ما تسوي شي بالنسبة لي» — and he is right. Emoji are somebody else's
-// drawings at somebody else's weight, they render differently on every OS, they
-// carry colour the palette never chose, and next to the tab bar's own line icons
-// they read as a placeholder that was never replaced.
-//
-// These match that tab bar exactly: 24x24, no fill, currentColor, 1.8 stroke,
-// round caps and joins. They inherit the skin's accent and text colours, they
-// sit on the same optical weight as the navigation, and they look like one hand
-// drew the whole app.
-//
-// The ⚙️ on the exercise card is deliberately NOT here: Raed asked for that one
-// back as an emoji by name (item C6).
 export const ICON_PATHS = {
   profile: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z', 'M4.5 20a7.5 7.5 0 0 1 15 0'],
   programme: ['M8 4h8a1 1 0 0 1 1 1v0a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v0a1 1 0 0 1 1-1Z',
@@ -152,14 +126,8 @@ export function icon(name, size = 18) {
   return svg;
 }
 
-// An in-app confirm.
-//
-// Native confirm()/prompt() are not dependable in an installed PWA — that is
-// exactly why adding a clip never worked for Raed, and why he reports deleting
-// a session "goes straight through". A destructive action must not depend on a
-// dialog the shell is allowed to suppress.
-//
-// Returns a promise so callers read like the confirm() they replace.
+// An installed PWA shell may suppress a native confirm(), turning a destructive
+// tap into nothing at all. Every confirmation in the app goes through this.
 export function confirmAction({ title, body, confirmLabel, danger = true }) {
   return new Promise((resolve) => {
     const modal = $('#modal');

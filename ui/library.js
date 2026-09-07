@@ -22,9 +22,8 @@ import {
 import { buildVideoTile } from '../ui/kit.js';
 
 // Was a native prompt(): English, unstyled, and suppressible by an installed PWA
-// shell — the same class already replaced everywhere else, missed because the
-// earlier scan only looked for a quoted literal after the paren and this one
-// interpolates the exercise name.
+// shell. Missed by the earlier sweep because it interpolates the exercise name
+// instead of taking a quoted literal.
 export function editJNUrlPrompt(exerciseId) {
   const ex = getAllExercises().find(e => e.id === exerciseId);
   if (!ex) return;

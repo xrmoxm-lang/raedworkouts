@@ -73,21 +73,6 @@ export function renderCoach() {
   }
 
   // The ask box is the subject of this screen ONLY while the screen is empty.
-  //
-  // It was built as the hero and then stayed the hero after answering — 250px of
-  // icon, title and promise sitting above the thing he actually came for, on
-  // every single answer. «أبغى أغيّر الصفحة حقة المدرب كاملة.» Once there is an
-  // answer the question is context, not an invitation: it collapses to one line
-  // carrying what he asked, with a tap to ask something else.
-  // What collapses is the CHROME, never the field.
-  //
-  // The first version of this replaced the whole box with a pill showing his
-  // question, which cost him the input: asking a follow-up became tap «سؤال
-  // جديد», then type. He asks follow-ups. Two coach tests caught it by failing
-  // to find [data-coach-input] — the right failure for the right reason.
-  //
-  // So the icon, the title and the promise are what go. They are an invitation,
-  // and an invitation is only worth 250px while the screen is empty.
   const answered = coachState.status !== 'idle';
   root.appendChild(h('section', { class: 'coach-ask' + (answered ? ' answered' : ''), 'data-coach-ask': 'true' },
     answered ? null : h('div', { class: 'coach-ask-head' },
@@ -118,11 +103,7 @@ export function renderCoach() {
       }, t(example)))),
     ));
 
-    // Roughly 57% of this screen was empty — measured, 481px of 844. What
-    // belongs in it is not decoration: the questions he actually asked, so he
-    // can re-ask one without typing, and a plain statement of where the answers
-    // come from, because the whole point of this coach is that it answers from
-    // HIS books and says so.
+    // Roughly 57% of this screen was empty — measured, 481px of 844.
     const recent = (state.coach_recent || []).filter(Boolean);
     if (recent.length) {
       root.appendChild(h('div', { class: 'coach-block', 'data-coach-recent': 'true' },
@@ -145,12 +126,9 @@ export function renderCoach() {
     return;
   }
 
-  // Three outcomes, three different things on screen. Collapsing them is how a
-  // retrieval failure turns into a training answer Raed trusts and shouldn't.
-  // The monthly ceiling was reached. Retrieval is local and free, so his books
-  // still answered — he has the passages, just not the written prose. Saying
-  // which is the point: an answer that silently stops being written reads as the
-  // coach being broken.
+  // Three outcomes, three different things on screen. Collapsing them is how
+  // a retrieval failure turns into a training answer Raed trusts and
+  // shouldn't. The monthly ceiling was reached.
   if (coachState.answer && coachState.answer.status === 'over_budget') {
     const a = coachState.answer;
     root.appendChild(h('div', { class: 'card compact warn', 'data-coach-over-budget': 'true' },
@@ -196,12 +174,6 @@ export function coachPassageCard(passage, index, cited) {
   const showEnglish = coachEnglish.has(index) || !arabic;
   const open = coachOpen.has(index);
   // The fade only belongs on text that is actually cut off.
-  //
-  // `clipped` was applied whenever the card was collapsed, regardless of length,
-  // so a two-line passage got a mask over its last 35% and a finished sentence
-  // read as truncated — while «اقرأ المقطع كاملاً» sat under it offering to
-  // reveal nothing. CSS cannot ask "did this overflow", so it is measured after
-  // layout and the class is added only if it did.
   const textNode = h('p', {
     class: 'coach-text' + (showEnglish ? ' ltr-run' : ''),
     ...(showEnglish ? { dir: 'ltr' } : {}),
@@ -270,21 +242,11 @@ export function coachPassageCard(passage, index, cited) {
 }
 
 // The answer, then the passages it was built from, then the rest.
-//
-// The order is the point. Raed asked for an answer in Arabic instead of five
-// English paragraphs, but the passages stay on screen underneath it so the
-// answer is always checkable against the book it came from. The ones the model
-// actually cited come first and are marked; the others are collapsed, because
-// showing five sources for a two-source answer implies five were used.
 export function renderCoachAnswer(root) {
   const answer = coachState.answer;
   const results = coachState.results;
 
-  // Say so when this is yesterday's answer rather than one just returned. The
-  // screen is otherwise identical either way, and an answer that looks live is
-  // the sort of small lie that costs trust in a coach whose entire pitch is
-  // that it shows its sources. The clear also gives him the suggestion chips
-  // back, which the restored answer replaces.
+  // Say so when this is yesterday's answer rather than one just returned.
   if (coachState.restored) {
     root.appendChild(h('div', { class: 'coach-restored', 'data-coach-restored': 'true' },
       h('span', {}, t('coach_restored')),
@@ -300,22 +262,13 @@ export function renderCoachAnswer(root) {
     ));
   }
 
-  // `answered` alone is not enough. The model returns the flag and the source
-  // list independently, so {answered: true, used: []} is reachable — a confident
-  // sentence with nothing under it, which is exactly the shape this feature was
-  // built to make impossible. An answer that names no passage is treated as no
-  // answer, and the passages are shown so he can judge for himself.
+  // `answered` alone is not enough: the model returns the flag and the source
+  // list independently, so {answered: true, used: []} is reachable. An answer
+  // that names no passage is treated as no answer.
   const cited = answer && Array.isArray(answer.used) ? answer.used : [];
-  // An answer off the open internet is a different kind of thing from a line in
-  // a book he paid for, so it is a separate state rather than a badge on the
-  // same card. It carries URLs instead of passage numbers, and it never claims
-  // his books as its source.
-  // Same rule as the library answer above, which the web branch used to skip.
-  // `fromWeb` asked only for status/source/text, so {source:'web', citations:[]}
-  // rendered a confident card headed «من الإنترنت — مو من كتبك» with nothing
-  // behind it at all. An answer off the open internet that cannot name where it
-  // came from is worth LESS than one from his books, not more, and this feature
-  // exists precisely to make an unsourced claim impossible.
+  // An answer off the open internet is a different kind of thing from a line
+  // in a book he paid for, so it is a separate state rather than a badge on
+  // the same card.
   const webUrls = answer && Array.isArray(answer.citations) ? answer.citations.filter(isSafeHttpUrl) : [];
   const fromWeb = answer && answer.status === 'ok' && answer.source === 'web' && answer.text
     && webUrls.length > 0;
@@ -359,25 +312,15 @@ export function renderCoachAnswer(root) {
         : null,
     ));
   } else if (unsourced) {
-    // The model claimed an answer and named no passage for it. Its sentence is
-    // NOT printed: an unsupported claim is the one thing this screen must never
-    // put in front of him, and reprinting it under a "not in your books"
-    // heading would do exactly that while looking careful.
+    // The model claimed an answer and named no passage for it. Its sentence is NOT
+    // printed: reprinting it under a «not in your books» heading would put an
+    // unsupported claim in front of him while looking careful.
     root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
       h('strong', {}, t('coach_unanswered')),
       h('p', { class: 'tiny muted' }, t('coach_unsourced_hint')),
     ));
   } else if (isRefusal) {
     // Not an error state. The search worked; the books do not cover it.
-    //
-    // The model's own sentence used to be printed here, while the `unsourced`
-    // branch three lines up deliberately refuses to print it — two branches
-    // disagreeing about the same principle. A refusal sentence is still
-    // unverified prose, and it routinely smuggles a claim: "your books don't
-    // cover this, but generally rest two to three minutes" is an answer with no
-    // passage behind it, which is the one thing this screen exists to prevent.
-    // The fixed line plus the near-miss passages below carry everything
-    // actionable. Restoring it is one line, if Raed decides he wants it back.
     root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
       h('strong', {}, t('coach_unanswered')),
       h('p', { class: 'tiny muted' }, t('coach_unanswered_hint')),
@@ -392,10 +335,8 @@ export function renderCoachAnswer(root) {
 
   if (fromWeb) {
     // Nothing from the library is shown under a web answer. The passages that
-    // came back are the ones the model judged did NOT answer the question, and
-    // printing them here would look exactly like sourcing. The usual footer is
-    // omitted for the same reason: «مكتوبة من المقاطع بالأسفل» would be a lie
-    // when there are no passages below.
+    // came back are the ones the model judged did NOT answer the question,
+    // and printing them here would look exactly like sourcing.
     return;
   }
   const rest = results.map((_, i) => i).filter((i) => !cited.includes(i));
@@ -408,10 +349,8 @@ export function renderCoachAnswer(root) {
 
   if (rest.length) {
     // Collapsed whenever the passages are not the answer — either because the
-    // answer named the ones it used, or because there IS no answer and these are
-    // the near-misses. Asking about kabsa and getting two full screens of vegan
-    // protein is noise, and printing it at full length reads as if the app
-    // thought it was relevant.
+    // answer named the ones it used, or because there IS no answer and these
+    // are the near-misses.
     const collapse = cited.length > 0 || isRefusal;
     if (collapse) {
       const more = h('details', { class: 'coach-more', 'data-coach-more': 'true' },

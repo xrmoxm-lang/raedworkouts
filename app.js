@@ -60,12 +60,8 @@ export function render() {
   }
   document.body.classList.remove('welcome-mode');
   // Drives the home ordering: while LIFTING the exercise leads and the week
-  // strip, tiles and music card drop below it. Warm-up keeps the normal order,
-  // because there is no set to log yet.
-  // Any live session, warm-up included. The warm-up used to keep the normal
-  // home order on the reasoning that "there is no set to log yet" — but Raed is
-  // doing arm swings at that point, not reading his streak, and he asked for
-  // the pre-workout block to go the moment the workout starts.
+  // strip, tiles and music card drop below it. Warm-up keeps the normal
+  // order, because there is no set to log yet.
   document.body.classList.toggle('session-active', Boolean(state.active_session));
   const route = window.location.hash.replace('#', '') || 'home';
   // Phase 6 intentionally returns the workout to the v15 card-in-app
@@ -80,12 +76,9 @@ export function render() {
     if (on) t.setAttribute('aria-current', 'page');
     else t.removeAttribute('aria-current');
   });
-  // The retired custom runner used to live here behind `if (false && ...)`, with
-  // renderRunner/renderRunnerWarmup/renderV15Workout/renderSessionPreview/
-  // appendV15HomeExerciseList below. All were unreachable: the guard short-circuits,
-  // and nothing else called them. Removed because one of them was named
-  // renderV15Workout while NOT being the live v15 card — the same name collision
-  // that let a shadowing block hide the real session view for an entire phase.
+  // The retired custom runner used to live here behind `if (false && …)`. It was
+  // removed because one of those was named renderV15Workout while NOT being the
+  // live v15 card — a name collision that once hid the real session view.
   if (route === 'home') renderHome();
   // preview retired 2026-08-28 — Raed: the plan is already on home, do not list it twice
   if (route === 'coach') renderCoach();
@@ -180,12 +173,9 @@ export function init() {
     const applyUpdateWhenSafe = () => {
       if (_reloading) return;
       const doReload = () => { _reloading = true; window.location.reload(); };
-      // "Wait until he switches away" used to mean "reload the instant he pockets
-      // the phone" — which is the same instant the rest timer starts running. The
-      // countdown is persisted now so a reload resumes it, but reloading in the
-      // middle of a rest is still the worst moment available, so a live rest
-      // holds the update off too. Nothing is lost by waiting: the next
-      // visibilitychange, focus, or hourly check comes back round.
+      // "Wait until he switches away" used to mean "reload the instant he
+      // pockets the phone" — which is the same instant the rest timer starts
+      // running.
       const resting = Boolean(restTimer.interval) || restTimer.end > Date.now();
       if (state.active_session && (resting || !document.hidden)) {
         if (!document.hidden) toast(t('update_ready'), 3000);
@@ -219,11 +209,6 @@ export function init() {
   }
 
   // A completed mesocycle is the natural moment to look up from the week.
-  //
-  // He asked for the programme to carry itself for twelve months and for a
-  // review "every six months or so". A cycle is twelve weeks, so two cycles is
-  // almost exactly six months at four sessions a week — the review prompt rides
-  // on that rather than on a calendar date the app would have to track.
   announceCycleIfNew();
 
   // A rest that was running when the app was last closed, reloaded, or evicted.
@@ -258,16 +243,8 @@ export function announceCycleIfNew() {
 }
 
 // ---- Modal keyboard + screen-reader behaviour ----------------
-//
-// #modal-overlay is opened from a dozen places by adding a class, and it had
-// none of the behaviour a dialog needs: no role, no aria-modal, focus left
-// behind on <body>, Tab wandering out into the page underneath, and Escape did
-// nothing at all — the swap sheet, the exercise sheet and every destructive
-// confirmation could only be dismissed by finding and tapping the right button.
-//
-// Rather than edit every call site, this watches the class the call sites
-// already toggle. One place to get right, and it cannot drift out of step with
-// a new sheet added later.
+// This watches the class every call site already toggles, rather than editing a
+// dozen of them: role, aria-modal, focus trap, focus return and Escape.
 export const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 export function initModalA11y() {
   const overlay = $('#modal-overlay');
@@ -366,17 +343,8 @@ export function initAutoHideNav() {
 }
 
 // ---- Last resort ---------------------------------------------------------
-//
-// There was no window.onerror and no unhandledrejection handler in this file at
-// all. On a phone in a gym there is no console to open, so any thrown error —
-// a render that half-completed, a storage write that failed, a promise nobody
-// caught — left the app visibly fine and quietly broken, and he would only find
-// out when the workout was missing.
-//
-// This does not pretend to recover. It does two honest things: it tells him the
-// app hit a problem so he knows not to trust what is on screen, and it makes
-// sure the session that is still in memory gets pushed to the server, which is
-// the copy most likely to survive.
+// There was no window.onerror and no unhandledrejection handler in this file
+// at all.
 export let _lastErrorToastAt = 0;
 export function reportFatal(source, err) {
   try {

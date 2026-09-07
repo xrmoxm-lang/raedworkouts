@@ -118,9 +118,8 @@ export function renderExerciseCard(ex_id, exState) {
   const bodyUrl = RW.bodyImg ? RW.bodyImg(ex.primary) : '';
   const head = h('div', { class: 'ex-head', onClick: () => {
     // Was also rewriting the ▸/▾ glyph on .ex-status. That element is now the
-    // settings button, so the query returned null and every header tap threw —
-    // collapsing stopped working entirely. The card's own class is the state;
-    // nothing needs to mirror it in text.
+    // settings button, so the query returned null and every header tap threw
+    // — collapsing stopped working entirely.
     card.classList.toggle('expanded');
   }},
     h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
@@ -141,9 +140,7 @@ export function renderExerciseCard(ex_id, exState) {
       ) : null,
     ),
     // Was a ▸/▾ chevron that only mirrored the card's state, while the whole
-    // header did the collapsing. Raed asked for a settings entry in its place;
-    // since the chevron never was the control, replacing it removes nothing —
-    // tapping the header still collapses.
+    // header did the collapsing.
     h('button', {
       class: 'ex-settings-btn' + (allWorkingDone ? ' done' : ''),
       'data-exercise-settings': 'true',
@@ -153,18 +150,7 @@ export function renderExerciseCard(ex_id, exState) {
     }),
   );
   // The emoji, back, at Raed's request: "رجّع الإيموجي الثابت حق إعدادات
-  // التمرين". It went through three forms and this is the third time he has
-  // ruled on it, so the reasoning is worth writing down rather than re-deriving:
-  //
-  //   ⚙   bare U+2699    — a TEXT glyph. Thin, and drawn by whatever font the
-  //                        platform picks, so it looked different on his phone
-  //                        than anywhere I checked it. He called it "the worst".
-  //   sliders SVG        — matched the app's line set, but he wants the emoji.
-  //   ⚙️  U+2699 U+FE0F  — the emoji presentation: same colour glyph on every
-  //                        device, which is the "ثابت" in what he asked for.
-  //
-  // The variation selector is the whole difference and it is invisible in the
-  // source, so: it is deliberate, do not "clean it up".
+  // التمرين".
   const gearBtn = head.querySelector('[data-exercise-settings]');
   if (gearBtn) gearBtn.textContent = allWorkingDone ? '✅' : '⚙️';
   card.appendChild(head);
@@ -172,9 +158,7 @@ export function renderExerciseCard(ex_id, exState) {
   // Body
   const body = h('div', { class: 'ex-body' });
   // «آخر مرة» is built here, where `last` is in scope, and appended AFTER the
-  // sets. Raed: "خله بس تحت يعني موجود تحت بدل ما يكون فوق". It is reference,
-  // not instruction — he needs it while deciding what to type, not before he
-  // has seen the row he is typing into.
+  // sets. Raed: "خله بس تحت يعني موجود تحت بدل ما يكون فوق".
   let lastTimeRow = null;
   if (last) {
     const ws = (last.sets || []).filter(s => !s.is_warmup && s.completed);
@@ -185,17 +169,8 @@ export function renderExerciseCard(ex_id, exState) {
       );
     }
   }
-  // Videos.
-  //
-  // `runner_video_open` was declared in defaultSettings(), migrated once on
-  // load, written by nothing and READ BY NOTHING — while GATES.md said it was
-  // live. Raed asked for this control in his own words: «فيه زي هذه العجلة حقة
-  // الإعدادات إنه مثلاً أحط أخفي الـvideos... وتكون مخفية، أهم شيء يكون real app
-  // وتتذكر التصرفات». The gear he pointed at now owns it, and it is remembered.
-  //
-  // Two levels, because he described both: this switch hides the strip during a
-  // workout without forgetting anything, and the per-clip marks below it in the
-  // sheet are still the Library's choices about individual clips.
+  // `runner_video_open` is the gear's switch, remembered per profile. The
+  // per-clip marks in the sheet are a second, narrower level over the same strip.
   const allVideos = settings.runner_video_open ? buildExerciseVideos(actualId, ex) : [];
   if (allVideos.length) {
     const videoRow = h('div', { class: 'video-row' },
@@ -205,11 +180,7 @@ export function renderExerciseCard(ex_id, exState) {
     // Note: video selection + JN URL editing live in Library, not here.
   } else {
     // Half the catalogue he can reach by swapping has no clip of its own — 39
-    // of 78, measured. Where the SAME movement exists on other equipment, its
-    // clip is offered here, labelled as exactly that and never mixed in with
-    // the exercise's own tiles. The label is the whole point: the movement is
-    // the same and the setup is not, and a clip presented as this exercise's
-    // own would be the wrong-clip case D8 forbids.
+    // of 78, measured.
     const related = relatedClips(ex);
     if (related.length) {
       body.appendChild(h('div', { class: 'related-clips', 'data-related-clips': 'true' },
@@ -225,28 +196,9 @@ export function renderExerciseCard(ex_id, exState) {
     }
   }
 
-  // The one number that actually moves the weight. The engine raises load only
-  // when EVERY working set hits the TOP of the rep range, so a range alone left
-  // Raed guessing whether 10 or 12 was the point -- and 10 would have held the
-  // weight still forever without explaining why.
-  // The engine has always explained WHY it suggests this weight. v16 kept the
-  // calculation and dropped the render, so the number looked arbitrary — the
-  // exact thing Raed complained about not understanding. Shown compactly, above
-  // the rep goal, and NOT as a form cue (those he removed on purpose).
-  //
-  // One of the nine notes is dropped: why_match_or_beat, «المرة الماضية: 10 كغ
-  // × 6. اعدلها أو تجاوزها». Raed asked for it gone — "وش أعدلها أو أتجاوزها ما
-  // أدري صراحة" — and he is right about that one specifically: «آخر مرة» below
-  // already prints every set of last session, so the note repeated a subset of
-  // it and added an instruction that names no number to aim at. It is also the
-  // FALLBACK branch, so it was the note he saw most often, which is why the
-  // whole feature read as noise.
-  //
-  // The other eight stay. They each explain a DECISION — hold this load, bump
-  // it, add a rep instead because this is an accessory, today is a calibration
-  // — which is exactly the "رقم بدون سبب" he asked to fix. Removing those to
-  // satisfy a complaint about the one that explains nothing would delete the
-  // answer along with the noise.
+  // Why this weight. why_match_or_beat is the one note suppressed — Raed asked
+  // for it gone, because «آخر مرة» below already prints every set of last
+  // session. The other eight each explain a DECISION and stay.
   const noteIsRestatement = sug.note_kind === 'match_or_beat';
   if (exState.machine_weight) {
     // Replaces the load reasoning rather than sitting beside it: with no added
@@ -266,12 +218,8 @@ export function renderExerciseCard(ex_id, exState) {
   const goalText = planned.deload
     ? tf('reps_goal_deload', { n: repTop })
     : tf('reps_goal', { n: repTop });
-  // The effort target gets its OWN line rather than trailing the goal sentence.
-  // Three words after «أكمل 12 في كل المجموعات ليرتفع الوزن» wrapped into a
-  // run-on with an orphan on the second line — «خفيف — بقصد» alone is four
-  // words. Two short lines read faster than one long one.
-  // Spelled out, not looked up by a computed key: the locale gate reads every
-  // lookup in this file to prove its key exists, and a built key defeats it.
+  // The effort target gets its OWN line rather than trailing the goal
+  // sentence.
   const EFFORT_SHORT = {
     effort_target_easy: () => t('effort_short_easy'),
     effort_target_moderate: () => t('effort_short_moderate'),
@@ -341,11 +289,7 @@ export function renderExerciseCard(ex_id, exState) {
       'data-session-set-row': String(idx),
       'data-set-kind': isWarm ? 'warmup' : 'working',
     },
-      // Raed: "نشيل الأرقام، ويكون بس اللي موجود اللي بالخلفية". The row number
-      // was never information he needed — he knows which set he is on because
-      // it is the next empty row, and the rep target is already on the card.
-      // Ramp rows keep a mark, because "this one is a warm-up" IS information
-      // and it is the only thing distinguishing them from working sets.
+      // Raed: "نشيل الأرقام، ويكون بس اللي موجود اللي بالخلفية".
       h('div', { class: 'set-num' + (isWarm ? ' warm-mark' : '') }, isWarm ? t('ramp_short') : ''),
       h('input', {
         type: 'number', step: '0.5', inputmode: 'decimal',
@@ -356,10 +300,9 @@ export function renderExerciseCard(ex_id, exState) {
         readOnly: Boolean(exState.machine_weight),
         value: editableWeightValue(set.weight),
         'data-runner-weight-input': 'true',
-        // A placeholder is not a label: it disappears the moment he types, and
-        // VoiceOver announced these two boxes as an unnamed pair of number
-        // fields. The set number is in the name because the row itself no longer
-        // shows one.
+        // A placeholder is not a label: it disappears the moment he types,
+        // and VoiceOver announced these two boxes as an unnamed pair of
+        // number fields.
         'aria-label': tf('a11y_weight_for_set', { n: idx + 1 }),
         disabled: Boolean(set.skipped),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
@@ -378,31 +321,24 @@ export function renderExerciseCard(ex_id, exState) {
       }),
       h('button', {
         class: 'set-check' + (set.completed ? ' checked' : '') + (set.skipped ? ' skipped' : ''),
-        // This is THE control of the app — the one he taps after every set — and
-        // it had no accessible name at all. It is an icon-only toggle, so it
-        // needs both a name and a state; without aria-pressed a screen reader
-        // cannot tell a ticked set from an unticked one.
+        // This is THE control of the app — the one he taps after every set —
+        // and it had no accessible name at all.
         'aria-label': tf(isWarm ? 'a11y_complete_ramp_set' : 'a11y_complete_set', { n: idx + 1 }),
         'aria-pressed': set.completed ? 'true' : 'false',
         disabled: Boolean(set.skipped),
         onClick: () => {
           if (!set.completed) {
-            // hasValidWorkingValues, NOT hasWorkingWeight. The card carried its
-            // own stricter copy of the rule requiring weight > 0, so a
-            // «وزن الجهاز فقط» set — which is legitimately 0 kg — could be
-            // created but never ticked complete. The domain function already
-            // distinguishes an explicit 0 from an untouched empty box; keeping
-            // a second rule here is what let the two drift apart.
+            // hasValidWorkingValues, NOT hasWorkingWeight: the card's own copy of
+            // the rule required weight > 0, so a «وزن الجهاز فقط» set — legitimately
+            // 0 kg — could be created and never ticked complete.
             if (!isWarm && !hasValidWorkingValues(set)) {
               toast(t('required'));
               return;
             }
             if (isFinalWorkingSet && !set.effort) {
-              // Refusing has to REVEAL the thing it is asking for. The picker
-              // only opened when the second-to-last set was ticked, so ticking
-              // the final set first — or an exercise with a single working set,
-              // where there is no prior set at all — got «اختر الجهد» with no
-              // picker anywhere on screen and no way forward.
+              // Refusing has to REVEAL the thing it is asking for: the picker used
+              // to open only when the second-to-last set was ticked, so «اختر الجهد»
+              // appeared with no picker anywhere on screen.
               set.effort_prompted = true;
               saveLocal();
               render();
@@ -427,10 +363,8 @@ export function renderExerciseCard(ex_id, exState) {
             const restSeconds = prescribedRestSeconds(planned);
             if (restSeconds > 0) startRest(restSeconds);
             if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
-            // Move to the other half of the pair. After A1 that is «move right
-            // into» A2; after A2 it is back to A1 for the next round, and A2's
-            // own rest_min has just started the timer above — which is exactly
-            // «rest for the time period indicated in the A2 row».
+            // Move to the other half of the pair. After A1 that is «move
+            // right into»
             const moved = advanceSuperset(actualId);
             if (moved) {
               const name = getAllExercises().find((item) => item.id === (moved.state?.swapped_to || moved.id))?.name;
@@ -446,16 +380,9 @@ export function renderExerciseCard(ex_id, exState) {
     // working set had a picker, so there was nowhere to log it.
     const probing = isWarm && !exState.calibrated_from
       && !(exState.sets || []).some((item) => !item.is_warmup && (hasWorkingWeight(item.weight) || item.completed));
-    // research/07 §2.7 puts a light/normal/heavy tap AFTER the last ramp set, on
-    // every exercise and not only a first exposure. The app's three efforts are
-    // already those three words.
-    //
-    // «After» is load-bearing, and so is §2.8 on the very next line of that same
-    // file — «Warm-up sets are not building muscle. No need to overdo or
-    // over-think them», which it says to put in the UI rather than the docs. A
-    // permanent second three-face strip inside a card he is working in is
-    // exactly the clutter he has complained about. So it appears only once that
-    // ramp set is ticked, and it leaves the moment it has been answered.
+    // research/07 §2.7 puts a light/normal/heavy tap AFTER the last ramp set,
+    // on every exercise and not only a first exposure. The app's three
+    // efforts are already those three words.
     const rampList = (exState.sets || []).filter((item) => item.is_warmup);
     const isLastRamp = isWarm && rampList.length > 0 && set === rampList[rampList.length - 1];
     const askFeel = isLastRamp && set.completed && !exState.warmup_feel_applied
@@ -473,22 +400,7 @@ export function renderExerciseCard(ex_id, exState) {
     }
     if (isFinalWorkingSet) {
       // Raed: "ليش ما تحطها بشكل أنظف جنب الجلسة الأخيرة؟ ليش حاطها تحت، كأن
-      // مسبب زحمة؟" — it was a full-width block under the sets. Now it is one
-      // compact face ON the final row; tapping it reveals the three, and
-      // choosing collapses them again. This is v15's own interaction.
-      // Raed: it should appear the moment the SECOND-TO-LAST set is ticked,
-      // because by then he already knows the last one is coming and the picker
-      // is what the last one needs. Waiting until he taps the final check makes
-      // him tap twice and reads as the app blocking him.
-      // Raed: the trigger button is redundant — the picker already opens by
-      // itself when the SECOND-TO-LAST set is ticked, so a face whose only job
-      // is to open something that has already opened is chrome. The strip is
-      // shown directly: prompting when the prior set is done, and staying
-      // visible afterwards to show the choice he made.
-      // `priorSet?.completed` alone was too narrow twice over: an exercise with
-      // ONE working set has no prior set, and ticking the sets out of order
-      // leaves the immediate predecessor unticked while others are done. Both
-      // hid the picker while the check button demanded it.
+      // مسبب زحمة؟" — it was a full-width block under the sets.
       const priorSet = workingSets[workingSets.length - 2];
       const anyPriorDone = workingSets.some((s, i) => i < workingSets.length - 1 && s.completed);
       const promptNow = !set.effort && (!priorSet || Boolean(priorSet.completed) || anyPriorDone);
@@ -506,10 +418,8 @@ export function renderExerciseCard(ex_id, exState) {
     body.appendChild(row);
   });
 
-  // Under the rows, in the order he reads them: the target for the rows above,
-  // then what he did last time. Both used to sit ABOVE the grid, pushing the
-  // first input he touches further down a screen he already said had too much
-  // scrolling.
+  // Under the rows, in the order he reads them: the target for the rows
+  // above, then what he did last time.
   if (repsGoalRow) body.appendChild(repsGoalRow);
   if (effortRow) body.appendChild(effortRow);
   if (lastTimeRow) body.appendChild(lastTimeRow);
@@ -521,24 +431,17 @@ export function renderExerciseCard(ex_id, exState) {
     ));
   }
 
-  // The per-set row is empty now. Everything that used to sit here — + مجموعة,
-  // راحة, استبدال, تخطي التمرين, + فيديو, + تمرين, وزن الجهاز فقط — belongs to
-  // the EXERCISE, not to the set he is in the middle of, and it now lives in
-  // the settings sheet behind the gear. Raed asked for the row under the sets to
-  // be clear of them. Nothing was removed; it is one tap away, grouped by what
-  // each control actually is.
-  //
-  // The gear in the card header is the way in, and the header still collapses
-  // on tap, so the row costs nothing to reach.
+  // The per-set row is empty on purpose. Everything that used to sit here belongs
+  // to the EXERCISE, not to the set he is mid-way through, and now lives in the
+  // settings sheet behind the gear. Nothing was removed.
 
   card.appendChild(body);
   return card;
 }
 
-// Raed: "الـexercise هذا ما تبدل، أضف لي exercise على نهاية التمرين". Swapping
-// REPLACES a prescribed movement and charges the volume ledger against it.
-// Appending adds a movement the programme never asked for, at the end, without
-// touching anything above it. They are different actions and he wanted both.
+// Raed: "الـexercise هذا ما تبدل، أضف لي exercise على نهاية التمرين".
+// Swapping REPLACES a prescribed movement and charges the volume ledger
+// against it.
 export function showAddExerciseModal() {
   const inSession = new Set(Object.keys(state.active_session?.exercises || {}));
   const options = getAllExercises()
@@ -580,25 +483,6 @@ export function showAddExerciseModal() {
 }
 
 // The per-exercise settings sheet.
-//
-// Everything that belongs to ONE movement lives here. Raed asked for it to be
-// designed properly — "neat, جميل, مرتب" — and the reason a flat stack of rows
-// would fail is that these controls are not the same KIND of thing:
-//
-//   الجهاز    what this movement is performed on. Configuration, set once.
-//   السجل     what he has actually lifted here. Evidence, read-only.
-//   إجراءات   things he can do to this exercise right now. Verbs.
-//
-// The sheet is structured in that order because it is true of the content, not
-// because three sections look tidy. Configuration is what he changes rarely and
-// wants to confirm; the record is what he opens the sheet to READ mid-workout;
-// the verbs are what he came to press.
-//
-// The table is the signature. It is the only surface in the app that shows one
-// movement across different machines side by side, which is the whole point of
-// remembering the machine — a weight history that mixes them is a history of
-// nothing. So it gets real typographic care: a header, tabular numerals, the
-// load dominant, the machine a quiet tag.
 export function showExerciseSettings(ex_id, exState) {
   const actualId = exState.swapped_to || ex_id;
   const ex = getAllExercises().find((e) => e.id === actualId);
@@ -666,13 +550,6 @@ export function showExerciseSettings(ex_id, exState) {
         onChange: () => {
           exState.machine_weight = !exState.machine_weight;
           // Remembered for the EXERCISE, not just this session.
-          //
-          // It was written only onto the active session's state, so «وزن الجهاز
-          // فقط» had to be re-ticked on every workout. Three of the seven
-          // exercises in his Upper A carry it — the T-bar row, the rope triceps
-          // extension and the cable lateral raise — which is three taps he was
-          // making every single session, forever, and a blank weight box until
-          // he made them.
           exercisePrefs(actualId).machine_weight = exState.machine_weight;
           if (exState.machine_weight) {
             for (const set of exState.sets) if (!set.is_warmup && !set.completed) set.weight = 0;
@@ -685,10 +562,7 @@ export function showExerciseSettings(ex_id, exState) {
   ));
 
   // ---- 2b. المقاطع — which clips he sees, from where he is standing -------
-  //
-  // The per-clip toggles existed only in Library. Mid-set, that is two screens
-  // and a scroll away from the card the clip is on, which is why the control he
-  // asked for never felt delivered even though half of it was there.
+  // The per-clip toggles existed only in Library.
   const clips = buildExerciseVideos(actualId, ex, { includeHidden: true });
   modal.appendChild(h('section', { class: 'xs-section' },
     h('div', { class: 'xs-label' }, t('clips_section')),
@@ -724,12 +598,7 @@ export function showExerciseSettings(ex_id, exState) {
   ));
 
   // ---- 2c. الترتيب — where this movement sits in the session --------------
-  //
-  // The gym moves machines. Reordering here rather than in Settings because this
-  // is where his hand already is the moment he walks up and finds the rack gone:
-  // «ما أدري وين تكون صراحة» — it belongs at the exercise, not two screens away.
-  //
-  // Moves the LIVE session and records the order for every future one.
+  // The gym moves machines.
   const moveExercise = (delta) => {
     const active = state.active_session;
     if (!active) return;
@@ -790,17 +659,6 @@ export function showExerciseSettings(ex_id, exState) {
   modal.appendChild(h('section', { class: 'xs-section' },
     h('div', { class: 'xs-label' }, t('actions_section')),
     // ONE grid, one button shape, six actions.
-    //
-    // It was three shapes stacked: a full-width primary slab for استبدال, a 2x2
-    // of outline buttons under it, and تخطي التمرين as a bare red text link — a
-    // fifth visual language for the one action that ends the exercise. Raed:
-    // "أعتقد نقدر نرتبها ونخليها بشكل أرتب وأنسق وأصغر... متناسقة".
-    //
-    // Now every action is the same box at the same height, and only the FILL
-    // says what kind it is: استبدال is filled because he uses it most and asked
-    // for it to lead, تخطي is tinted because it ends the exercise, the rest are
-    // outlines. Two of them span the full width, so the grid still reads as a
-    // hierarchy rather than a wall of six identical tiles.
     h('div', { class: 'xs-grid' },
       h('button', {
         class: 'btn primary xs-action xs-wide', 'data-open-swap': 'true',
@@ -846,9 +704,7 @@ export function showExerciseSettings(ex_id, exState) {
   ));
 
   // ---- السجل — evidence, last ---
-  // Raed: "ياليت يكون السجل يكون آخر شيء تحت... لأنه هو تاريخ وسرد". He is
-  // right: it is the only READ-ONLY block in the sheet, so it belongs after the
-  // things he came to change rather than between them.-------------------------------------------
+  // Raed: "ياليت يكون السجل يكون آخر شيء تحت... لأنه هو تاريخ وسرد".
   const rows = exerciseHistoryRows(actualId, 3);
   modal.appendChild(h('section', { class: 'xs-section' },
     h('div', { class: 'xs-label' }, t('exercise_log')),
@@ -906,14 +762,8 @@ export function showAltModal(ex_id, exState) {
   m.appendChild(h('h3', {}, t('swap')));
 
   // ===== SECTION 1: Replace =====
-  // The PROGRAMME's own substitutes come first. §8.4 authors a sub1/sub2 for
-  // every row — Chest Press Machine prescribes Flat DB Press and Hammer Strength
-  // Press — and this modal was reading only the catalogue's generic
-  // `alternatives`, which for that same exercise are Incline Chest Press and Pec
-  // Deck. Swapping therefore offered movements the programme never chose.
-  //
-  // The catalogue list still follows, so nothing is taken away; the sourced ones
-  // simply lead, because they were picked for THIS slot.
+  // The PROGRAMME's own sub1/sub2 lead, because they were picked for THIS slot;
+  // the catalogue's generic `alternatives` follow, so nothing is taken away.
   const plannedRow = exState?.planned || {};
   const programmeSubs = [plannedRow.sub1, plannedRow.sub2].filter(Boolean);
   const orderedIds = [...new Set([...programmeSubs, ...(ex?.alternatives || [])])]

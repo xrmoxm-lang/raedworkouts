@@ -2,21 +2,7 @@
 
 import { settings } from '../core/store.js';
 
-// ---- Gym launcher (IN2 Fitness) ------------------------------
-// Tries the user's override first, then a URL scheme. If the scheme
-// doesn't open the app within ~1.2s (page still focused), falls back
-// to the App Store URL so they can tap "Open" there.
-// These three settings are NAVIGATED TO, and settings arrive from the sync
-// server as well as from the settings screen — while the sync token ships in
-// this very file, by an accepted decision. So anyone who reads the public JS can
-// write his row, and `javascript:` in gym_launch_override would then execute
-// inside his app the next time he taps the gym button. That is a public token
-// turning into code execution, which is a different thing from the shared-secret
-// trade he agreed to.
-//
-// The override legitimately needs non-http schemes (shortcuts://, scope.bit://),
-// so this is a deny-list of the schemes that execute rather than navigate, not
-// an http-only allow-list.
+// Tries the user's override first, then a URL scheme.
 export const EXECUTING_SCHEMES = /^\s*(?:javascript|data|vbscript|blob|file)\s*:/i;
 export function safeLaunchUrl(value) {
   const url = String(value || '').trim();

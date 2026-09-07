@@ -7,13 +7,7 @@ import { state } from '../core/store.js';
 import { isSafeHttpUrl, youtubeThumbUrl, ytIdFromUrl } from '../core/videos.js';
 import { isCountableWorkingSet } from '../domain/runner-session.js';
 
-// ---- Final-set effort -----------------------------------------
 // D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
-// The emoji are v15's, unchanged: 😌 / 💪 / 🥵. v15 stored an RPE number (7/8/9)
-// behind them; D16 replaced that with three words. The faces map one-to-one onto
-// the words, so this is v15's picture over v16's meaning — nothing numeric returns.
-// v15 hid them behind a popover (two taps). These stay inline (one tap), because
-// one-thumb logging outranks copying the interaction.
 export const EFFORT_LEVELS = [
   { value: 'easy', emoji: '😌' },
   { value: 'medium', emoji: '💪' },
@@ -108,15 +102,8 @@ export function buildVideoTile(v, opts = {}) {
   link.insertBefore(img, chip);
   return link;
 }
-// The home hero was 125px tall with every word pinned to the right edge and the
-// left 55% empty — measured, not eyeballed. Nothing filled it because nothing
-// on Home said where he stands in the week; that number lived only in a
-// paragraph further down. A ring says it in one glance and gives the screen the
-// single focal object it was missing.
-//
-// The arc is --accent, but the numeral inside is --accent-label: in the ورق
-// dark skin --accent is #743d4a, which is a fine stroke and an unreadable
-// letter. scripts/lint-contrast.mjs enforces that distinction.
+// The home hero was 125px tall with every word pinned to the right edge and
+// the left 55% empty — measured, not eyeballed.
 export function progressRing(done, target, caption) {
   const NS = 'http://www.w3.org/2000/svg';
   const R = 26, C = 2 * Math.PI * R;
@@ -151,10 +138,8 @@ export function progressRing(done, target, caption) {
 }
 
 // A quiet "?" that explains one term in place. Raed asked for something the
-// size of a copyright mark that opens a plain sentence — "شيء مرة بسيط يطلع" —
-// after the coach gave him a poor answer for "superset". This is not the coach:
-// it is a fixed definition sitting next to the word it defines, so the answer
-// is instant and cannot be wrong.
+// size of a copyright mark that opens a plain sentence — "شيء مرة بسيط يطلع"
+// — after the coach gave him a poor answer for "superset".
 export function explainMark(termKey) {
   const bubble = h('span', { class: 'explain-bubble', hidden: true }, t(termKey + '_explain'));
   const mark = h('button', {

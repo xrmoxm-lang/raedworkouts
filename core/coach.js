@@ -1,4 +1,7 @@
-/* The coach request path and its answer state. */
+/* The coach searches the 33 Nippard works Raed owns and answers out of them,
+ * showing the passages it used with book and page. The rule underneath: no
+ * passages means the model is never called, and an answer that names no
+ * passage is not shown. */
 
 import { $, h, localizedTextNode } from '../core/dom.js';
 import { activeLanguage, t, tf } from '../core/i18n.js';
@@ -7,46 +10,9 @@ import { renderCoach } from '../core/shell.js';
 import { saveLocal, state } from '../core/store.js';
 import { getAllExercises } from '../core/videos.js';
 
-// HTTPS, not the raw Tailscale IP. The app is served over HTTPS, and a browser
-// refuses to fetch http:// from an https:// page — the request never leaves, and
-// it looks like a network fault rather than the policy block it is.
-//
-// This WAS tailnet-only on :8444, on the reasoning that these passages are the
-// text of books Raed paid for. That reasoning still holds, but the arrangement
-// did not: :8444 cannot be funnelled, so the coach only ever answered a device
-// already on the tailnet — and he does not want Tailscale on his phone.
-//
-// The trade he is making, stated plainly rather than buried: the endpoint is now
-// public and gated by X-Coach-Key, and that key ships inside this file. It stops
-// casual access and search engines; it does not stop someone who reads the
-// deployed JavaScript. Verified refused without the key and with a wrong one.
-// Port 8444 was never publicly reachable. Tailscale Funnel serves only 443,
-// 8443 and 10000 — anything else reports "Funnel on" in the status output and
-// silently answers nobody from the internet. That is why the coach needed
-// Tailscale switched on to work at all, and Raed does not want Tailscale on his
-// phone: "ما أبغى تليسكيل".
-//
-// It now rides the 443 funnel on a path, beside the P180 dashboard already
-// there. Verified from the public ingress IP with Tailscale DNS bypassed:
-// /coach/health returns 200 and /coach/search returns real passages.
-// Same-origin, and the key is NOT here any more.
-//
-// It used to be: `const COACH_KEY = '…'` in this file, shipped to every browser
-// that opened the site, on a service that spends real money per question. The
-// comment that stood here called it a stated trade. It stopped being one when
-// /answer became metered — anyone who viewed source could spend his credit.
-//
-// api/coach.js on Vercel holds the key now and forwards to the same funnel.
-// A browser app cannot keep a secret: it either carries a credential the user
-// can read, or it goes through a server. This is the server.
-//
-// Measured before adopting it, because he asked for exactly this not to slow
-// him down: the extra leg costs ~500ms, against a model that takes 2–8s to
-// write an answer. Nothing joins a tailnet and nothing about starting a workout
-// changes — his two conditions, «ما يكون تليسكيل» and «ما يعقد علي الـprocess».
-//
-// There is deliberately NO fallback to the direct URL. A fallback would mean
-// shipping the key again for the case where the proxy is down.
+// Same-origin, through api/coach.js on Vercel. The access key used to ship in
+// this file and /answer is metered, so anyone who viewed source could spend his
+// credit. There is deliberately NO fallback to the direct funnel URL.
 export const COACH_URL = '/api/coach';
 export const coachRoute = (name) => `${COACH_URL}?route=${name}`;
 export const COACH_EXAMPLES = ['coach_eg_volume', 'coach_eg_failure', 'coach_eg_protein'];
@@ -54,16 +20,6 @@ export let coachState = { status: 'idle', question: '', results: [], answer: nul
 
 export function setCoachState(value) { coachState = value; }
 // The last answer survives leaving the tab.
-//
-// It did not before: coachState was memory only, so the sequence he actually
-// performs in the gym — ask, switch to the runner to log the set the answer was
-// about, switch back — threw the answer away and left an empty screen. Re-asking
-// is not free either: /answer is the one metered call in this app, so forgetting
-// costs money as well as the answer.
-//
-// Only a successful answer is kept. An error, an offline, a no_match and a
-// half-finished loading state are all about a moment that has passed; restoring
-// «الخادم غير متاح» on a screen he opens tomorrow would be a lie about now.
 export const COACH_LAST_KEY = 'coach_last_answer';
 export function rememberCoachAnswer() {
   if (coachState.status !== 'ok') return;
@@ -72,9 +28,7 @@ export function rememberCoachAnswer() {
       question: coachState.question,
       answer: coachState.answer,
       // Passages carry the citation targets, so the answer is unreadable
-      // without them — but they are also the bulk. Six is every citation the
-      // model has ever used and keeps the record well inside a storage quota
-      // that safeSetItem already has to defend.
+      // without them — but they are also the bulk.
       results: (coachState.results || []).slice(0, 6),
       at: Date.now(),
     };
@@ -90,9 +44,7 @@ export function restoreCoachAnswer() {
   };
 }
 // Which passages he has flipped to English, and which he has opened in full,
-// keyed by index within the current answer. Both reset on every new question —
-// a toggle belongs to the passage on screen, not to an index that will mean
-// something else next time.
+// keyed by index within the current answer.
 export let coachEnglish = new Set();
 export function setCoachEnglish(value) { coachEnglish = value; }
 export let coachOpen = new Set();
@@ -102,23 +54,15 @@ export let coachRequestId = 0;
 export let coachAbort = null;
 
 // Raed's library deliberately keeps both editions of two Nippard programmes,
-// because their bytes differ and no supersession was ever proven. Retrieval does
-// not know that: "how many sets per week" came back with page 92 of file A AND
-// page 92 of file B, identical text, one above the other. Keep the first (they
-// arrive sorted by score) and drop later passages whose text repeats it.
-// Returns the surviving passages AND a map from each server-side index to its
-// new one, because the written answer cites passages by the server's numbering.
+// because their bytes differ and no supersession was ever proven.
 export function dedupePassages(results) {
   const seen = new Map();
   const passages = [];
   const moved = new Map();
   results.forEach((passage, index) => {
-    // The WHOLE passage, not its opening. 160 characters was enough to collapse
-    // two genuinely different 900-character chunks that happen to start the
-    // same way — consecutive pages of one book routinely do — and because the
-    // answer cites passages by index, collapsing them also redirects a citation
-    // onto the survivor. Wrong evidence under a right answer is worse than a
-    // duplicate.
+    // The WHOLE passage, not its opening: 160 characters collapsed two genuinely
+    // different chunks, and because the answer cites passages by index,
+    // collapsing them also redirects a citation onto the survivor.
     const key = String(passage.text || '').replace(/\s+/g, ' ').trim().toLowerCase();
     if (seen.has(key)) {
       // A citation of the copy still points at the one that was kept.
@@ -152,34 +96,13 @@ export function coachMoreLabel(count) {
 
 export async function askCoach(question, context = null) {
   // Only the NAME is sent, and it travels in its own field. Sets, loads and
-  // history stay on the device — he asked for a coach that knows which exercise
-  // he is on, not one that reads his session.
-  //
-  // It used to be appended to the question, and that silently narrowed every
-  // question asked mid-session: "متى أسوي ديلود؟" became "when do I deload for
-  // the Chest Press Machine", and the honest answer to that is "your books do
-  // not cover it". As its own field the name steers retrieval and is offered to
-  // the answer as context, so a general question stays general and a vague one
-  // ("كم تكرار أسوي؟") finally has something to resolve against.
-  // Every request gets a number, and only the newest one is allowed to write
-  // to coachState. Two questions in a row on a slow connection could otherwise
-  // finish out of order and leave the FIRST answer sitting under the SECOND
-  // question — with citation markers pointing into the wrong passage list,
-  // because coachOpen and coachEnglish are keyed by index into it.
-  // Abort the previous request, do not merely ignore its answer.
-  //
-  // The ticket below already stops a slow first answer overwriting a fast second
-  // one, but the first fetch kept running and the server kept generating — and
-  // /answer is the one metered call in this app. A double tap, or a second
-  // question typed while the first was still thinking, paid twice. The input and
-  // the button also stayed enabled throughout, which is what made a double tap
-  // easy in the first place.
+  // history stay on the device — he asked for a coach that knows which
+  // exercise he is on, not one that reads his session.
   if (coachAbort) { try { coachAbort.abort(); } catch (_) { /* already gone */ } }
   coachAbort = typeof AbortController === 'function' ? new AbortController() : null;
-  // Kept so the idle screen can offer them back. Mid-set he re-asks the same few
-  // things — «كم راحة بين المجموعات؟» — and retyping Arabic on a phone with
-  // chalk on your hands is the friction worth removing. Five is enough to be
-  // useful and short enough never to become a list he has to read.
+  // Kept so the idle screen can offer them back. Mid-set he re-asks the same
+  // few things — «كم راحة بين المجموعات؟» — and retyping Arabic on a phone
+  // with chalk on your hands is the friction worth removing.
   if (question) {
     const recent = (state.coach_recent || []).filter((q) => q !== question);
     state.coach_recent = [question, ...recent].slice(0, 5);
@@ -197,16 +120,9 @@ export async function askCoach(question, context = null) {
     const res = await fetch(coachRoute('answer'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // 0.35, down from 0.5. The floor used to be the answerability guard, and
-      // measuring it on 26 questions showed it cannot be: real questions his
-      // books answer score 0.396 (هل الإحماء ضروري؟), 0.412 (وش هو RIR؟) and
-      // 0.476 (هل الكرياتين مفيد؟), all BELOW «وصفة كبسة لحم» at 0.514. A floor
-      // that stops the kabsa question silences RIR and creatine with it.
-      //
-      // So the floor is now only a cheap early exit for the absurd — عاصمة
-      // اليابان lands at 0.179, علاج حب الشباب at 0.273, and neither costs an
-      // API call — and the model, holding the passages, decides whether they
-      // answer the question. It returns that as a flag, not as prose.
+      // 0.35, and it is NOT an answerability guard: measured over 26 questions,
+      // real questions his books answer score BELOW nonsense. It is only a cheap
+      // early exit for the absurd; the model, holding the passages, decides.
       body: JSON.stringify({
         question,
         ...(context ? { context: context.name } : {}),
@@ -216,9 +132,7 @@ export async function askCoach(question, context = null) {
         top_k: 10,
         min_score: 0.35,
         // The server may leave the library only because this says it may, and
-        // only after two passes over his books have failed. Anything it finds
-        // out there comes back labelled `source: "web"` and is rendered as
-        // such — he asked for the answer AND for it to say where it came from.
+        // only after two passes over his books have failed.
         allow_web: true,
       }),
       // Both the 30s ceiling AND this request's own abort, so a newer question
@@ -228,12 +142,9 @@ export async function askCoach(question, context = null) {
         : AbortSignal.timeout(30000),
     });
     if (ticket !== coachRequestId) return;
-    // Status first, body second. res.json() used to run before anything looked
-    // at res.status, so an HTML error page from a proxy — a 502, a 504, or a
-    // 401 that Tailscale Serve rewrites into its own page — threw on the parse
-    // and landed in the catch, which reports "the library is unreachable". It
-    // was reachable; it was refusing or the gateway was broken, and Raed would
-    // have gone looking for a network fault that did not exist.
+    // Status first, body second. res.json() on an HTML error page from a proxy
+    // throws, and the catch reports «the library is unreachable» — which sends
+    // him looking for a network fault that does not exist.
     let data;
     try {
       data = await res.json();
@@ -284,16 +195,8 @@ export async function askCoach(question, context = null) {
   renderCoach();
 }
 
-// What the coach is allowed to know about the session in progress.
-//
-// Raed asked for exactly this and explicitly NOT for more: "أبغى إذا انتقلت من
-// حصة تدريبية إلى المدرب، المدرب يدري أنا في أي تدريب، أو أقدر أفعل هذا الخيار
-// أو أطفيه". He turned down a coach that reads his sets and advises on them.
-//
-// So this is a search context, not an adviser: the name of the movement he is
-// standing at, added to the question so he can ask "كم راحة؟" without typing
-// which exercise he means. Nothing about his loads, his history or his
-// performance crosses over, and the switch is his.
+// Only the movement's NAME crosses over — Raed turned down a coach that reads
+// his sets. The switch that turns even that off is on the coach screen.
 export function activeCoachContext() {
   const session = state.active_session;
   if (!session || session.phase === 'warmup') return null;
@@ -307,14 +210,9 @@ export function activeCoachContext() {
   return { id: actualId, name: exercise.name, sessionName: session.session_name || '' };
 }
 
-// The web answer arrives as markdown, and printing it raw put
-// `([nice.org.uk](https://www.nice.org.uk/guidance/NG226/...?utm_source=openai))`
-// in the middle of an Arabic sentence — a URL long enough to push the whole page
-// sideways — while headings, list markers, and emphasis all read as punctuation.
-//
-// The inline links are dropped rather than rendered: every one of them is
-// already in `citations`, listed under the answer as a tappable host name, so
-// keeping them inline would be the same source twice, once unreadably.
+// The web answer arrives as markdown. Inline links are DROPPED rather than
+// rendered: every one is already in `citations` below the answer, so keeping
+// them inline would be the same source twice, once unreadably.
 export function webAnswerInline(text) {
   const nodes = [];
   const pattern = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
