@@ -3,7 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
-import { appSource, appSourceFiles } from '../scripts/app-source.mjs';
+import { appSource } from '../scripts/app-source.mjs';
 
 // app.js + core/**/*.js + ui/**/*.js. The client is no longer one file, and a
 // gate that still read app.js alone would be checking the boot file only.
