@@ -1020,6 +1020,17 @@ export const LOCALE = Object.freeze({
   // this one is an answer he deliberately went and re-opened.
   coach_log_past: pair('An answer you already have', 'جواب عندك من قبل'),
   coach_ask_new: pair('Ask something new', 'اسأل شيئًا جديدًا'),
+  // ---- v17r3: live activity ----
+  // The Island now runs for the whole session, and it says the set in words:
+  // «التو out of three ما فهمتها» — a bare «2/3» read as nothing to him.
+  activity_set_of: pair('Set {n} of {total}', 'المجموعة {n} من {total}'),
+  // Ramp rows are numbered apart from the working sets, exactly as the set grid
+  // numbers them W1/W2: counting them together would double the exercise.
+  activity_ramp_of: pair('Ramp {n} of {total}', 'تدرّج {n} من {total}'),
+  activity_exercise_of: pair('Exercise {n} of {total}', 'تمرين {n} من {total}'),
+  // Prefixes the elapsed session timer on the Island. Swift never formats
+  // Arabic, so even this one word is resolved here.
+  activity_since: pair('Since', 'منذ'),
 });
 
 const englishIndex = new Map(Object.entries(LOCALE).map(([key, value]) => [value.en, key]));
