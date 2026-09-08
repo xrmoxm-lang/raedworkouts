@@ -53,7 +53,29 @@ export default defineConfig({
       timeout: 15000,
     },
   ],
+  // Two projects. App specs run without a service worker (see tests/_fixtures.mjs
+  // for the context-level network fence); the deployed-site gate is the one spec
+  // that needs the real network and the real service worker.
+  projects: [
+    {
+      name: 'app',
+      testIgnore: /pwa-deploy\.spec\.mjs/,
+      use: {
+        serviceWorkers: 'block',
+      },
+    },
+    {
+      name: 'deploy',
+      testMatch: /pwa-deploy\.spec\.mjs/,
+      use: { serviceWorkers: 'allow' },
+    },
+  ],
   use: {
+    // The app ships real sync credentials, and sw.js answers sync-host GETs with
+    // its own fetch() — which page.route() never sees. Proven 2026-09-08: with
+    // both routes aborted, a page fetch of the live /health still returned 200.
+    // Blocking service workers is what makes the per-spec route() guards real.
+    // tests/pwa-deploy.spec.mjs re-enables them for the deployed-site gate.
     // His actual phone. Individual specs still override where they need to.
     viewport: { width: 390, height: 844 },
     actionTimeout: 15_000,

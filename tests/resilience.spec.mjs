@@ -4,7 +4,7 @@
 // the whole suite was green. They are written against observable behaviour —
 // what the phone does, what he sees — not against the implementation, so they
 // keep working if the code underneath is rewritten.
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
 
@@ -734,7 +734,8 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
       parsed.forced_next_session = 'upper_a';
       localStorage[key] = JSON.stringify(parsed);
     }, completed);
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'load' });
+    await page.locator('.welcome-screen, [data-home-overview]').first().waitFor({ timeout: 15000 });
     await page.waitForTimeout(900);
     await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
     await page.waitForTimeout(800);

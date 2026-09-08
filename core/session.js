@@ -4,6 +4,7 @@ import { confirmAction, toast } from '../core/dom.js';
 import {
   derivedBlock,
   exercisePrefs,
+  equipmentStepKg,
   rampLoadsFor,
   reEntryPlan,
   scopedReplacementFor,
@@ -114,7 +115,8 @@ function startSession(session) {
       // The COUNT is passed in, so a one-ramp exercise gets its own 60% load
       // rather than the first half of a two-set pair.
       const ramps = canSuggest
-        ? rampLoadsFor(sug.weight, rampSets)
+        // The learned equipment step, so a 5 kg machine ramps in 5 kg pins rather than 2.5.
+        ? rampLoadsFor(sug.weight, rampSets, equipmentStepKg(replacementId))
         : (rampSets >= 2 ? [{ weight: '', reps: 10 }, { weight: '', reps: 6 }] : [{ weight: '', reps: 8 }]);
       ramps.forEach((warm) =>
         sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // research/06 §7.2 rules: «[LADDER] wins. No scheduled deload in the first
 // block. Deload on trigger, with a week-12 backstop.» Only the backstop was
@@ -11,7 +11,10 @@ const APP = 'http://localhost:8877';
 async function boot(page) {
   await page.route('https://raed-hp.tail53bd35.ts.net/**', (r) => r.abort());
   await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
-  await page.goto(APP, { waitUntil: 'networkidle' });
+  // Wait for the app to draw, not for the network to fall silent: under a
+  // loaded machine `networkidle` was the one thing this file timed out on.
+  await page.goto(APP, { waitUntil: 'load' });
+  await page.locator('.welcome-screen, [data-home-overview]').first().waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
@@ -25,7 +28,8 @@ async function patchState(page, patch) {
     const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
     localStorage[key] = JSON.stringify({ ...JSON.parse(localStorage[key]), ...p });
   }, patch);
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'load' });
+  await page.locator('.welcome-screen, [data-home-overview]').first().waitFor({ timeout: 15000 });
   await page.waitForTimeout(900);
 }
 

@@ -56,7 +56,28 @@ import {
   videoIdentity,
 } from '../core/videos.js';
 import { hasValidWorkingValues, isRunnerExerciseResolved } from '../domain/runner-session.js';
+import { figure } from '../ui/figure.js';
 import { buildVideoTile, effortPicker, explainMark } from '../ui/kit.js';
+
+// mm:ss for a prescribed rest. The head and the sheet both print it, so they
+// cannot drift apart into 2:30 and 2:3.
+const restClock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
+// The next/finish pair is sticky-bottom, so it floats UP over whatever precedes
+// it. Measured at 390×844 with the rest dock up: the strip occupied 614–666 and
+// the docked bar 630–698, and all three effort words failed elementFromPoint at
+// their own centres. The session cannot advance without this answer, so the
+// question has to be reachable. Bring it clear once, and only when it is not.
+function revealEffortStrip(strip) {
+  requestAnimationFrame(() => {
+    if (!strip.isConnected || strip.hasAttribute('hidden')) return;
+    const box = strip.getBoundingClientRect();
+    const nav = document.querySelector('.runner-nav');
+    const floor = nav ? nav.getBoundingClientRect().top : window.innerHeight;
+    if (box.top >= 0 && box.bottom <= floor) return;
+    strip.scrollIntoView({ block: 'end', behavior: 'auto' });
+  });
+}
 
 function showSubstitutionScopeModal(exercise_id, exState, alt) {
   const modal = $('#modal');
@@ -67,6 +88,8 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
     const assessment = assessSessionSubstitution(exercise_id, alt.id, scope);
     const status = assessment.classification;
     modal.innerHTML = '';
+    // NOT .xs-head: that block sets direction:ltr for a bare exercise name, and
+    // this title is an Arabic sentence with a Latin name inside it.
     modal.appendChild(h('h3', {}, tf('adopt_named', { name: alt.name })));
     modal.appendChild(h('p', { class: 'tiny muted' }, t('substitution_ledger')));
     // This modal shipped entirely in English on an Arabic-only app. It escaped
@@ -92,12 +115,16 @@ function showSubstitutionScopeModal(exercise_id, exState, alt) {
       const original = getAllExercises().find((exercise) => exercise.id === exercise_id);
       const safe = (original?.alternatives || []).map((id) => getAllExercises().find((exercise) => exercise.id === id)).filter(Boolean)
         .find((candidate) => assessSessionSubstitution(exercise_id, candidate.id, scope).classification.severity !== 'block-with-override');
-      if (safe) modal.appendChild(h('div', { class: 'tiny muted', style: 'margin:10px 0;' }, tf('safer_option', { name: safe.name })));
-      modal.appendChild(h('button', { class: 'btn danger full', onClick: () => adopt({ accepted_at: new Date().toISOString(), reason: t('blocked_substitution_accepted') }) }, t('override_and_adopt')));
-    } else {
-      modal.appendChild(h('button', { class: 'btn primary full', 'data-adopt-swap': 'true', onClick: () => adopt() }, t('adopt_confirm')));
+      if (safe) modal.appendChild(h('div', { class: 'tiny muted safer-option' }, tf('safer_option', { name: safe.name })));
     }
-    modal.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:8px;', onClick: () => $('#modal-overlay').classList.remove('show') }, t('cancel')));
+    // One stacked pair of full-width actions, the same shape as confirmAction:
+    // the decision and the way out, never side by side.
+    modal.appendChild(h('div', { class: 'confirm-actions' },
+      status.severity === 'block-with-override'
+        ? h('button', { class: 'btn danger full', onClick: () => adopt({ accepted_at: new Date().toISOString(), reason: t('blocked_substitution_accepted') }) }, t('override_and_adopt'))
+        : h('button', { class: 'btn primary full', 'data-adopt-swap': 'true', onClick: () => adopt() }, t('adopt_confirm')),
+      h('button', { class: 'btn ghost full', onClick: () => $('#modal-overlay').classList.remove('show') }, t('cancel')),
+    ));
   };
   draw();
   $('#modal-overlay').classList.add('show');
@@ -112,23 +139,32 @@ export function renderExerciseCard(ex_id, exState) {
   const allWorkingDone = isRunnerExerciseResolved(exState);
 
   const card = h('div', { class: 'ex' + (allWorkingDone ? ' done' : ''), id: 'ex-' + ex_id });
-  const isOpen = card.classList.contains('expanded');
 
-  // Head — thumbnail is the body-anatomy illustration (cleaner than action shots)
-  const bodyUrl = RW.bodyImg ? RW.bodyImg(ex.primary) : '';
+  // Head — the drawn figure, with the working muscle in the accent, replaces the
+  // pastel PNG. It is the same fact, rendered in the app's own hand.
+  const headRest = prescribedRestSeconds(planned);
   const head = h('div', { class: 'ex-head', onClick: () => {
     // Was also rewriting the ▸/▾ glyph on .ex-status. That element is now the
     // settings button, so the query returned null and every header tap threw
     // — collapsing stopped working entirely.
     card.classList.toggle('expanded');
   }},
-    h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
+    figure(ex.primary, ex.secondary, 's72'),
     h('div', { class: 'ex-info' },
       // T1: catalogue exercise names remain English even in the Arabic UI.
       h('h4', {}, h('bdi', { class: 'ltr-run' }, ex.name)),
       h('div', { class: 'meta' },
         ex.primary.map(m => h('span', { class: 'muscle-tag' }, muscleLabel(m))),
-        ` ${planned.sets} × ${planned.reps}`,
+        h('span', { class: 'meta-dot', 'aria-hidden': 'true' }, '·'),
+        h('span', { class: 'num' }, `${planned.sets} × ${planned.reps}`),
+        // The prescribed rest was reachable only through the gear, so the one
+        // number he waits on between every set was not on the card at all.
+        headRest > 0
+          ? [
+              h('span', { class: 'meta-dot', 'aria-hidden': 'true' }, '·'),
+              h('span', { class: 'meta-rest' }, t('rest_plain'), ' ', h('span', { class: 'num' }, restClock(headRest))),
+            ]
+          : null,
       ),
       // A swapped card used to show only the replacement, so the programme's own
       // movement vanished with no trace and Raed could not tell a substitution
@@ -164,8 +200,11 @@ export function renderExerciseCard(ex_id, exState) {
     const ws = (last.sets || []).filter(s => !s.is_warmup && s.completed);
     if (ws.length) {
       lastTimeRow = h('div', { class: 'last-time' },
-        h('strong', {}, 'Last time'), ` (${fmtDate(last.date)}): `,
-        ws.map(s => `${s.weight}×${s.reps}`).join(', ')
+        // The date stays in the Arabic face: it is a weekday and a month, not a
+        // measurement. h() isolates the day numeral inside it on its own.
+        h('strong', {}, t('runner_last_time')),
+        ` (${fmtDate(last.date)}) `,
+        h('span', { class: 'num' }, ws.map(s => `${s.weight}×${s.reps}`).join(', ')),
       );
     }
   }
@@ -275,17 +314,21 @@ export function renderExerciseCard(ex_id, exState) {
     // The first column held the set number until Raed asked for it to go. It
     // now carries only a mark on ramp rows, so "#" labels an empty column.
     h('span', {}, ''),
-    h('span', {}, 'Weight (kg)'),
-    h('span', {}, 'Reps'),
+    h('span', {}, t('weight_kg')),
+    h('span', {}, t('reps')),
     h('span', {}, ''),
   ));
+  // The live row: the first set he has neither logged nor skipped. It is the
+  // one thing on this screen that is about to happen, so it is the one thing
+  // that carries the accent — and it walks down the ledger as he ticks.
+  const currentIdx = exState.sets.findIndex((set) => !set.completed && !set.skipped);
   exState.sets.forEach((set, idx) => {
     const isWarm = set.is_warmup;
     const setNum = isWarm ? `W${idx+1}` : `${idx - exState.sets.filter(s => s.is_warmup).length + 1}`;
     const workingSets = exState.sets.filter((item) => !item.is_warmup);
     const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
     const row = h('div', {
-      class: 'set-grid' + (isWarm ? ' warm' : '') + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : '') + (set.is_extra ? ' extra' : ''),
+      class: 'set-grid' + (isWarm ? ' warm' : '') + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : '') + (set.is_extra ? ' extra' : '') + (idx === currentIdx ? ' current' : ''),
       'data-session-set-row': String(idx),
       'data-set-kind': isWarm ? 'warmup' : 'working',
     },
@@ -396,6 +439,7 @@ export function renderExerciseCard(ex_id, exState) {
       }));
       body.appendChild(row);
       body.appendChild(strip);
+      revealEffortStrip(strip);
       return;
     }
     if (isFinalWorkingSet) {
@@ -411,6 +455,7 @@ export function renderExerciseCard(ex_id, exState) {
       strip.appendChild(effortPicker(set, () => { saveLocal(); render(); }));
       body.appendChild(row);
       body.appendChild(strip);
+      if (promptNow) revealEffortStrip(strip);
       return;
     }
     // Every other row keeps the fifth cell empty so the columns stay aligned.
@@ -426,8 +471,10 @@ export function renderExerciseCard(ex_id, exState) {
 
   // Action row: alternatives + add set + warmup helper
   if (planned.warmup) {
+    // The ⚠ that used to lead this line was decoration on a line that is
+    // already coloured as a caution. The instruction is the message.
     body.appendChild(h('div', { class: 'warmup-block' },
-      h('strong', {}, '⚠ ', t('warmup'), ': '), warmupText(planned, sug.weight)
+      h('strong', {}, t('warmup'), ': '), warmupText(planned, sug.weight)
     ));
   }
 
@@ -464,19 +511,21 @@ function showAddExerciseModal() {
     },
   });
   modal.appendChild(search);
+  // Seventy-odd movements as seventy-odd 48px slabs was a wall of buttons. The
+  // sheet's own list row carries the same tap and the same hook.
   options.forEach((item) => modal.appendChild(h('button', {
-    class: 'btn full', style: 'margin-top:6px; text-align:start;',
+    type: 'button', class: 'list-option',
     'data-add-exercise-option': item.id,
     onClick: () => {
       appendExerciseToSession(item.id);
       $('#modal-overlay').classList.remove('show');
     },
   },
-    h('strong', {}, item.name),
-    h('span', { class: 'tiny muted' }, ' · ', muscleLabel(item.primary?.[0])),
+    h('span', { class: 'row-title' }, h('bdi', { class: 'ltr-run' }, item.name)),
+    h('span', { class: 'row-hint' }, muscleLabel(item.primary?.[0])),
   )));
   modal.appendChild(h('button', {
-    class: 'btn ghost full', style: 'margin-top:10px;',
+    type: 'button', class: 'btn ghost full xs-done',
     onClick: () => $('#modal-overlay').classList.remove('show'),
   }, t('cancel')));
   $('#modal-overlay').classList.add('show');
@@ -738,25 +787,35 @@ function showAltModal(ex_id, exState) {
   const m = $('#modal');
   m.innerHTML = '';
 
-  // Section header helper
-  const sectionHead = (title, sub) => h('div', { style: 'margin: 14px 0 6px;' },
-    h('div', { style: 'font-size:13px; font-weight:600; color:var(--text);' }, title),
-    sub ? h('div', { class: 'tiny muted', style: 'margin-top:2px;' }, sub) : null,
-  );
-  const altCard = (alt, onClick) => {
-    const bodyUrl = RW.bodyImg ? RW.bodyImg(alt.primary) : '';
-    return h('div', {
-      class: 'ex swap-option', style: 'cursor:pointer; margin-bottom:6px; touch-action:pan-y;',
+  // The sheet's own section grammar, in place of three inline style strings.
+  const sectionHead = (titleKey, subKey) => [
+    h('div', { class: 'xs-label' }, t(titleKey)),
+    subKey ? h('div', { class: 'xs-note' }, t(subKey)) : null,
+  ];
+  // A candidate movement is a list item, not a second exercise card: a card
+  // inside a sheet on top of a card was the shape the design system bans.
+  // Kept as a div with role=button because the row carries an <h4>, which a
+  // <button> may not contain — and the swap tests read that heading.
+  const altRow = (alt, onClick) => {
+    const row = h('div', {
+      class: 'row is-button swap-option',
+      role: 'button', tabindex: '0',
       onClick,
+      onKeydown: (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onClick(event);
+      },
     },
-      h('div', { class: 'ex-head' },
-        h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
-        h('div', { class: 'ex-info' },
-          h('h4', {}, alt.name),
-          h('div', { class: 'meta' }, (alt.primary || []).map(muscleLabel).join(', '), t('tap_inspect')),
-        ),
+      h('div', { class: 'row-lead' }, figure(alt.primary, alt.secondary, 's40')),
+      h('div', { class: 'row-body' },
+        h('h4', { class: 'row-title' }, h('bdi', { class: 'ltr-run' }, alt.name)),
+        // «اضغط للتفاصيل» is kept: it is what tells him the tap costs nothing,
+        // that it computes the ledger rather than adopting the swap outright.
+        h('div', { class: 'row-hint' }, (alt.primary || []).map(muscleLabel).join(' · '), t('tap_inspect')),
       ),
     );
+    return row;
   };
 
   m.appendChild(h('h3', {}, t('swap')));
@@ -770,19 +829,20 @@ function showAltModal(ex_id, exState) {
     .filter((id) => id !== (exState?.swapped_to || ex_id));
   const validAlts = orderedIds.map(id => allEx.find(e => e.id === id)).filter(Boolean);
   if (validAlts.length) {
-    m.appendChild(sectionHead('Replace with…', 'Tap to calculate the ledger before adopting.'));
-    validAlts.forEach(alt => m.appendChild(altCard(alt, () => {
+    const replaceSection = h('section', { class: 'xs-section' }, sectionHead('swap_replace', 'swap_ledger'));
+    validAlts.forEach(alt => replaceSection.appendChild(altRow(alt, () => {
       showSubstitutionScopeModal(ex_id, exState, alt);
     })));
+    m.appendChild(replaceSection);
   }
 
   // ===== SECTION 2: Add another exercise =====
-  m.appendChild(sectionHead('Add another exercise to today', 'Appends to the end of this session. Doesn\'t modify the original programme.'));
-
+  const list = h('div', { class: 'list' });
   const searchInput = h('input', {
     type: 'search', class: 'search-input',
-    placeholder: '🔍 Search any exercise…',
-    style: 'margin-bottom:8px;',
+    // The magnifier emoji sat inside the placeholder, so it was read aloud and
+    // it survived into the value the field compared against.
+    placeholder: t('search_any_exercise_plain'),
     onInput: (e) => {
       const q = e.target.value.toLowerCase();
       list.innerHTML = '';
@@ -790,23 +850,25 @@ function showAltModal(ex_id, exState) {
         .filter(x => !state.active_session?.exercises?.[x.id])  // not already in session
         .filter(x => (x.name + ' ' + (x.name_ar || '')).toLowerCase().includes(q))
         .slice(0, 30);
-      matched.forEach(x => list.appendChild(altCard(x, () => {
+      matched.forEach(x => list.appendChild(altRow(x, () => {
         addExerciseToSession(x.id);
         $('#modal-overlay').classList.remove('show');
         toast(tf('added_to_today', { name: x.name }));
       })));
       if (!matched.length) {
-        list.appendChild(h('div', { class: 'tiny muted', style: 'padding:8px; text-align:center;' }, 'No matches.'));
+        list.appendChild(h('div', { class: 'xs-empty' }, t('no_matches')));
       }
     }
   });
-  m.appendChild(searchInput);
-  const list = h('div');
-  m.appendChild(list);
+  m.appendChild(h('section', { class: 'xs-section' },
+    sectionHead('swap_add', 'swap_add_desc'),
+    h('div', { class: 'xs-field' }, searchInput),
+    list,
+  ));
 
-  m.appendChild(h('button', { class: 'btn ghost full', style: 'margin-top:14px;',
+  m.appendChild(h('button', { class: 'btn ghost full xs-done',
     onClick: () => $('#modal-overlay').classList.remove('show')
-  }, 'Cancel'));
+  }, t('cancel')));
 
   $('#modal-overlay').classList.add('show');
   // Trigger initial empty render so user sees "type to search"

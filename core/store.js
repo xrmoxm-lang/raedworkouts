@@ -149,7 +149,6 @@ export function replaceSettings(next) { settings = next; }
 export let syncDirty = false;
 export function setSyncDirty(value) { syncDirty = value; }
 let activeUser = '';
-let suppressNextPush = false;
 export function hasMeaningfulLocalData() {
   return (state.history || []).length > 0 || Boolean(state.active_session) || (state.bodyweight_log || []).length > 0;
 }
@@ -437,7 +436,7 @@ export function saveLocal(opts = {}) {
   const { sync = true, dirty = true } = opts;
   persistLocal();
   if (dirty) markDirty();
-  if (sync && dirty && !suppressNextPush) schedulePush();
+  if (sync && dirty) schedulePush();
 }
 // Interaction log — his idea, and a better one than describing a problem in
 // words: «وش رأيك تصير أنت تراقب الضغطات وأزراري ونجلس نسجل كم جلسة، وبعدين

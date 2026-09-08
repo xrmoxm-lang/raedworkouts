@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // Raed pressed "finish" by accident and had no way back: the session was gone
 // from the workout screen and the log offered no way in. An hour of work must

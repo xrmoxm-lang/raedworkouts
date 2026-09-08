@@ -14,6 +14,8 @@ async function blockLiveSync(page) {
 const deployUrl = process.env.PWA_DEPLOY_URL || '';
 
 test.use({
+  // The deployed-site gate needs the real service worker; the project config blocks it for every other spec.
+  serviceWorkers: 'allow',
   browserName: 'chromium',
   headless: true,
   viewport: { width: 390, height: 844 },

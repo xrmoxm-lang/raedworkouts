@@ -1,6 +1,6 @@
 /* Home, and the in-session runner it turns into. */
 
-import { $, h, icon, isolate } from '../core/dom.js';
+import { $, h, icon, isolate, setUiText } from '../core/dom.js';
 import {
   currentTrainingWeek,
   deloadActive,
@@ -39,7 +39,17 @@ import { profileProteinRange, saveLocal, settings, state } from '../core/store.j
 import { PLATFORM_INFO, getAllExercises, getCurrentPlaylists } from '../core/videos.js';
 import { isCountableWorkingSet, isRunnerExerciseResolved } from '../domain/runner-session.js';
 import { renderExerciseCard } from '../ui/exercise-card.js';
+import { figure } from '../ui/figure.js';
 import { renderWarmupPhase } from '../ui/warmup.js';
+
+// A stat's number, sized so it can never leave its column. The digit count is
+// measured rather than guessed: tonnage is four figures now and seven by winter.
+const statNum = (text) => {
+  const digits = (String(text).match(/\d/g) || []).length;
+  const size = digits >= 7 ? ' s7' : digits >= 6 ? ' s6' : digits >= 5 ? ' s5' : '';
+  const zero = /^0(\.0+)?$/.test(String(text).replace(/[,\s]/g, '')) ? ' zero' : '';
+  return h('div', { class: 'stat-num' + size + zero, 'data-digits': String(digits) }, String(text));
+};
 
 export function renderHome() {
   const root = $('#page-home');
@@ -55,12 +65,12 @@ export function renderHome() {
     .some((entry) => String(entry?.date || '').slice(0, 10) === todayISO());
   const dow = ['weekday_sunday','weekday_monday','weekday_tuesday','weekday_wednesday','weekday_thursday','weekday_friday','weekday_saturday'][new Date().getDay()];
 
-  // Header — structured (accent carries state via the progress meter / top rule)
+  // ---- The hero. One shape for all three states: kicker, name, facts, clock.
   if (state.active_session) {
     const a = state.active_session;
     const parts = a.session_name.split(' — ');
     // One centred line while a session runs.
-    root.appendChild(h('div', { class: 'today-banner active running-line', 'data-home-overview': 'true' },
+    root.appendChild(h('div', { class: 'running-line', 'data-home-overview': 'true' },
       h('span', { class: 'rl-name' }, parts[0]),
       h('span', { class: 'rl-dot' }, '·'),
       h('span', { class: 'rl-since' }, tf('runner_active_started', { time: fmtTime(a.started_at) })),
@@ -69,123 +79,68 @@ export function renderHome() {
     // He asked for "today training / tomorrow rest, at a glance, before I
     // leave the house" four separate times and never got it.
     const parts = planned.name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner rest hero', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-main' },
-        h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('rest_day_plain')),
-        // The kicker already says «يوم راحة»; the heading says what it is FOR.
-        h('h2', {}, t('rest_day_earned')),
-        // t() the name BEFORE interpolating. Passing it raw puts "Upper A"
-        // inside the template, and the combined string matches no locale key
-        // — so the line renders half-English.
-        h('p', {}, tf('rest_next_up', { name: t(parts[0]) })),
-        h('div', { class: 'tb-meta' }, tf('rest_week_done', { n: week.done, target: week.target })),
-        h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
-      ),
-      // A rest day is the ring's best moment — it is the only day it is full.
-      progressRing(week.done, week.target, t('this_week_plain')),
+    root.appendChild(h('div', { class: 'today', 'data-home-overview': 'true' },
+      // The kicker already says «يوم راحة»; the heading says what it is FOR.
+      h('div', { class: 'eyebrow tb-kicker' }, isolate(t(dow)), ' · ', t('rest_day_plain')),
+      h('h1', {}, t('rest_day_earned')),
+      // t() the name BEFORE interpolating. Passing it raw puts "Upper A"
+      // inside the template, and the combined string matches no locale key
+      // — so the line renders half-English.
+      h('p', {}, tf('rest_next_up', { name: t(parts[0]) })),
+      h('div', { class: 'tb-meta' }, tf('rest_week_done', { n: week.done, target: week.target })),
+      h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
     ));
   } else if (planned) {
     const parts = planned.name.split(' — ');
-    root.appendChild(h('div', { class: 'today-banner hero', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-main' },
-        h('div', { class: 'tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
-        h('h2', {}, parts[0]),
-        // No subtitle when the name has no " — " half. The fallback was the FULL
-        // name, so a session called just «سفلي أ» printed its own title twice.
-        parts[1] ? h('p', {}, parts[1]) : null,
-        h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ',
-          // «~» is neutral, so it took its direction from the Arabic around it and
-          // landed AFTER the number: «65 ~ دقيقة». Isolated, it stays a prefix.
-          isolate('~', tf('home_minutes', { n: estimateSessionMinutes(planned) }))),
-        // Where he is in the programme, on the screen he opens — until now this
-        // existed only inside Settings, and it is the fact that shows the
-        // 12-month progression is actually moving on its own.
-        h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
-        // A deload week has fewer sets and a lower target effort. Unannounced,
-        // that reads as the app losing his programme rather than following it.
-        deloadActive() ? h('div', { class: 'tb-deload', 'data-deload-running': 'true' }, t('deload_running')) : null,
-      ),
-      progressRing(week.done, week.target, t('this_week_plain')),
+    root.appendChild(h('div', { class: 'today', 'data-home-overview': 'true' },
+      h('div', { class: 'eyebrow tb-kicker' }, isolate(t(dow)), ' · ', t('gym_day_plain')),
+      h('h1', {}, parts[0]),
+      // No subtitle when the name has no " — " half. The fallback was the FULL
+      // name, so a session called just «سفلي أ» printed its own title twice.
+      parts[1] ? h('p', {}, parts[1]) : null,
+      h('div', { class: 'tb-meta' }, tf('home_exercise_count', { n: planned.exercises.length }), ' · ',
+        // «~» is neutral, so it took its direction from the Arabic around it and
+        // landed AFTER the number: «65 ~ دقيقة». Isolated, it stays a prefix.
+        isolate('~', tf('home_minutes', { n: estimateSessionMinutes(planned) }))),
+      // Where he is in the programme, on the screen he opens — until now this
+      // existed only inside Settings, and it is the fact that shows the
+      // 12-month progression is actually moving on its own.
+      h('div', { class: 'tb-clock' }, tf('programme_hint', { week: derivedWeek(), cycle: derivedCycle() })),
+      // A deload week has fewer sets and a lower target effort. Unannounced,
+      // that reads as the app losing his programme rather than following it.
+      deloadActive() ? h('div', { class: 'tb-deload', 'data-deload-running': 'true' }, t('deload_running')) : null,
     ));
   } else {
     // data-home-overview marks "home drew its banner", not "a session is
     // running", so it belongs on all three branches.
-    root.appendChild(h('div', { class: 'today-banner rest', 'data-home-overview': 'true' },
-      h('div', { class: 'tb-kicker' }, t('rest_day_plain')),
-      h('h2', {}, tf('home_rest_next', { name: next.session.name.split(' — ')[0] })),
+    root.appendChild(h('div', { class: 'today', 'data-home-overview': 'true' },
+      h('div', { class: 'eyebrow tb-kicker' }, t('rest_day_plain')),
+      h('h1', {}, tf('home_rest_next', { name: next.session.name.split(' — ')[0] })),
       h('p', {}, tf('home_rest_rotation', { day: next.session.day || next.session.name })),
       h('div', { class: 'tb-meta' }, tf('home_rest_recover', { protein: profileProteinRange() })),
     ));
   }
 
-  // Everything from here to the music card is pre-workout context. During a
-  // running session .home-context orders it BELOW the exercise: the first set row
-  // sat at y=952 on an 844px screen, so logging an opening set began with a scroll.
-  const context = h('div', { class: 'home-context', 'data-home-context': 'true' });
-  root.appendChild(context);
-
-  // Order matters more than any of the styling below it. The one button he
-  // came to this screen to press was at y=462 on an 844px phone, under a week
-  // strip and three stat tiles — 482px of context ahead of the action.
-  const belowAction = h('div', { class: 'home-below' });
-
-  // A stat tile's number, sized so it can never leave the tile.
-  const statNum = (text) => {
-    const digits = (String(text).match(/\d/g) || []).length;
-    const size = digits >= 7 ? ' s7' : digits >= 6 ? ' s6' : digits >= 5 ? ' s5' : '';
-    const zero = /^0(\.0+)?$/.test(String(text).replace(/[,\s]/g, '')) ? ' zero' : '';
-    return h('div', { class: 'stat-num' + size + zero, 'data-digits': String(digits) }, String(text));
-  };
-
-  belowAction.appendChild(buildWeekStrip());
-
-  belowAction.appendChild(h('div', { class: 'stat-row', 'data-home-stat-tiles': 'true' },
-    h('div', { class: 'stat-tile' },
-      statNum(String(streak)),
-      h('div', { class: 'stat-cap' }, t('home_streak')),
-      h('div', { class: 'stat-sub' }, t('sessions_4wk')),
-    ),
-    h('div', { class: 'stat-tile' },
-      statNum(String(vol.totalSets)),
-      h('div', { class: 'stat-cap' }, t('this_week_plain')),
-      h('div', { class: 'stat-sub' }, t('working_sets')),
-    ),
-    // Tonnage is the one tile whose number keeps growing.
-    h('div', { class: 'stat-tile' },
-      statNum(fmtKgTotal(vol.totalKg)),
-      h('div', { class: 'stat-cap' }, t('home_tonnage')),
-      h('div', { class: 'stat-sub' }, t('kg_this_week')),
-    ),
-  ));
-
   const shownSession = planned || next.session;
   const shortSessionName = (session) => t(session.name.split(' — ')[0]);
 
-  // Action button
-  if (state.active_session) {
-    context.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('home') },
-      t('continue_session')
+  // ---- The one button he came to press, directly under the name. It was at
+  // y=462 on an 844px phone, under a week strip and three stat tiles.
+  if (!state.active_session) {
+    const target = planned || next.session;
+    root.appendChild(h('div', { class: 'home-start' },
+      h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(target) },
+        '▶ ', tf('start_session_named', { session: shortSessionName(target) })),
     ));
-    // عرض التمارين retired — the plan is already listed on this page.
 
-  } else if (planned) {
-    context.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(planned) },
-      '▶ ', tf('start_session_named', { session: shortSessionName(planned) })
-    ));
-  } else {
-    context.appendChild(h('button', { class: 'btn primary full', 'data-home-view-exercises': 'true', onClick: () => showSessionPreview(next.session) },
-      '▶ ', tf('start_session_named', { session: shortSessionName(next.session) })
-    ));
-  }
-  if (!state.active_session && shownSession) {
     // Back to exactly what it was. I replaced it with a <select> and he looked
     // at it and said "رجّع لنفس مكان القديم" — same call he made on the banner,
     // and the same answer: his screen, his decision.
-    let chooserOpen = false;
-    const sessions = getActiveProgramme().sessions.filter(s => s.id !== shownSession.id);
+    const sessions = getActiveProgramme().sessions.filter((s) => s.id !== shownSession.id);
     if (sessions.length) {
-      const row = h('div', { class: 'alt-row session-chooser-row' },
-        sessions.map(s => h('button', {
+      let chooserOpen = false;
+      const row = h('div', { class: 'session-chooser-row' },
+        sessions.map((s) => h('button', {
           type: 'button',
           class: 'chip',
           onClick: () => showSessionPreview(s),
@@ -194,21 +149,57 @@ export function renderHome() {
       const toggle = h('button', {
         type: 'button',
         class: 'btn tiny ghost session-chooser-toggle',
+        'aria-expanded': 'false',
         onClick: () => {
           chooserOpen = !chooserOpen;
           row.classList.toggle('open', chooserOpen);
-          toggle.textContent = chooserOpen ? 'Choose a different session ▴' : 'Choose a different session ▾';
+          toggle.setAttribute('aria-expanded', chooserOpen ? 'true' : 'false');
+          // Semantic keys, not the English literal: the label was the one string
+          // on this screen still resolved by its English source. setUiText, not
+          // textContent, so the swap goes through the locale resolver like every
+          // other string on the screen.
+          setUiText(toggle, chooserOpen ? 'choose_different_up' : 'choose_different_down');
         },
-      }, 'Choose a different session ▾');
-      context.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
+      }, t('choose_different_down'));
+      root.appendChild(h('div', { class: 'session-chooser' }, toggle, row));
     }
   }
 
-  // Week strip + stat tiles, now that the action is above them.
-  context.appendChild(belowAction);
+  // Everything from here down is pre-workout context. While a session runs
+  // .home-context is not shown at all — Raed: «هذي شيلها، هذي المفروض بس تكون
+  // موجودة لو ما بديت التمرين» — but it stays in the DOM so it returns intact.
+  const context = h('div', { class: 'home-context', 'data-home-context': 'true' });
+  root.appendChild(context);
+
+  if (state.active_session) {
+    context.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('home') },
+      t('continue_session')
+    ));
+  }
+
+  context.appendChild(buildWeekStrip());
+
+  context.appendChild(h('div', { class: 'stats-inline', 'data-home-stat-tiles': 'true' },
+    h('div', { class: 'stat' },
+      statNum(String(streak)),
+      h('div', { class: 'stat-cap' }, t('home_streak')),
+      h('div', { class: 'stat-sub' }, t('sessions_4wk')),
+    ),
+    h('div', { class: 'stat' },
+      statNum(String(vol.totalSets)),
+      h('div', { class: 'stat-cap' }, t('this_week_plain')),
+      h('div', { class: 'stat-sub' }, t('working_sets')),
+    ),
+    // Tonnage is the one number that keeps growing.
+    h('div', { class: 'stat' },
+      statNum(fmtKgTotal(vol.totalKg)),
+      h('div', { class: 'stat-cap' }, t('home_tonnage')),
+      h('div', { class: 'stat-sub' }, t('kg_this_week')),
+    ),
+  ));
 
   // This is deliberately the v15 block rather than a new music treatment.
-  // Raed explicitly approved its glyph, wording, card and playlist chips.
+  // Raed explicitly approved its glyph, wording and playlist links.
   const activeSession = state.active_session;
   const activeProgrammeSession = activeSession
     ? getActiveProgramme().sessions.find((item) => item.id === activeSession.session_id)
@@ -226,7 +217,7 @@ export function renderHome() {
         h('span', {}, tf('home_music_handoff', {
           platform: PLATFORM_INFO[settings.music_platform || 'spotify']?.label || '',
         }))),
-      h('div', { style: 'display:flex; gap:6px; flex-wrap:wrap;' },
+      h('div', { class: 'cluster' },
         platformPlaylists.map((playlist) => h('a', {
           href: playlist.url, target: '_blank', rel: 'noopener', class: 'btn tiny', title: playlist.vibe,
           // No isolate() here: getCurrentPlaylists already returns the label as a
@@ -242,7 +233,6 @@ export function renderHome() {
 
   // Active session detail
   if (state.active_session) {
-    root.appendChild(h('div', { class: 'spacer-24' }));
     const a = state.active_session;
     // Active sessions created before Phase 2 remain usable instead of being
     // retroactively blocked by a phase they never received.
@@ -273,9 +263,8 @@ export function renderHome() {
       // ما تطلع الصفحة اللي فوق الكبيرة".
       if (!sessionDoneDismissed && exEntries.every(([, entry]) => isRunnerExerciseResolved(entry))) {
         root.appendChild(buildSessionDonePanel(a, exEntries));
-        root.appendChild(h('div', { class: 'card', style: 'margin-top:16px;' },
+        root.appendChild(h('div', { class: 'session-close' },
           h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session')),
-          h('div', { class: 'spacer-12' }),
           h('button', { class: 'btn ghost full', onClick: () => { setFocusExerciseIdx(0); setSessionDoneDismissed(true); render(); } }, t('review_exercises')),
         ));
         return;
@@ -295,8 +284,9 @@ export function renderHome() {
             onClick: () => { setFocusExerciseIdx(i); render(); },
           }))
         ),
-        h('div', { class: 'sp-count' },
-          h('bdi', { class: 'ltr-run' }, `${doneCount}/${exEntries.length}`)),
+        // «3/7» is a fraction, and a fraction is LTR in Arabic too. Laid out by
+        // the page's RTL it printed «7/3» — a different number.
+        h('span', { class: 'sp-count num' }, `${doneCount}/${total}`),
       ));
 
       // Render only the current exercise, expanded
@@ -347,7 +337,7 @@ export function renderHome() {
         // else behind it, and it used to be a button that did nothing. Raed:
         // "أبغى لما أضغط السابق يرجع للإحماء".
         h('button', {
-          class: 'btn', style: 'flex:1;', 'data-runner-prev': 'true',
+          class: 'btn grow-1', 'data-runner-prev': 'true',
           onClick: () => {
             if (curIdx === 0) {
               const warm = state.active_session?.warmup;
@@ -366,8 +356,8 @@ export function renderHome() {
           },
         }, curIdx === 0 ? t('back_to_warmup') : t('previous')),
         curIdx < total - 1
-          ? h('button', { class: 'btn primary', style: 'flex:2;', onClick: () => { setFocusExerciseIdx(curIdx + 1); render(); } }, t('next_exercise_arrow'))
-          : h('button', { class: 'btn primary', style: 'flex:2;', onClick: endSession }, t('end_session')),
+          ? h('button', { class: 'btn primary grow-2', onClick: () => { setFocusExerciseIdx(curIdx + 1); render(); } }, t('next_exercise_arrow'))
+          : h('button', { class: 'btn primary grow-2', onClick: endSession }, t('end_session')),
       ));
     }
 
@@ -381,78 +371,57 @@ export function renderHome() {
     // Raed: «رجّع زر تجاهل الجلسة» — abandoning a session is decided in the middle
     // of one, so it stays on every exercise. It names the SESSION rather than
     // reading as «skip this exercise», and confirms in-app.
-    root.appendChild(h('div', { class: 'card session-close', style: 'margin-top:16px;' },
+    root.appendChild(h('div', { class: 'session-close' },
       onLastExercise
         ? h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session'))
         : null,
       h('button', {
-        class: 'btn tiny ghost session-discard', 'data-discard-session': 'true',
+        class: 'btn tiny ghost danger session-discard', 'data-discard-session': 'true',
         onClick: () => discardSession(),
       }, t('discard_session')),
     ));
   } else {
-    // Show today's planned exercises preview
+    // Today's plan, as a ledger. Every row is one line of the session: what it
+    // is, which muscle it works, how many sets, and the weight to open with.
     const sess = planned || next.session;
-    // No spacer here: .section-label already carries its own margin, so a 24px
-    // block on top of it made a 46px hole — two rules doing one job.
-    root.appendChild(h('h3', { class: 'section-label' }, planned ? 'Session plan' : 'Next session preview'));
+    const plan = h('section', { class: 'section' },
+      h('div', { class: 'section-head' },
+        h('span', { class: 'eyebrow' }, planned ? t('session_plan') : t('next_session_preview')),
+        h('span', { class: 'num' }, String(sess.exercises.length)),
+      ),
+    );
     sess.exercises.forEach((p, i) => {
-      const ex = getAllExercises().find(e => e.id === p.exercise_id);
+      const ex = getAllExercises().find((e) => e.id === p.exercise_id);
       const sug = suggestNextWeight(p.exercise_id, p);
-      const bodyUrl = (ex && RW.bodyImg) ? RW.bodyImg(ex.primary) : '';
-      root.appendChild(h('div', { class: 'ex plan-row' },
-        h('div', { class: 'ex-head' },
-          h('div', { class: 'ex-thumb body-img', style: bodyUrl ? `background-image:url('${bodyUrl}')` : '' }),
-          h('div', { class: 'ex-info' },
-            // The number belongs to the English exercise name, so the two are
-            // one isolated LTR run rather than a bare template string — and
-            // the row reads left-to-right like the name it carries.
-            h('h4', {}, h('bdi', { class: 'ltr-run' }, `${i+1}. ${ex?.name || p.exercise_id}`)),
-            h('div', { class: 'meta' },
-              h('span', { class: 'muscle-tag' }, muscleLabel(ex?.primary?.[0])),
-              ` ${p.sets} × ${p.reps} · `,
-              h('strong', { 'data-suggested-weight': 'true' }, displaySuggestedWeight(sug.weight)),
-            ),
+      plan.appendChild(h('div', { class: 'plan-row ex' },
+        h('span', { class: 'plan-idx num' }, String(i + 1)),
+        h('div', { class: 'plan-body' },
+          // The name is one isolated LTR run, so the row reads left to right
+          // like the name it carries instead of being reordered by the page.
+          h('div', { class: 'plan-name' }, h('bdi', { class: 'ltr-run' }, ex?.name || p.exercise_id)),
+          h('div', { class: 'plan-meta' },
+            h('span', { class: 'muscle-tag' }, muscleLabel(ex?.primary?.[0])),
+            h('span', { class: 'num' }, `${p.sets} × ${p.reps}`),
+            h('strong', { 'data-suggested-weight': 'true' }, displaySuggestedWeight(sug.weight)),
           ),
         ),
+        // The anatomical figure, in the app's own hand, instead of the pastel
+        // body PNG it used to paint as a background image.
+        figure(ex?.primary || [], ex?.secondary || [], 's56'),
       ));
     });
+    context.appendChild(plan);
   }
 }
 
 // ---- Home-only pieces (moved out of ui/kit.js so one screen owns them) ----
-export function progressRing(done, target, caption) {
-  const NS = 'http://www.w3.org/2000/svg';
-  const R = 26, C = 2 * Math.PI * R;
-  const filled = target > 0 ? Math.min(1, Math.max(0, done / target)) : 0;
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 64 64');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.classList.add('ring-svg');
-  const circle = (cls, dash) => {
-    const c = document.createElementNS(NS, 'circle');
-    c.setAttribute('cx', '32'); c.setAttribute('cy', '32'); c.setAttribute('r', String(R));
-    c.setAttribute('fill', 'none'); c.setAttribute('stroke-width', '5.5');
-    c.setAttribute('stroke-linecap', 'round');
-    c.classList.add(cls);
-    if (dash) { c.setAttribute('stroke-dasharray', dash); c.setAttribute('transform', 'rotate(-90 32 32)'); }
-    return c;
-  };
-  svg.appendChild(circle('ring-track'));
-  // A zero-length arc still paints a round cap — a dot on an empty ring reads as
-  // "one done". Draw the arc only when there is something to draw.
-  if (filled > 0) svg.appendChild(circle('ring-arc', `${(C * filled).toFixed(2)} ${C.toFixed(2)}`));
-  return h('div', { class: 'hero-ring' },
-    svg,
-    // «0/4» is a fraction, and a fraction is LTR in Arabic too. Laid out by the
-    // page's RTL it printed «4/0» — a different number.
-    h('div', { class: 'ring-face', dir: 'ltr' },
-      h('span', { class: 'ring-num' + (done > 0 ? '' : ' zero') }, String(done)),
-      h('span', { class: 'ring-of' }, `/${target}`),
-    ),
-    caption ? h('div', { class: 'ring-cap' }, caption) : null,
-  );
-}
+// progressRing lived here until v17. The ring is retired from Home — the week
+// rail and its «0/4» carry the same fact in a line he can read without decoding
+// an arc — and `styles.css` already hides `.hero-ring`. It is DELETED rather
+// than kept, because `tests/videos.test.mjs` fences dead functions and its own
+// note says the fence must shrink, never widen: a retired component parked as an
+// uncalled export is exactly the shape that gate exists to catch. Restoring it
+// means restoring the function and its one call in the rest-day branch.
 
 export function buildSessionDonePanel(active, entries) {
   const started = new Date(active.started_at);
@@ -468,8 +437,10 @@ export function buildSessionDonePanel(active, entries) {
       volume += (Number(set.weight) || 0) * (Number(set.reps) || 0);
     }
   }
-  return h('section', { class: 'card session-done', 'data-session-done': 'true' },
+  return h('section', { class: 'session-done', 'data-session-done': 'true' },
     h('h2', {}, t('session_done_title')),
+    // No .num here: the line is «45 دقيقة», and forcing direction:ltr on a
+    // mixed run moves the numeral to the wrong side of its own word.
     h('p', { class: 'session-done-time' }, arabicMinutes(minutes)),
     h('div', { class: 'session-done-stats tiny muted' },
       tf('session_done_sets', { n: sets }),
@@ -496,8 +467,7 @@ export function buildWeekStrip() {
     trainedOn.set(String(entry.date).slice(0, 10), entry.session_name || entry.session_id || '');
   }
 
-  const strip = h('div', { class: 'week-strip', 'data-week-strip': 'true' });
-  let doneThisWeek = 0;
+  const strip = h('div', { class: 'week-strip week-rail', 'data-week-strip': 'true' });
   for (let offset = 0; offset < 7; offset += 1) {
     const day = new Date(start);
     day.setDate(start.getDate() + offset);
@@ -505,30 +475,41 @@ export function buildWeekStrip() {
     const trained = trainedOn.get(key);
     const isToday = key === iso(today);
     const isFuture = day > today && !isToday;
-    if (trained) doneThisWeek += 1;
     strip.appendChild(h('div', {
       class: 'week-day' + (trained ? ' trained' : '') + (isToday ? ' today' : '') + (isFuture ? ' future' : ''),
       'data-week-day': key,
       title: trained || '',
     },
       h('span', { class: 'wd-name' }, t(DAY_KEYS[day.getDay()])),
+      // The mark is drawn by CSS; the text stays because a future day must
+      // carry nothing at all — the programme has no weekday map, so claiming
+      // tomorrow is a training day would be an invention.
       h('span', { class: 'wd-mark' }, trained ? '●' : (isFuture ? '' : '·')),
     ));
   }
 
+  // One source of truth for the count. This used to derive its own
+  // `4 - doneThisWeek` beside a hero that asked the engine, so the rail and the
+  // line under it could disagree the day the target stops being four.
+  const week = currentTrainingWeek();
   const planned = getTodayPlannedSession();
   const trainedToday = trainedOn.has(iso(today));
-  const remaining = Math.max(0, 4 - doneThisWeek);
-  return h('section', { class: 'card compact week-card', 'data-week-card': 'true' },
-    h('div', { class: 'tiny muted', style: 'margin-bottom:6px;' },
-      trainedToday
-        ? t('week_trained_today')
-        // Localise the session name BEFORE interpolating. Passing it raw put
-        // "Lower A" inside the template, and the combined string matches no
-        // locale key, so the whole line rendered half-English.
-        : tf('week_today_is', { name: t((planned?.name || '').split(' — ')[0]) })),
+  // On a day the week is already complete, «اليوم: علوي أ» contradicts the
+  // «ارتَحْ اليوم» directly above it, so it is stated only when it is owed.
+  const todayLine = trainedToday
+    ? t('week_trained_today')
+    // Localise the session name BEFORE interpolating. Passing it raw put
+    // "Lower A" inside the template, and the combined string matches no
+    // locale key, so the whole line rendered half-English.
+    : (week.remaining && planned ? tf('week_today_is', { name: t((planned.name || '').split(' — ')[0]) }) : '');
+  const countLine = week.remaining ? tf('week_remaining', { n: week.remaining }) : t('week_target_met');
+
+  return h('section', { class: 'section', 'data-week-card': 'true' },
+    h('div', { class: 'section-head' },
+      h('span', { class: 'eyebrow' }, t('week')),
+      h('span', { class: 'num' }, `${week.done}/${week.target}`),
+    ),
     strip,
-    h('div', { class: 'tiny muted', style: 'margin-top:6px;' },
-      remaining ? tf('week_remaining', { n: remaining }) : t('week_target_met')),
+    h('div', { class: 'week-note' }, todayLine ? [todayLine, ' · ', countLine] : countLine),
   );
 }

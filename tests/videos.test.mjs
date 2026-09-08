@@ -141,15 +141,7 @@ const KNOWN_DEAD_FUNCTIONS = new Set([
   // it navigated the CURSOR between exercises and was replaced by Prev/Next, so
   // it is not the feature he wants.
   //
-  // The test below still runs. Its job now is to stop the NEXT one appearing.
-  //
-  // Added 2026-09-07, by the app.js split. prescribedEffortKey has no caller and
-  // never had one: its only reference in the whole file was the words «see
-  // prescribedEffortKey» inside a narrative comment, and distilling that comment
-  // is what exposed it. The gate had been certifying a dead function on the
-  // strength of a mention — the shape this fence exists to catch. It is recorded
-  // rather than removed because deleting anything is Raed's call.
-  'prescribedEffortKey',
+  // 2026-09-08: prescribedEffortKey was deleted; the fence shrank with it.
 ]);
 
 test('no NEW function is left defined but never called', async () => {

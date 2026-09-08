@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // research/06 §6.3 — the first exposure to a movement, with no history behind
 // it. Step 1 of the source algorithm is titled «Ask nothing. Start at the

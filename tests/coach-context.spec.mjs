@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // Raed asked for the coach to know which exercise he is standing at, with a
 // switch — and explicitly NOT for a coach that reads his session. These pin

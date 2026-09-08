@@ -3,7 +3,7 @@
 // slabs unreadable without opening all seven. It is 11.5px, so it needs the full
 // 4.5:1, and it has to hold in all three skins in both themes. Measured, because
 // a muted token that reads fine on paper can vanish on حديد dark.
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 test.use({ viewport:{width:390,height:844} });
 const lum = c => { const [r,g,b]=c.match(/\d+/g).map(Number).map(v=>{v/=255; return v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4;}); return 0.2126*r+0.7152*g+0.0722*b; };
 const ratio=(a,c)=>{const l1=lum(a),l2=lum(c); return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);};

@@ -953,6 +953,39 @@ export const LOCALE = Object.freeze({
   programme_note_block_b: pair('Block B retains the same primary compounds and rotates only the listed isolation slots.', 'الكتلة ب تُبقي المركّبات الأساسية كما هي، ولا تبدّل إلا تمارين العزل المذكورة.'),
   programme_note_history_seed: pair('Seed each first working weight from logged history where it exists; the ramp probe is the fallback, not the default.', 'ابدأ كل وزن عمل أول من سجلّك حين يوجد؛ والتدرّج الاستكشافي بديل عند غيابه لا الأصل.'),
   programme_note_reentry: pair('Weeks 1–2 are a re-entry ramp: cap effort and eccentric volume, never deliberately under-load a detrained lifter.', 'الأسبوعان 1–2 تدرّج عودة: قيّد الجهد وحجم الحركة السالبة، ولا تُنقص الوزن عمدًا على من ترك التدريب وعاد.'),
+  // ---- v17: library + history ----
+  library_count_hint: pair('exercises · tap any group to expand', 'تمرينًا · اضغط أي مجموعة لتوسيعها'),
+  library_search_placeholder: pair('Search exercises…', 'ابحث عن تمرين…'),
+  custom_exercise_button: pair('Custom exercise', 'تمرين مخصص'),
+  name_arabic: pair('Name (Arabic)', 'الاسم بالعربي'),
+  arabic_name_example: pair('e.g. Cross-body cable fly', 'مثال: تفتيح كيبل عرضي'),
+  // The same two labels as video_edit_jn / video_edit_jn_custom, without the
+  // pencil emoji: v17 carries no emoji outside the exercise gear.
+  video_edit_jn_plain: pair('Edit JN URL', 'عدّل رابط JN'),
+  video_edit_jn_custom_plain: pair('JN URL (custom)', 'رابط JN (مخصّص)'),
+  history_sessions_word: pair('sessions logged', 'جلسة مسجّلة'),
+  bodyweight_latest: pair('Latest', 'آخر قياس'),
+  bodyweight_log_action: pair('Log it', 'سجّل'),
+  // A session whose stored name is missing and whose programme entry is gone.
+  // It used to print the raw session_id, and before that «undefined».
+  session_generic: pair('Session', 'جلسة'),
+  // Was a trophy emoji on the set that set the record.
+  pr_mark: pair('Personal record', 'رقم شخصي'),
+  revision_word: pair('revision', 'مراجعة'),
+  // ---- v17: session runner ----
+  // The same field as search_any_exercise without the magnifier emoji: v17
+  // carries no emoji outside the exercise gear, and a glyph inside a
+  // placeholder is read aloud as «magnifying glass» before the instruction.
+  search_any_exercise_plain: pair('Search any exercise…', 'ابحث عن أي تمرين…'),
+  // ---- v17: settings + welcome + end ----
+  // Group labels for the seven Settings disclosures. Two of them keep wording
+  // the existing `preferences` / `cloud_data` entries do not carry, so they get
+  // their own keys rather than silently changing what the group is called.
+  settings_group_preferences: pair('Preferences (settings group)', 'تفضيلات'),
+  settings_group_data: pair('Cloud and data (settings group)', 'سحب البيانات'),
+  settings_sync_row: pair('Sync', 'المزامنة'),
+  // personal_records carries a trophy emoji; the end screen carries none.
+  personal_records_plain: pair('Personal records', 'أرقام شخصية'),
 });
 
 const englishIndex = new Map(Object.entries(LOCALE).map(([key, value]) => [value.en, key]));

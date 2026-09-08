@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // [PPL] E p.27 L:1292-1302, carried into research/06 §«Superset note»:
 // «Do not rest after completing the first set of the A1 exercise and move right
@@ -104,7 +104,11 @@ test('a set of A1 sends him straight into A2, and A2 sends him back', async ({ p
   const afterA1 = await focused(page);
   expect(afterA1, 'a working set of A1 must move him to A2').not.toBe(onA1);
 
-  // ...and completing A2's set brings him back for the next round.
+  // ...and completing A2's set brings him back for the next round. A2 has its
+  // own ramp row, and ramps never alternate (the rule's own guard), so it has
+  // to be out of the way here exactly as it was on A1 — otherwise this tick
+  // lands on the ramp and the assertion measures nothing.
+  await clearRamps(page);
   await logOneWorkingSet(page);
   const afterA2 = await focused(page);
   expect(afterA2, 'A2 returns him to A1 for the next round').toBe(onA1);

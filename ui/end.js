@@ -1,6 +1,6 @@
 /* The end-of-session screen and its wellbeing check. */
 
-import { $, h } from '../core/dom.js';
+import { $, h, isolate } from '../core/dom.js';
 import {
   DELOAD_SIGNS,
   DELOAD_SIGN_LABEL,
@@ -12,10 +12,40 @@ import {
   recordWellbeingCheck,
   wellbeingCheckDue,
 } from '../core/engine.js';
-import { fmtDate, t, tf } from '../core/i18n.js';
+import { fmtDate, fmtKgTotal, localizeText, t, tf } from '../core/i18n.js';
 import { _endScreenSession } from '../core/session.js';
 import { settings, state } from '../core/store.js';
 import { getAllExercises } from '../core/videos.js';
+
+// The 💪 that used to sit here was the app's own emoji, on the one screen that
+// is supposed to feel like a ledger closing. A stroke drawn once says the same
+// thing in the app's hand. Built in the SVG namespace — h() uses
+// document.createElement, which in an HTML document produces a non-rendering
+// HTML element named "svg".
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function drawnCheck() {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('check-draw');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', 'M5 12.5l4.5 4.5L19 7');
+  svg.appendChild(path);
+  return svg;
+}
+
+// A five-digit volume in 28px mono overruns a third of a 390px screen, so the
+// number steps down rather than pushing its neighbour off the row.
+const numClass = (text) => 'num' + (text.length >= 7 ? ' s7' : text.length === 6 ? ' s6' : text.length === 5 ? ' s5' : '');
+const statCell = (value, labelKey) => h('div', { class: 'stat' },
+  h('div', { class: numClass(value) }, value),
+  h('div', { class: 'lbl' }, t(labelKey)),
+);
 
 // Five taps and «كله تمام». The sixth sign, «persistent loss of strength», is
 // not asked — the app reads it out of his own logs, because asking someone
@@ -69,10 +99,10 @@ export function renderSessionEnd() {
     // Was a hand-written innerHTML string, and the only one in the file:
     // English («Session saved.» / «Home») on an Arabic-only screen, and
     // markup where every other screen builds nodes.
-    root.appendChild(h('div', { class: 'empty' },
-      h('div', { class: 'big' }, '✓'),
-      h('p', { class: 'muted' }, t('session_saved')),
-      h('a', { class: 'btn primary', href: '#home' }, t('home')),
+    root.appendChild(h('div', { class: 'session-end' },
+      h('div', { class: 'hero' }, drawnCheck()),
+      h('p', { class: 'subtitle' }, t('session_saved')),
+      h('a', { class: 'btn primary full', href: '#home' }, t('home')),
     ));
     return;
   }
@@ -82,38 +112,29 @@ export function renderSessionEnd() {
   const msg = (RW.MOTIVATIONAL_MESSAGES || ['Eat. Sleep. Repeat.'])[msgIdx];
 
   const wrap = h('div', { class: 'session-end' },
-    h('div', { class: 'hero' }, '💪'),
+    h('div', { class: 'hero' }, drawnCheck()),
     // session_done_title, not a literal: 'Session done.' — with the full stop —
     // matched no locale entry, so this one heading rendered English on the
     // screen shown after every workout.
     h('h2', {}, t('session_done_title')),
-    h('div', { class: 'subtitle' }, fmtDate(s.started_at) + ' · ' + s.session_name),
+    h('div', { class: 'subtitle' }, fmtDate(s.started_at), ' · ', localizeText(s.session_name)),
 
     h('div', { class: 'stats-grid' },
-      h('div', { class: 'stat' },
-        h('div', { class: 'num' }, String(stats.sets)),
-        h('div', { class: 'lbl' }, 'Sets'),
-      ),
-      h('div', { class: 'stat' },
-        h('div', { class: 'num' }, String(stats.reps)),
-        h('div', { class: 'lbl' }, 'Reps'),
-      ),
-      h('div', { class: 'stat' },
-        h('div', { class: 'num' }, String(stats.volume_kg)),
-        h('div', { class: 'lbl' }, 'Volume kg'),
-      ),
+      statCell(String(stats.sets), 'sets'),
+      statCell(String(stats.reps), 'reps'),
+      statCell(fmtKgTotal(stats.volume_kg), 'volume_kg'),
     ),
 
     // Honour the setting. It was written and toggled in Settings and read by
     // NOTHING, so turning "show PR summary" off changed nothing on screen — a
     // control that lies about what it does.
     (settings.show_pr_summary !== false && prs.length) ? h('div', { class: 'pr-card' },
-      h('h3', {}, t('personal_records')),
+      h('h3', {}, t('personal_records_plain')),
       prs.map(pr => {
         const ex = getAllExercises().find(e => e.id === pr.exercise_id);
         return h('div', { class: 'pr-line' },
-          h('span', {}, ex ? ex.name : pr.exercise_id),
-          h('span', {}, `${pr.kg} kg × ${pr.reps}`),
+          h('span', {}, isolate(ex ? ex.name : pr.exercise_id)),
+          h('span', { class: 'num' }, `${pr.kg} kg × ${pr.reps}`),
         );
       })
     ) : null,
@@ -124,12 +145,14 @@ export function renderSessionEnd() {
     wellbeingCheckDue() ? buildWellbeingCheck() : null,
 
     h('div', { class: 'next-up' },
-      h('div', { class: 'tiny muted', style: 'margin-bottom:4px;' },
+      h('div', { class: 'eyebrow' },
         // Was "of 12" with a foundation/strength/peak split — neither of which
         // this programme has. It is 8 weeks in two blocks, and the block carries
-        // its own name in the data.
+        // its own name in the data. localizeText, because tf() interpolates the
+        // block name AFTER the locale lookup — so the English block name from
+        // data.js used to survive onto an Arabic screen.
         tf('block_week_of', {
-          block: getActiveProgramme()?.block_name || derivedBlock(),
+          block: localizeText(getActiveProgramme()?.block_name || String(derivedBlock())),
           week: derivedWeek(),
           total: Math.max(...((state.programme_overrides || RW.PROGRAMME).blocks || []).map((b) => b.week_end || 0), 1),
         })
@@ -142,10 +165,9 @@ export function renderSessionEnd() {
     ),
 
     h('div', { class: 'end-cta' },
-      h('a', { href: '#history', class: 'btn' }, 'View history'),
-      h('a', { href: '#home', class: 'btn primary' }, 'Done'),
+      h('a', { href: '#history', class: 'btn' }, t('view_history')),
+      h('a', { href: '#home', class: 'btn primary' }, t('done')),
     ),
   );
   root.appendChild(wrap);
 }
-

@@ -51,7 +51,6 @@ export function syncUserQuery(localUserId = settings.user_id) {
   return encodeURIComponent(syncUserId(localUserId));
 }
 let syncTimer = null;
-let syncInFlight = false;
 let syncInFlightPromise = null;
 export let welcomeProfiles = null;
 export let welcomeLoading = false;
@@ -216,7 +215,6 @@ export async function flushSync(opts = {}) {
     clearScheduledPush();
     let ok = false;
     let run;
-    syncInFlight = true;
     run = (async () => {
       try {
         ok = await syncToCloud(opts);
@@ -232,7 +230,6 @@ export async function flushSync(opts = {}) {
         }
         return false;
       } finally {
-        syncInFlight = false;
         if (syncInFlightPromise === run) syncInFlightPromise = null;
         if (syncDirty) schedulePush(ok ? 2500 : 60000);
       }

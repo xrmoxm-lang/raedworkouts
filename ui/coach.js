@@ -19,6 +19,17 @@ import { fmtUsd, t, tf } from '../core/i18n.js';
 import { saveLocal, settings, state } from '../core/store.js';
 import { isSafeHttpUrl } from '../core/videos.js';
 
+// «صفحة 92» with the digits in Plex Mono. The locale keeps the whole sentence —
+// duplicating it as a bare word plus a number would put the word order in the
+// renderer, where Arabic and English disagree about it.
+function numbered(key, value) {
+  const text = tf(key, { n: value });
+  const mark = String(value);
+  const at = text.indexOf(mark);
+  if (at < 0) return [text];
+  return [text.slice(0, at), h('span', { class: 'num' }, mark), text.slice(at + mark.length)];
+}
+
 export function renderCoach() {
   const root = $('#page-coach');
   root.innerHTML = '';
@@ -122,7 +133,7 @@ export function renderCoach() {
   }
 
   if (coachState.status === 'loading') {
-    root.appendChild(h('div', { class: 'card compact tiny muted', 'data-coach-loading': 'true' }, t('coach_searching')));
+    root.appendChild(h('div', { class: 'notice', 'data-coach-loading': 'true' }, t('coach_searching')));
     return;
   }
 
@@ -131,9 +142,9 @@ export function renderCoach() {
   // shouldn't. The monthly ceiling was reached.
   if (coachState.answer && coachState.answer.status === 'over_budget') {
     const a = coachState.answer;
-    root.appendChild(h('div', { class: 'card compact warn', 'data-coach-over-budget': 'true' },
+    root.appendChild(h('div', { class: 'notice warn', 'data-coach-over-budget': 'true' },
       h('strong', {}, t('coach_over_budget')),
-      h('p', { class: 'tiny muted' }, tf('coach_over_budget_hint', {
+      h('p', { class: 'tiny muted coach-notice-hint' }, tf('coach_over_budget_hint', {
         month: fmtUsd(a.month_usd), cap: fmtUsd(a.cap_usd),
       })),
     ));
@@ -141,24 +152,29 @@ export function renderCoach() {
     return;
   }
   if (coachState.status === 'no_match') {
-    root.appendChild(h('div', { class: 'card compact', 'data-coach-no-match': 'true' },
+    // Deliberately NOT `.warn`: the library answered, and «nothing here» is an
+    // answer. Painting it in the failure colour is the exact conflation the
+    // spec for this state exists to prevent.
+    root.appendChild(h('div', { class: 'notice', 'data-coach-no-match': 'true' },
       h('strong', {}, t('coach_no_match')),
-      h('p', { class: 'tiny muted' }, t('coach_no_match_hint')),
+      h('p', { class: 'tiny muted coach-notice-hint' }, t('coach_no_match_hint')),
     ));
     return;
   }
   if (coachState.status === 'unauthorized') {
-    root.appendChild(h('div', { class: 'card compact warn', 'data-coach-error': 'true' },
+    root.appendChild(h('div', { class: 'notice warn', 'data-coach-error': 'true' },
       h('strong', {}, t('coach_unauthorized')),
-      h('p', { class: 'tiny muted' }, t('coach_unauthorized_hint')),
+      h('p', { class: 'tiny muted coach-notice-hint' }, t('coach_unauthorized_hint')),
     ));
     return;
   }
   if (coachState.status === 'offline' || coachState.status === 'error') {
-    root.appendChild(h('div', { class: 'card compact warn', 'data-coach-error': 'true' },
+    root.appendChild(h('div', { class: 'notice warn', 'data-coach-error': 'true' },
       h('strong', {}, t(coachState.status === 'offline' ? 'coach_offline' : 'coach_error')),
-      h('p', { class: 'tiny muted' }, t(coachState.status === 'offline' ? 'coach_offline_hint' : 'coach_error_hint')),
-      h('p', { class: 'tiny muted' }, h('bdi', { class: 'ltr-run' }, coachState.error)),
+      h('p', { class: 'tiny muted coach-notice-hint' }, t(coachState.status === 'offline' ? 'coach_offline_hint' : 'coach_error_hint')),
+      // The raw failure, verbatim. It is diagnostic text from the network
+      // stack, not copy, so it is never translated — only isolated.
+      h('p', { class: 'tiny muted coach-notice-hint' }, h('bdi', { class: 'ltr-run' }, coachState.error)),
     ));
     return;
   }
@@ -166,9 +182,9 @@ export function renderCoach() {
   renderCoachAnswer(root);
 }
 
-// One passage card. Shows the Arabic translation when the library has one and
-// keeps the English original one tap away, because the Arabic is machine
-// translation of a book he paid for and he should be able to check it.
+// One passage. Shows the Arabic translation when the library has one and keeps
+// the English original one tap away, because the Arabic is machine translation
+// of a book he paid for and he should be able to check it.
 function coachPassageCard(passage, index, cited) {
   const arabic = passage.text_ar;
   const showEnglish = coachEnglish.has(index) || !arabic;
@@ -195,7 +211,7 @@ function coachPassageCard(passage, index, cited) {
   }
 
   const card = h('article', {
-    class: 'card compact coach-passage' + (cited ? ' cited' : ''),
+    class: 'coach-passage' + (cited ? ' cited' : ''),
     'data-coach-passage': 'true',
     ...(cited ? { 'data-coach-cited': 'true' } : {}),
   },
@@ -206,7 +222,7 @@ function coachPassageCard(passage, index, cited) {
       // Book titles are English and stay English (T1). h() isolates Latin runs
       // on its own, so no manual <bdi> here — that is what produced nested bdi.
       h('strong', {}, passage.work),
-      h('span', { class: 'tiny muted' }, ' · ', tf('coach_page', { n: passage.page })),
+      h('span', { class: 'tiny muted coach-page' }, ' · ', numbered('coach_page', passage.page)),
       arabic && !showEnglish
         ? h('span', { class: 'coach-tag' }, t('coach_translated'))
         : null,
@@ -278,7 +294,7 @@ function renderCoachAnswer(root) {
   const isRefusal = (answer && answer.status === 'ok' && !answer.answered) || unsourced;
 
   if (fromWeb) {
-    const card = h('article', { class: 'card coach-answer from-web', 'data-coach-web': 'true' },
+    const card = h('article', { class: 'coach-answer from-web', 'data-coach-web': 'true' },
       h('div', { class: 'coach-answer-label web' }, t('coach_from_web')),
       webAnswerText(answer.text),
       h('p', { class: 'tiny muted' }, t('coach_web_note')),
@@ -300,7 +316,7 @@ function renderCoachAnswer(root) {
     }
     root.appendChild(card);
   } else if (isAnswer) {
-    root.appendChild(h('article', { class: 'card coach-answer', 'data-coach-answer': 'true' },
+    root.appendChild(h('article', { class: 'coach-answer', 'data-coach-answer': 'true' },
       h('div', { class: 'coach-answer-label' }, t('coach_answer_label')),
       coachAnswerText(answer.text, results.length),
       // Says so when the first search missed and the rewrite found it, because
@@ -315,21 +331,21 @@ function renderCoachAnswer(root) {
     // The model claimed an answer and named no passage for it. Its sentence is NOT
     // printed: reprinting it under a «not in your books» heading would put an
     // unsupported claim in front of him while looking careful.
-    root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
+    root.appendChild(h('article', { class: 'coach-answer unanswered', 'data-coach-unanswered': 'true' },
       h('strong', {}, t('coach_unanswered')),
       h('p', { class: 'tiny muted' }, t('coach_unsourced_hint')),
     ));
   } else if (isRefusal) {
     // Not an error state. The search worked; the books do not cover it.
-    root.appendChild(h('article', { class: 'card coach-answer unanswered', 'data-coach-unanswered': 'true' },
+    root.appendChild(h('article', { class: 'coach-answer unanswered', 'data-coach-unanswered': 'true' },
       h('strong', {}, t('coach_unanswered')),
       h('p', { class: 'tiny muted' }, t('coach_unanswered_hint')),
     ));
   } else if (answer && answer.status === 'unconfigured') {
-    root.appendChild(h('div', { class: 'card compact tiny muted', 'data-coach-answer-off': 'true' },
+    root.appendChild(h('div', { class: 'notice', 'data-coach-answer-off': 'true' },
       t('coach_answer_off')));
   } else if (!answer || answer.status === 'failed') {
-    root.appendChild(h('div', { class: 'card compact tiny muted', 'data-coach-answer-off': 'true' },
+    root.appendChild(h('div', { class: 'notice', 'data-coach-answer-off': 'true' },
       t('coach_answer_failed')));
   }
 
@@ -342,7 +358,7 @@ function renderCoachAnswer(root) {
   const rest = results.map((_, i) => i).filter((i) => !cited.includes(i));
 
   if (cited.length) {
-    root.appendChild(h('div', { class: 'tiny muted coach-section', 'data-coach-count': 'true' },
+    root.appendChild(h('div', { class: 'eyebrow coach-section', 'data-coach-count': 'true' },
       t('coach_sources_used')));
     cited.forEach((i) => root.appendChild(coachPassageCard(results[i], i, true)));
   }
@@ -354,18 +370,20 @@ function renderCoachAnswer(root) {
     const collapse = cited.length > 0 || isRefusal;
     if (collapse) {
       const more = h('details', { class: 'coach-more', 'data-coach-more': 'true' },
-        h('summary', {}, coachMoreLabel(rest.length)));
+        // The label goes inside a span. The summary is a flex row, so a bare
+        // «3 مقاطع أخرى وُجدت» became two flex items — the isolated numeral and
+        // the rest — and flex drops the space between them: «3مقاطع».
+        h('summary', {}, h('span', {}, coachMoreLabel(rest.length))));
       rest.forEach((i) => more.appendChild(coachPassageCard(results[i], i, false)));
       root.appendChild(more);
     } else {
       // No answer was written at all — the passages are the whole product, so
       // they stay open, exactly as the coach behaved before this layer existed.
-      root.appendChild(h('div', { class: 'tiny muted coach-section', 'data-coach-count': 'true' },
+      root.appendChild(h('div', { class: 'eyebrow coach-section', 'data-coach-count': 'true' },
         coachFoundLabel(results.length)));
       rest.forEach((i) => root.appendChild(coachPassageCard(results[i], i, false)));
     }
   }
 
-  root.appendChild(h('p', { class: 'tiny muted', style: 'text-align:center;margin-top:4px;' }, t('coach_footer')));
+  root.appendChild(h('p', { class: 'tiny muted coach-footer' }, t('coach_footer')));
 }
-

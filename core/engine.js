@@ -409,7 +409,7 @@ export function warmupText(planned, suggestedWeight) {
     // rampLoadsFor can legitimately return ONE entry, when the load is
     // too light for two distinct ramp weights. Indexing [1] blindly would throw
     // here and take the whole card's render down with it.
-    const warmups = rampLoadsFor(suggestedWeight, 2);
+    const warmups = rampLoadsFor(suggestedWeight, 2, equipmentStepKg(planned.exercise_id));
     const parts = warmups.map((w, i) => `${fmtKgValue(w.weight)}kg×${i === 0 ? 10 : 6}`);
     return `${warmups.length} ${warmups.length === 1 ? 'set' : 'sets'}: ${parts.join(', ')}`;
   }
@@ -578,12 +578,6 @@ function prescribedRpeValues(planned) {
   return (String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [])
     .map(Number).filter(Number.isFinite);
 }
-function prescribedEffortKey(planned) {
-  const all = prescribedRpeValues(planned);
-  if (!all.length) return null;
-  return effortKeyForRpe(Math.max(...all));
-}
-
 // The effort target of EACH set, not the hardest of them.
 export function prescribedEffortSequence(planned) {
   const all = prescribedRpeValues(planned);
@@ -622,7 +616,7 @@ function learnedStepFromHistory(exerciseId) {
   if (!Number.isFinite(smallest) || smallest < 0.5 || smallest > 10) return null;
   return smallest;
 }
-function equipmentStepKg(exerciseId) {
+export function equipmentStepKg(exerciseId) {
   const learned = learnedStepFromHistory(exerciseId);
   if (learned) return learned;
   const kind = exercisePrefs(exerciseId).equipment;

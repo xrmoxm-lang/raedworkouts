@@ -32,15 +32,25 @@ export const h = (tag, attrs = {}, ...children) => {
   return el;
 };
 export const isolate = (...children) => h('bdi', {}, children);
-export const brandMark = () => h('svg', {
-  class: 'brand-mark', viewBox: '0 0 200 100', 'aria-hidden': 'true',
-}, h('g', { transform: 'translate(100 50)', fill: 'currentColor' },
-  h('rect', { x: '-84', y: '-5', width: '168', height: '10', rx: '5' }),
-  h('circle', { cx: '-46', cy: '0', r: '25' }),
-  h('circle', { cx: '46', cy: '0', r: '25' }),
-  h('circle', { cx: '-80', cy: '0', r: '12' }),
-  h('circle', { cx: '80', cy: '0', r: '12' }),
-));
+// The brand mark is an SVG, so it must be built in the SVG namespace — h() uses
+// createElement, which yields an XHTML <svg> that lays out as an empty box.
+// Same art as the header mark in index.html.
+export const brandMark = () => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'brand-mark');
+  svg.setAttribute('viewBox', '0 0 200 130');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '9');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', 'M29 50V74M35 42V82M165 42V82M171 50V74M36 62H164');
+  svg.appendChild(path);
+  return svg;
+};
 // Keep an approved technical URI together. The general run deliberately
 // leaves sentence punctuation outside <bdi>; the URI alternative prevents a
 // scheme such as scope.bit:// from being split into a false English fragment.
@@ -133,7 +143,10 @@ export function confirmAction({ title, body, confirmLabel, danger = true }) {
     const modal = $('#modal');
     modal.innerHTML = '';
     const close = (answer) => { $('#modal-overlay').classList.remove('show'); resolve(answer); };
-    modal.appendChild(h('div', { class: 'xs-head' }, h('h3', {}, title)));
+    // .xs-head forces direction:ltr on its h3 because the exercise sheet's title
+    // is a bare Latin movement name. A confirmation's title is an Arabic
+    // sentence, and it was rendering flush left under a right-aligned body.
+    modal.appendChild(h('div', { class: 'xs-head confirm-head' }, h('h3', {}, title)));
     if (body) modal.appendChild(h('p', { class: 'confirm-body' }, body));
     modal.appendChild(h('div', { class: 'confirm-actions' },
       h('button', {

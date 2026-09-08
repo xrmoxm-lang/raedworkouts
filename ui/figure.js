@@ -28,15 +28,15 @@ const BODY = [
 ];
 
 const FRONT = {
-  'm-delts': [['ellipse', { cx: 31, cy: 48, rx: 10, ry: 8.5 }], ['ellipse', { cx: 89, cy: 48, rx: 10, ry: 8.5 }]],
+  'm-delts': [['ellipse', { cx: 31, cy: 48, rx: 11.5, ry: 9.5 }], ['ellipse', { cx: 89, cy: 48, rx: 11.5, ry: 9.5 }]],
   'm-chest': [
     ['path', { d: 'M38 48Q58 45 59 50V70Q58 78 47 77Q36 73 36 60Z' }],
     ['path', { d: 'M82 48Q62 45 61 50V70Q62 78 73 77Q84 73 84 60Z' }],
   ],
-  'm-abs': [['rect', { x: 50, y: 80, width: 20, height: 44, rx: 6 }]],
-  'm-biceps': [['rect', { x: 22, y: 53, width: 10, height: 34, rx: 5 }], ['rect', { x: 88, y: 53, width: 10, height: 34, rx: 5 }]],
-  'm-forearms': [['rect', { x: 20.5, y: 97, width: 10, height: 38, rx: 5 }], ['rect', { x: 89.5, y: 97, width: 10, height: 38, rx: 5 }]],
-  'm-quads': [['rect', { x: 41, y: 134, width: 15, height: 48, rx: 7 }], ['rect', { x: 64, y: 134, width: 15, height: 48, rx: 7 }]],
+  'm-abs': [['rect', { x: 49, y: 79, width: 22, height: 46, rx: 7 }]],
+  'm-biceps': [['rect', { x: 21, y: 52, width: 12, height: 36, rx: 6 }], ['rect', { x: 87, y: 52, width: 12, height: 36, rx: 6 }]],
+  'm-forearms': [['rect', { x: 19.5, y: 96, width: 12, height: 40, rx: 6 }], ['rect', { x: 88.5, y: 96, width: 12, height: 40, rx: 6 }]],
+  'm-quads': [['rect', { x: 40, y: 132, width: 17, height: 52, rx: 8 }], ['rect', { x: 63, y: 132, width: 17, height: 52, rx: 8 }]],
 };
 
 const BACK = {
@@ -45,11 +45,11 @@ const BACK = {
     ['path', { d: 'M36 60Q46 66 52 74L50 110Q42 112 38 105Z' }],
     ['path', { d: 'M84 60Q74 66 68 74L70 110Q78 112 82 105Z' }],
   ],
-  'm-delts': [['ellipse', { cx: 31, cy: 48, rx: 10, ry: 8.5 }], ['ellipse', { cx: 89, cy: 48, rx: 10, ry: 8.5 }]],
-  'm-triceps': [['rect', { x: 22, y: 53, width: 10, height: 34, rx: 5 }], ['rect', { x: 88, y: 53, width: 10, height: 34, rx: 5 }]],
-  'm-glutes': [['rect', { x: 40, y: 110, width: 19, height: 24, rx: 9 }], ['rect', { x: 61, y: 110, width: 19, height: 24, rx: 9 }]],
-  'm-hams': [['rect', { x: 41, y: 138, width: 15, height: 46, rx: 7 }], ['rect', { x: 64, y: 138, width: 15, height: 46, rx: 7 }]],
-  'm-calves': [['rect', { x: 43, y: 190, width: 12, height: 34, rx: 6 }], ['rect', { x: 65, y: 190, width: 12, height: 34, rx: 6 }]],
+  'm-delts': [['ellipse', { cx: 31, cy: 48, rx: 11.5, ry: 9.5 }], ['ellipse', { cx: 89, cy: 48, rx: 11.5, ry: 9.5 }]],
+  'm-triceps': [['rect', { x: 21, y: 52, width: 12, height: 36, rx: 6 }], ['rect', { x: 87, y: 52, width: 12, height: 36, rx: 6 }]],
+  'm-glutes': [['rect', { x: 39, y: 108, width: 20, height: 26, rx: 10 }], ['rect', { x: 61, y: 108, width: 20, height: 26, rx: 10 }]],
+  'm-hams': [['rect', { x: 40, y: 136, width: 17, height: 50, rx: 8 }], ['rect', { x: 63, y: 136, width: 17, height: 50, rx: 8 }]],
+  'm-calves': [['rect', { x: 42, y: 189, width: 14, height: 38, rx: 7 }], ['rect', { x: 64, y: 189, width: 14, height: 38, rx: 7 }]],
 };
 
 const el = (tag, attrs) => {

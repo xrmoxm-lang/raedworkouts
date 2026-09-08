@@ -200,6 +200,8 @@ function init() {
       if (hadController) applyUpdateWhenSafe();
     });
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
+      // A blocked or refused registration resolves with nothing to update.
+      if (!reg) return;
       reg.update().catch(() => {});
       // Re-check for updates when the app regains focus, and hourly.
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });

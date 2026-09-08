@@ -8,7 +8,7 @@
 // of those had its own targeted test; none of them proved the app still works
 // as a whole. This does, and it is the test to run first when something feels
 // wrong.
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 test.use({ viewport:{width:390,height:844} });
 test('a whole workout, start to finish, on a fresh profile', async ({ page }) => {
   const errs=[]; page.on('pageerror',e=>errs.push(e.message));

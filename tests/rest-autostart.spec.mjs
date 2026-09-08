@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // Raed believes rest is automatic: "زر الراحة يعني ما أحتاجه، لأنه خلاص
 // أوتوماتيكي، إذا ضغطت check على واحدة ويبدأ الراحة". This pins that it is,

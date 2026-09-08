@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
 // The coach moved off :8444 — Tailscale Funnel serves only 443, 8443 and 10000,
