@@ -12,6 +12,7 @@ import {
   workingRepTarget,
 } from '../core/engine.js';
 import { editableWeightValue, hasWorkingWeight, t, tf, todayISO } from '../core/i18n.js';
+import { postNativeActivity } from '../core/native.js';
 import { cancelRest } from '../core/rest.js';
 import { render, router } from '../core/shell.js';
 import { checkStorageHeadroom, saveLocal, settings, state } from '../core/store.js';
@@ -167,6 +168,9 @@ function startSession(session) {
   const skinSuggestion = skinBoundary.suggestion;
   state._last_toasted_block = curBlock;
   saveLocal();
+  // The Live Activity is the session, so it starts when the session does —
+  // immediately, not on the render debounce four hundred milliseconds later.
+  postNativeActivity();
   router('home');   // v15's session view lives on home
   if (skinSuggestion) showSkinSuggestion(skinSuggestion);
   else {
@@ -240,11 +244,13 @@ export function discardSession() {
     state.forced_next_session = null;
     focusExerciseIdx = null;
     saveLocal();
+    postNativeActivity();
     render();
     toast(t('session_discarded'), 9000, t('undo'), () => {
       if (state.active_session) { toast(t('undo_unavailable')); return; }
       state.active_session = discarded;
       saveLocal();
+      postNativeActivity();
       render();
       toast(t('session_restored'));
     });
@@ -272,6 +278,7 @@ export function endSession() {
       state.forced_next_session = null;
       focusExerciseIdx = null;
       saveLocal();
+      postNativeActivity();
       router('home');
     });
     return;
@@ -313,6 +320,9 @@ export function endSession() {
   focusExerciseIdx = null;
   state.msg_index = (state.msg_index + 1) % (RW.MOTIVATIONAL_MESSAGES?.length || 20);
   saveLocal();
+  // The session is over: the Island has nothing left to count. Said now rather
+  // than on the next render, because the end screen is where he stops looking.
+  postNativeActivity();
   // Show end-of-session screen instead of jumping to history
   showSessionEnd(finishedSession);
   // The only moment history actually grows.

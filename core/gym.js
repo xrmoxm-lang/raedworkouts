@@ -1,5 +1,6 @@
 /* The gym-launcher button. */
 
+import { nativeAvailable, postNative } from '../core/native.js';
 import { settings } from '../core/store.js';
 
 // Tries the user's override first, then a URL scheme.
@@ -13,13 +14,24 @@ function safeLaunchUrl(value) {
 }
 export function launchGymApp() {
   const override = safeLaunchUrl(settings.gym_launch_override);
+  const scheme = override || safeLaunchUrl(settings.gym_launch_scheme) || 'scope.bit://';
+  // An override is the whole instruction: it must not fall back to the App Store
+  // page for an app he deliberately routed around.
+  const fallback = override ? '' : (safeLaunchUrl(settings.gym_launch_fallback) || 'https://apps.apple.com/sa/app/in2-fitness/id1536137282');
+
+  // In the native shell iOS answers the question the browser could only guess
+  // at: `UIApplication.open` reports whether the app was there. No visibility
+  // heuristic, no 1.2s wait, and nothing that could navigate the page away.
+  if (nativeAvailable()) {
+    postNative('open_gym', { scheme, fallback });
+    return;
+  }
+
   if (override) {
     // User has set a custom URL (Shortcut, different scheme, etc.) — use it directly.
     window.location.href = override;
     return;
   }
-  const scheme = safeLaunchUrl(settings.gym_launch_scheme) || 'scope.bit://';
-  const fallback = safeLaunchUrl(settings.gym_launch_fallback) || 'https://apps.apple.com/sa/app/in2-fitness/id1536137282';
 
   // Heuristic: try the scheme; if the page is still visible after a moment, open fallback.
   const before = Date.now();
@@ -41,4 +53,3 @@ export function launchGymApp() {
     }
   }, 1200);
 }
-

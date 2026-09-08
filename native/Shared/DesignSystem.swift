@@ -26,6 +26,13 @@ enum RWLight {
 /// System-appearance-aware tokens for the Home-Screen widget. Resolved by the
 /// trait, not by `@Environment(\.colorScheme)`, so `containerBackground` and the
 /// content can never disagree about which theme they are in.
+///
+/// `UIKit`-gated so this file also compiles for the Mac, which is where
+/// `Tools/RenderIslandPreviews.swift` draws the Island faces. Nothing outside
+/// the Home-Screen widget uses it.
+#if canImport(UIKit)
+import UIKit
+
 enum RWColor {
     static let bg = dynamic(RWLight.bg, RWDark.bg)
     static let ink = dynamic(RWLight.ink, RWDark.ink)
@@ -38,6 +45,48 @@ enum RWColor {
         Color(UIColor { trait in
             UIColor(trait.userInterfaceStyle == .dark ? dark : light)
         })
+    }
+}
+#endif
+
+/// The three skins, dark row only — the Dynamic Island and the Lock Screen are
+/// always dark, whatever the phone is set to. Values are `styles.css`
+/// `[data-skin][data-theme="dark"]`, with one deliberate departure: وَرَق's dark
+/// `--accent` (`#743d4a`) is a fill colour and is unreadable as a numeral at
+/// 40pt on `#121110`, so the skin carries two — `accent` for fills and rules,
+/// `label` for text and numbers. حديد and رخام read fine, so their `label` is
+/// the accent itself.
+struct RWSkin {
+    let bg: Color
+    let ink: Color
+    let muted: Color
+    /// Fills: the glyph, the draining bar, the keyline.
+    let accent: Color
+    /// Text and numerals. Never darker than the accent.
+    let label: Color
+    let good: Color
+
+    static let hadid = RWSkin(
+        bg: Color(hex: 0x121010), ink: Color(hex: 0xF4ECE3), muted: Color(hex: 0x9C8672),
+        accent: Color(hex: 0xE8622D), label: Color(hex: 0xE8622D), good: Color(hex: 0x229E71)
+    )
+    static let waraq = RWSkin(
+        bg: Color(hex: 0x121110), ink: Color(hex: 0xF2ECE4), muted: Color(hex: 0x9C968E),
+        accent: Color(hex: 0xA33F52), label: Color(hex: 0xD98A9A), good: Color(hex: 0x229E71)
+    )
+    static let rukham = RWSkin(
+        bg: Color(hex: 0x111517), ink: Color(hex: 0xE8EEF1), muted: Color(hex: 0x87949C),
+        accent: Color(hex: 0xA8B8C0), label: Color(hex: 0xA8B8C0), good: Color(hex: 0x229E71)
+    )
+
+    /// An unknown or missing name is حديد — the app's own default — never a
+    /// blank palette, because the Island has to draw something.
+    static func named(_ name: String) -> RWSkin {
+        switch name {
+        case "waraq": return .waraq
+        case "rukham": return .rukham
+        default: return .hadid
+        }
     }
 }
 

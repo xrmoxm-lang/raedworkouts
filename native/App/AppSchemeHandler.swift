@@ -154,13 +154,43 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler {
                 self?.finish(task, status: status, mime: mime, body: data)
             } catch {
                 StatusLog.proxy("\(method) \(route) failed:\(StatusLog.describe(error))")
-                self?.finish(task, status: 502, mime: "application/json",
-                             body: Data(#"{"status":"error","error":"proxy_failed"}"#.utf8))
+                // A synthesized 502 is a RESPONSE: `fetch()` resolves, the coach
+                // parses it, and core/coach.js reports «the server answered with
+                // an error» — in a gym with no bars, which is the opposite of the
+                // truth and sends him hunting a server fault. A transport failure
+                // has to fail the task so `fetch()` rejects and the page can say
+                // «offline». Only a reply that arrived and could not be
+                // represented keeps the synthetic 502.
+                if Self.isTransportFailure(error) {
+                    self?.fail(task, error: error)
+                } else {
+                    self?.finish(task, status: 502, mime: "application/json",
+                                 body: Data(#"{"status":"error","error":"proxy_failed"}"#.utf8))
+                }
             }
         }
     }
 
+    /// The network never reached the other end — no reply exists to forward.
+    private static func isTransportFailure(_ error: Error) -> Bool {
+        guard let url = error as? URLError else { return false }
+        switch url.code {
+        case .notConnectedToInternet, .networkConnectionLost, .timedOut,
+             .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+             .internationalRoamingOff, .dataNotAllowed, .secureConnectionFailed:
+            return true
+        default:
+            return false
+        }
+    }
+
     // MARK: Replying
+
+    private func fail(_ task: WKURLSchemeTask, error: Error) {
+        guard !stopped.contains(ObjectIdentifier(task)) else { return }
+        task.didFailWithError(error)
+        stopped.remove(ObjectIdentifier(task))
+    }
 
     private func finish(_ task: WKURLSchemeTask, status: Int, mime: String, body: Data) {
         guard !stopped.contains(ObjectIdentifier(task)) else { return }

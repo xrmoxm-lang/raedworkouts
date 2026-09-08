@@ -21,10 +21,12 @@ struct WebShellView: View {
                 Button("تحديث") { reloadID = UUID() }
                 Section("الحالة") {
                     Text("الصفحة: \(StatusLog.pageStatus())")
-                    Text("الراحة: \(StatusLog.restStatus())")
+                    Text("خطأ الصفحة: \(StatusLog.jsErrorStatus())")
+                    Text("الجلسة: \(StatusLog.activityStatus())")
                     Text("الملخّص: \(StatusLog.summaryStatus())")
                     Text("الوسيط: \(StatusLog.proxyStatus())")
                     Text("الودجت: \(StatusLog.widgetStatus())")
+                    Text("النادي: \(StatusLog.gymStatus())")
                 }
                 Button("حدّث الحالة") { statusID = UUID() }
             } label: {
@@ -108,6 +110,11 @@ struct AppWebView: UIViewRepresentable {
         try { window.webkit.messageHandlers.native.postMessage({ type: 'js_error', message: String(what).slice(0, 200) }); } catch (e) {}
       };
       window.addEventListener('error', function (e) {
+        // Capture phase catches subresource failures too — offline, every
+        // YouTube thumbnail on the library screen fires one, each a bridge
+        // round-trip and an App Group write, and each overwriting the real
+        // page state with «error @ :0». A script error's target is window.
+        if (e.target && e.target !== window) return;
         report((e.message || 'error') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0));
       }, true);
       window.addEventListener('unhandledrejection', function (e) {

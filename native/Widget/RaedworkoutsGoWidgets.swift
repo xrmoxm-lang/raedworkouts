@@ -5,6 +5,6 @@ import WidgetKit
 struct RaedworkoutsGoWidgets: WidgetBundle {
     var body: some Widget {
         SummaryWidget()
-        RestLiveActivity()
+        SessionLiveActivity()
     }
 }

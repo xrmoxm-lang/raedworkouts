@@ -10,14 +10,21 @@ enum RW {
     static let apiOrigin = "https://raedworkouts-v16.vercel.app"
 
     static let summaryKey = "rw.summary"
-    // Two keys, not one: a `summary` lands after every render and would
-    // otherwise overwrite the `rest_start` line within half a second — losing
+    // Separate keys, not one: a `summary` lands after every render and would
+    // otherwise overwrite the `activity` line within half a second — losing
     // exactly the line worth reading.
-    static let restStatusKey = "rw.status.rest"
+    static let activityStatusKey = "rw.status.activity"
     static let summaryStatusKey = "rw.status.summary"
     static let widgetStatusKey = "rw.status.widget"
     static let proxyStatusKey = "rw.status.proxy"
     static let pageStatusKey = "rw.status.page"
+    // Same reason again: `didFinish` fires AFTER module evaluation, so a
+    // «loaded» line would always overwrite the js_error that explains a
+    // blank screen — destroying the only diagnostic that mattered.
+    static let jsErrorStatusKey = "rw.status.jserror"
+    // The gym launcher gets its own line for the same reason: «it just did
+    // nothing» is the one report we cannot diagnose without one.
+    static let gymStatusKey = "rw.status.gym"
 
     static func deepLink(_ path: String = "open") -> URL {
         URL(string: "\(urlScheme)://\(path)") ?? URL(string: "\(urlScheme)://open")!
@@ -48,17 +55,21 @@ enum AppGroupStore {
 /// message, every proxy round trip and every widget timeline fetch writes one
 /// short line here, and the `⋯` menu reads them back.
 enum StatusLog {
-    static func rest(_ value: String) { write(value, RW.restStatusKey) }
+    static func activity(_ value: String) { write(value, RW.activityStatusKey) }
     static func summary(_ value: String) { write(value, RW.summaryStatusKey) }
     static func widget(_ value: String) { write(value, RW.widgetStatusKey) }
     static func proxy(_ value: String) { write(value, RW.proxyStatusKey) }
     static func page(_ value: String) { write(value, RW.pageStatusKey) }
+    static func gym(_ value: String) { write(value, RW.gymStatusKey) }
+    static func jsError(_ value: String) { write(value, RW.jsErrorStatusKey) }
 
-    static func restStatus() -> String { read(RW.restStatusKey) }
+    static func activityStatus() -> String { read(RW.activityStatusKey) }
+    static func gymStatus() -> String { read(RW.gymStatusKey) }
     static func summaryStatus() -> String { read(RW.summaryStatusKey) }
     static func widgetStatus() -> String { read(RW.widgetStatusKey) }
     static func proxyStatus() -> String { read(RW.proxyStatusKey) }
     static func pageStatus() -> String { read(RW.pageStatusKey) }
+    static func jsErrorStatus() -> String { read(RW.jsErrorStatusKey) }
 
     static func describe(_ error: Error) -> String {
         let ns = error as NSError
