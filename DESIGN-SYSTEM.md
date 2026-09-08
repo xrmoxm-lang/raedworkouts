@@ -143,6 +143,7 @@ The rest-day variant keeps the same skeleton with «ارتَحْ اليوم» as
 `[data-home-context]` ★ wraps the pre-workout block so it can order below the runner while a session runs (`body.session-active`).
 
 ### Home, in a session (runner)
+Raed 2026-09-08: the next/previous pair stays IN FLOW at 44px (never docked); «تجاهل الجلسة» lives in the session header (`.running-line`, end edge); on the last exercise the nav's primary IS `[data-finish-session]` ★ — one place.
 ```
 .running-line [data-home-overview] ★: علوي أ · جارية · بدأت 10:17 م   (one line, 13px, centred)
 .sess-progress [data-v15-session-progress] ★
@@ -158,8 +159,8 @@ The rest-day variant keeps the same skeleton with «ارتَحْ اليوم» as
       .done rows: good tint, inputs stay editable; .warm rows: compact (44px) and muted; .extra rows: dashed start bar; .skipped: struck
       [data-ramp-effort] ★ / .effort-strip ★ (hidden attr contract) holding .effort-picker ★ → now a .seg of three words, no emoji
     [data-reps-goal] ★ · [data-prescribed-effort] ★ · .last-time ★ — three quiet lines under the grid
-.runner-nav: [data-runner-prev] ★ default btn + next/finish primary
-.session-close: [data-finish-session] ★ (last exercise only) + [data-discard-session] ★ ghost danger tiny
+.runner-nav: [data-runner-prev] ★ default btn + next primary, or [data-finish-session] ★ primary on the last exercise
+.running-line carries [data-discard-session] ★ (ghost danger tiny)
 [data-session-done] ★ panel when everything is resolved
 ```
 Warm-up phase (`ui/warmup.js`): `.warmup-phase` ★ with two `.warmup-step`s,
@@ -167,27 +168,12 @@ Warm-up phase (`ui/warmup.js`): `.warmup-phase` ★ with two `.warmup-step`s,
 (tick button: `.drill-name`, `.drill-reps.num`, `.drill-tick`) and the drill's clip
 tile beside it; primary CTA; `[data-warmup-skip]` ★ ghost.
 
-### Coach (`ui/coach.js`)
-h1; `.coach-ask [data-coach-ask]` ★ with `.coach-input [data-coach-input]` ★ and
-`[data-coach-submit]` ★ (primary, 48px, inside the same field row); when answered the
-head collapses (class `answered`) but the field stays. Idle: «جرّب» chips, «سألت
-قريباً» `[data-coach-recent]` chips, `.coach-scope [data-coach-scope]` ★ footer.
-Answer: `.coach-answer [data-coach-answer]` ★ reads like a document (16px/1.75,
-`.coach-answer-text` ★ with `.coach-cite` ★ superscript marks), `[data-coach-web]`,
-`[data-coach-unanswered]`, `[data-coach-restored]` ★, passages as `.coach-passage
-[data-coach-passage][data-coach-cited]` ★ rows (source line → `.coach-text` ★,
-`.clipped` fade, `[data-coach-expand]`, `[data-coach-lang]`), `[data-coach-more]`
-details, `[data-coach-context]` ★ row with its toggle ★. Error states keep their
-`data-coach-*` hooks.
+### Coach (`ui/coach.js`) — a notebook of what he asked
+Idle: `.page-header` h1 · the composer (`.coach-ask` with `[data-coach-input]` ★ + `[data-coach-submit]` ★; in a session `[data-coach-context]` ★ with its toggle sits above it) · one horizontally scrolling `.coach-chips` row (`[data-coach-recent]`: the three suggestions plus recent questions that have no kept answer) · the log `.section` «سألت قبل» — `state.coach_log`, the last 12 successful answers (`core/coach.js`, capped at 60 KB), as `.list > .row.is-button` (question · answer snippet + `.coach-tag` من كتبك/من الإنترنت · date `.num`). Empty log → `[data-coach-scope]` ★ as the honest empty state (kept in the DOM in every idle state).
+Answer (fresh or from the log): the question as an `.eyebrow`; `article.coach-answer [data-coach-answer]` ★ (+ `.from-web` / `.unanswered`); sources as `.coach-passage [data-coach-passage][data-coach-cited]` ★ rows with `.coach-text` ★, `[data-coach-expand]`, `[data-coach-lang]`, `[data-coach-more]`; a log entry carries `[data-coach-restored]` ★ semantics («جواب عندك من قبل» + «اسأل شيئًا جديدًا»); a fresh answer gets `.coach-back`; the composer is reachable again in a «سؤال آخر» section — exactly ONE `[data-coach-input]` in the DOM at any time. Error states keep their `data-coach-*` hooks.
 
-### Library (`ui/library.js`)
-h1 + count; `.search-input` (48px, leading magnifier icon drawn in CSS, no emoji);
-«+ تمرين مخصص» as a `.btn` default (not a 56px primary slab); groups as
-`.lib-group` details ★ with `.lib-group-summary` (label + `.count.num`) — no emoji;
-`.lib-sub` details; exercises as `.ex` rows (`.figure.s40`, name, muscle) expanding
-to clips (`.video-row`, `.video-thumb-wrap` ★, `.video-toggle`), alternatives
-`.alt-row` chips, and the action buttons. Custom-exercise modal is a sheet with
-`.field`s; all copy via locale keys.
+### Library (`ui/library.js`) — a catalogue
+`.page-header` (h1 + count `.num`) · one `.search-row` (filters instantly, the input never re-renders) · a scrolling `.lib-filters` rail of `.chip`s («الكل» + the four parts, counts in `.num`, one `.active`) · one `.section` per muscle in `LIB_HIERARCHY` order (`.section-head` eyebrow + `.num`) of `.list > .row.is-button.ex` rows: `figure(…,'s40')` · Latin name in `bdi.ltr-run` + Arabic hint · clip count `.num` · chevron; custom exercises carry a «مخصص» mark. Tapping a row opens the exercise sheet (`#modal`): `.xs-head` + muscle tags → `.cue` → clips with their show/hide toggles (`.video-thumb-wrap` + `.video-toggle`) → `.xs-grid` actions (add clip · edit JN) → «تمارين مشابهة» chips that open THAT exercise's sheet → delete for custom ones → `.xs-done`. «+ تمرين مخصص» is a `.btn.full` after the last section. Empty search → `.empty`.
 
 ### History (`ui/history.js`)
 h1 + count; bodyweight row (`#bw-input` + button) as one `.row`; sessions grouped

@@ -142,6 +142,12 @@ test('every control is at least 44px to the thumb, even where it looks smaller',
       // Only judge controls fully inside the viewport; a half-scrolled button
       // point-tests as zero and would fail for the wrong reason.
       if (b.top < 0 || b.bottom > innerHeight || b.left < 0 || b.right > innerWidth) return;
+      // Same reason, other edge: a control that sits under the fixed tab bar
+      // while the page can still scroll is one scroll away, not a small target.
+      // A control under the bar with NOTHING left to scroll is still a defect.
+      const bar = document.querySelector('.tab-bar:not(.hidden)')?.getBoundingClientRect();
+      const canScroll = document.documentElement.scrollHeight - innerHeight - scrollY > 1;
+      if (bar && canScroll && b.bottom > bar.top) return;
       const w = reachable(el, 1, 0) + reachable(el, -1, 0);
       const h = reachable(el, 0, 1) + reachable(el, 0, -1);
       // 43 not 44: the probe steps outward from the centre pixel, so a 44px

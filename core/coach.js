@@ -8,7 +8,7 @@ import { activeLanguage, t, tf } from '../core/i18n.js';
 import { focusExerciseIdx } from '../core/session.js';
 import { renderCoach } from '../core/shell.js';
 import { saveLocal, state } from '../core/store.js';
-import { getAllExercises } from '../core/videos.js';
+import { getAllExercises, isSafeHttpUrl } from '../core/videos.js';
 
 // Same-origin, through api/coach.js on Vercel. The access key used to ship in
 // this file and /answer is metered, so anyone who viewed source could spend his
@@ -21,6 +21,87 @@ export let coachState = { status: 'idle', question: '', results: [], answer: nul
 export function setCoachState(value) { coachState = value; }
 // The last answer survives leaving the tab.
 export const COACH_LAST_KEY = 'coach_last_answer';
+// And so does every answer before it. Until now the coach kept exactly one:
+// every earlier answer he had paid for was thrown away, and the only way to
+// read one again was to buy it again — /answer is the one metered call in the
+// app. Twelve entries, newest first, under a 60 KB ceiling, in `state` so they
+// ride the same sync as everything else.
+export const COACH_LOG_KEY = 'coach_log';
+const COACH_LOG_MAX = 12;
+const COACH_LOG_BYTES = 60 * 1024;
+// A passage is a ~900-character window; the log keeps enough of it to recognise
+// what was quoted, and the book and page to go and check the rest.
+const COACH_PASSAGE_CHARS = 500;
+
+// Which of the two answer shapes this is — grounded in his books, off the open
+// internet, or neither. The renderer and the log MUST agree about this: a
+// refusal, or a claim that named no passage, written into the log would print
+// an unsupported sentence back at him from «سألت قبل» — the exact thing the
+// answer screen refuses to do. One function, both callers.
+export function coachAnswerKind(answer) {
+  if (!answer || answer.status !== 'ok' || !answer.text) return null;
+  const urls = Array.isArray(answer.citations) ? answer.citations.filter(isSafeHttpUrl) : [];
+  if (answer.source === 'web' && urls.length > 0) return 'web';
+  const used = Array.isArray(answer.used) ? answer.used : [];
+  if (answer.answered && used.length > 0) return 'books';
+  return null;
+}
+
+const jsonBytes = (value) => {
+  const json = JSON.stringify(value);
+  // A UTF-16 length would under-count Arabic by half, which is the whole log.
+  return typeof TextEncoder === 'function' ? new TextEncoder().encode(json).length : json.length * 2;
+};
+
+function logCoachAnswer() {
+  const answer = coachState.answer;
+  const kind = coachAnswerKind(answer);
+  if (!kind) return;
+  const results = coachState.results || [];
+  const used = kind === 'books' && Array.isArray(answer.used) ? answer.used : [];
+  const cited = used.map((i) => results[i]).filter(Boolean).map((passage) => {
+    const text = String(passage.text || '');
+    return {
+      work: passage.work,
+      page: passage.page,
+      text: text.length > COACH_PASSAGE_CHARS ? `${text.slice(0, COACH_PASSAGE_CHARS)}…` : text,
+    };
+  });
+  // An answer whose cited passages did not survive is an unsourced claim, and
+  // the screen refuses to print one. Not written, rather than written and then
+  // shown as «ليس في كتبك» when he taps it.
+  if (kind === 'books' && !cited.length) return;
+  // The stored answer keeps only the passages it cited, so its "[3]" now points
+  // past the end of that shorter list. Renumber the markers onto it — the same
+  // remap dedupe does — or re-opening the entry would show a citation that
+  // leads nowhere, which this screen treats as worse than no citation at all.
+  const at = new Map();
+  used.forEach((original) => { if (results[original] && !at.has(original)) at.set(original, at.size); });
+  const text = kind === 'books'
+    ? String(answer.text).replace(/\[(\d{1,2})\]/g, (whole, digits) => {
+        const to = at.get(Number(digits) - 1);
+        return to === undefined ? '' : `[${to + 1}]`;
+      })
+    : String(answer.text);
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    asked_at: Date.now(),
+    question: coachState.question || '',
+    source: kind,
+    text,
+    cited,
+    citations: kind === 'web' ? (answer.citations || []).filter(isSafeHttpUrl) : [],
+  };
+  // Asking the same thing again replaces the older record rather than filling
+  // the notebook with twelve copies of one question, exactly as coach_recent does.
+  const previous = (Array.isArray(state[COACH_LOG_KEY]) ? state[COACH_LOG_KEY] : [])
+    .filter((item) => item && item.question !== entry.question);
+  const log = [entry, ...previous].slice(0, COACH_LOG_MAX);
+  // The newest answer is never the one dropped: it is the one he just asked for.
+  while (log.length > 1 && jsonBytes(log) > COACH_LOG_BYTES) log.pop();
+  state[COACH_LOG_KEY] = log;
+}
+
 function rememberCoachAnswer() {
   if (coachState.status !== 'ok') return;
   try {
@@ -32,6 +113,7 @@ function rememberCoachAnswer() {
       results: (coachState.results || []).slice(0, 6),
       at: Date.now(),
     };
+    logCoachAnswer();
     saveLocal();
   } catch (_) { /* a record of an answer is never worth breaking the answer */ }
 }

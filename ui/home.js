@@ -70,10 +70,18 @@ export function renderHome() {
     const a = state.active_session;
     const parts = a.session_name.split(' — ');
     // One centred line while a session runs.
+    // Raed: «رجّع زر تجاهل الجلسة» — abandoning a session is decided in the middle
+    // of one, so the control sits in the session header, on every phase and every
+    // exercise, never under the tab bar. It names the SESSION and confirms in-app.
     root.appendChild(h('div', { class: 'running-line', 'data-home-overview': 'true' },
-      h('span', { class: 'rl-name' }, parts[0]),
-      h('span', { class: 'rl-dot' }, '·'),
-      h('span', { class: 'rl-since' }, tf('runner_active_started', { time: fmtTime(a.started_at) })),
+      h('span', { class: 'rl-text' },
+        h('span', { class: 'rl-name' }, parts[0]),
+        h('span', { class: 'rl-dot' }, '·'),
+        h('span', { class: 'rl-since' }, tf('runner_active_started', { time: fmtTime(a.started_at) }))),
+      h('button', {
+        class: 'btn tiny ghost danger session-discard', 'data-discard-session': 'true',
+        onClick: () => discardSession(),
+      }, t('discard_session')),
     ));
   } else if (planned && restDayToday) {
     // He asked for "today training / tomorrow rest, at a glance, before I
@@ -241,7 +249,6 @@ export function renderHome() {
     }
     if (a.phase === 'warmup' && a.warmup) {
       root.appendChild(renderWarmupPhase(a));
-      root.appendChild(h('button', { class: 'btn danger ghost full', 'data-discard-session': 'true', onClick: () => discardSession() }, t('discard_session')));
       return;
     }
 
@@ -357,29 +364,12 @@ export function renderHome() {
         }, curIdx === 0 ? t('back_to_warmup') : t('previous')),
         curIdx < total - 1
           ? h('button', { class: 'btn primary grow-2', onClick: () => { setFocusExerciseIdx(curIdx + 1); render(); } }, t('next_exercise_arrow'))
-          : h('button', { class: 'btn primary grow-2', onClick: endSession }, t('end_session')),
+          // On the last exercise the nav's primary IS «finish»: one place, as he asked,
+          // and never a second full-width button under it.
+          : h('button', { class: 'btn primary grow-2', 'data-finish-session': 'true', onClick: endSession }, t('end_session')),
       ));
     }
 
-    // "Finish & save" belongs on the LAST exercise only.
-    const onLastExercise = (() => {
-      const entries = Object.entries(state.active_session?.exercises || {});
-      if (!entries.length) return true;
-      const idx = Math.min(Math.max(focusExerciseIdx ?? 0, 0), entries.length - 1);
-      return idx >= entries.length - 1;
-    })();
-    // Raed: «رجّع زر تجاهل الجلسة» — abandoning a session is decided in the middle
-    // of one, so it stays on every exercise. It names the SESSION rather than
-    // reading as «skip this exercise», and confirms in-app.
-    root.appendChild(h('div', { class: 'session-close' },
-      onLastExercise
-        ? h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session'))
-        : null,
-      h('button', {
-        class: 'btn tiny ghost danger session-discard', 'data-discard-session': 'true',
-        onClick: () => discardSession(),
-      }, t('discard_session')),
-    ));
   } else {
     // Today's plan, as a ledger. Every row is one line of the session: what it
     // is, which muscle it works, how many sets, and the weight to open with.

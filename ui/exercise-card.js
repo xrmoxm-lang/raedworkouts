@@ -63,17 +63,18 @@ import { buildVideoTile, effortPicker, explainMark } from '../ui/kit.js';
 // cannot drift apart into 2:30 and 2:3.
 const restClock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-// The next/finish pair is sticky-bottom, so it floats UP over whatever precedes
-// it. Measured at 390×844 with the rest dock up: the strip occupied 614–666 and
-// the docked bar 630–698, and all three effort words failed elementFromPoint at
-// their own centres. The session cannot advance without this answer, so the
-// question has to be reachable. Bring it clear once, and only when it is not.
+// The effort question must be reachable the moment it appears: below the fold
+// it sits under the fixed tab bar (and the rest dock while a rest runs), and the
+// session cannot advance without the answer. Bring it clear once, only when it
+// is actually covered.
 function revealEffortStrip(strip) {
   requestAnimationFrame(() => {
     if (!strip.isConnected || strip.hasAttribute('hidden')) return;
     const box = strip.getBoundingClientRect();
-    const nav = document.querySelector('.runner-nav');
-    const floor = nav ? nav.getBoundingClientRect().top : window.innerHeight;
+    const tab = document.querySelector('.tab-bar');
+    const dock = document.getElementById('rest-timer');
+    let floor = tab && !tab.classList.contains('hidden') ? tab.getBoundingClientRect().top : window.innerHeight;
+    if (dock && dock.style.display !== 'none') floor = Math.min(floor, dock.getBoundingClientRect().top);
     if (box.top >= 0 && box.bottom <= floor) return;
     strip.scrollIntoView({ block: 'end', behavior: 'auto' });
   });

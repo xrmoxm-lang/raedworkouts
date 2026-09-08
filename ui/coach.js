@@ -1,10 +1,18 @@
-/* The coach screen: question, answer, passages. */
+/* The coach screen: his notebook of questions.
+ *
+ * The idle screen used to be a form with a slogan — an icon, a title, a box,
+ * three chips and a footer over 481px of empty paper — and every answer he had
+ * ever paid for was thrown away except the last one. It reads like the rest of
+ * the app now: a composer, and under it the log of what he has already asked.
+ */
 
 import {
   COACH_EXAMPLES,
   COACH_LAST_KEY,
+  COACH_LOG_KEY,
   activeCoachContext,
   askCoach,
+  coachAnswerKind,
   coachAnswerText,
   coachEnglish,
   coachFoundLabel,
@@ -14,8 +22,8 @@ import {
   setCoachState,
   webAnswerText,
 } from '../core/coach.js';
-import { $, h, icon } from '../core/dom.js';
-import { fmtUsd, t, tf } from '../core/i18n.js';
+import { $, h } from '../core/dom.js';
+import { fmtDateShort, fmtUsd, t, tf } from '../core/i18n.js';
 import { saveLocal, settings, state } from '../core/store.js';
 import { isSafeHttpUrl } from '../core/videos.js';
 
@@ -30,19 +38,119 @@ function numbered(key, value) {
   return [text.slice(0, at), h('span', { class: 'num' }, mark), text.slice(at + mark.length)];
 }
 
+// Only the numerals wear the mono face: «8 سبتمبر» is one date, not one number.
+// It is ONE element, because `.row-trail` is a flex row — returning the day and
+// the month as siblings made them two flex items with the row's 8px gap
+// between them, and laid them out in flex order rather than in Arabic order.
+function dateNode(at) {
+  const text = fmtDateShort(at);
+  const nodes = [];
+  let cursor = 0;
+  for (const match of text.matchAll(/\d+/g)) {
+    const index = match.index ?? 0;
+    if (index > cursor) nodes.push(text.slice(cursor, index));
+    nodes.push(h('span', { class: 'num' }, match[0]));
+    cursor = index + match[0].length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return h('span', { class: 'coach-log-date' }, nodes);
+}
+
+// The opening of the answer. Its citation markers come out — «[2]» in a
+// 90-character preview points at a passage that is not on this screen — and so
+// does the markdown a web answer is stored in, which otherwise opened the
+// preview with «## البداية».
+function answerSnippet(text) {
+  const flat = String(text || '')
+    .replace(/\[\d{1,2}\]/g, ' ')
+    .replace(/\[([^\]]*)\]\((?:https?:)?[^)]*\)/g, '$1')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/^\s*(?:[-+*]|•|\d+[.)])\s+/gm, '')
+    .replace(/[*`_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return flat.length > 90 ? `${flat.slice(0, 90)}…` : flat;
+}
+
+// An entry has to have both halves to be worth a row: tapping one that carries
+// no answer opens an empty screen. Nothing is deleted — a malformed record
+// stays in `state`, it just does not get listed as something to read.
+const coachLog = () => (Array.isArray(state[COACH_LOG_KEY]) ? state[COACH_LOG_KEY] : [])
+  .filter((entry) => entry && typeof entry === 'object' && entry.question && entry.text);
+
+// Whether what is on screen came out of the log rather than off the network.
+// «اسأل شيئًا جديدًا» must not delete `coach_last_answer` when he is only
+// reading an older entry — that would throw away the genuine last answer.
+let fromLog = false;
+// What he has typed but not sent. renderCoach() runs again on every passage
+// expanded and every language flipped, and rebuilding the field from
+// coachState dropped the half-written question each time.
+let draft = '';
+
+// A logged answer is given the shape a fresh one has, so the answer layout
+// below renders it through exactly one code path.
+function openLogEntry(entry) {
+  fromLog = true;
+  coachEnglish.clear();
+  coachOpen.clear();
+  const cited = Array.isArray(entry.cited) ? entry.cited : [];
+  setCoachState({
+    status: 'ok',
+    question: entry.question || '',
+    results: cited.map((passage) => ({ work: passage.work, page: passage.page, text: passage.text })),
+    answer: {
+      status: 'ok',
+      answered: true,
+      text: entry.text || '',
+      used: cited.map((_, index) => index),
+      ...(entry.source === 'web'
+        ? { source: 'web', citations: (entry.citations || []).filter(isSafeHttpUrl) }
+        : {}),
+    },
+    error: '',
+    restored: true,
+  });
+  renderCoach();
+}
+
+function coachLogSection(log) {
+  return h('section', { class: 'section coach-log', 'data-coach-log': 'true' },
+    h('div', { class: 'section-head' },
+      h('div', { class: 'eyebrow' }, t('coach_log_title')),
+      h('span', { class: 'num' }, String(log.length)),
+    ),
+    h('div', { class: 'list' }, log.map((entry) => h('button', {
+      type: 'button', class: 'row is-button coach-log-row',
+      'data-coach-log-entry': String(entry.id || entry.asked_at || ''),
+      onClick: () => openLogEntry(entry),
+    },
+      h('span', { class: 'row-body' },
+        h('span', { class: 'row-title' }, entry.question || ''),
+        h('span', { class: 'row-hint' },
+          h('span', { class: 'coach-tag' }, t(entry.source === 'web' ? 'coach_source_web' : 'coach_from_books')),
+          answerSnippet(entry.text),
+        ),
+      ),
+      h('span', { class: 'row-trail' }, dateNode(entry.asked_at || Date.now())),
+    ))),
+  );
+}
+
 export function renderCoach() {
   const root = $('#page-coach');
   root.innerHTML = '';
   root.appendChild(h('div', { class: 'page-header' }, h('h1', {}, t('coach'))));
 
+  const idle = coachState.status === 'idle';
   // Disabled while a question is in flight. They were rendered before the
   // loading branch and never disabled, so a double tap on «اسأل» — easy on a
   // phone — fired a second metered request before the first had answered.
   const busy = coachState.status === 'loading';
   const input = h('input', {
-    type: 'text', class: 'coach-input', value: coachState.question,
+    type: 'text', class: 'coach-input', value: draft,
     placeholder: t('coach_placeholder'), 'data-coach-input': 'true',
     ...(busy ? { disabled: 'disabled' } : {}),
+    onInput: (ev) => { draft = ev.target.value; },
     onKeydown: (ev) => { if (ev.key === 'Enter') submit(); },
   });
   const submit = () => {
@@ -51,87 +159,143 @@ export function renderCoach() {
     // The service rejects anything under 3 characters; catching it here keeps a
     // stray tap from rendering as a server error.
     if (question.length < 3) return;
+    draft = '';
+    fromLog = false;
     // The movement name rides along with the question rather than replacing it,
     // so "كم راحة؟" becomes a question about the machine he is standing at.
     const ctx = activeCoachContext();
     const useContext = ctx && settings.coach_use_context !== false;
     askCoach(question, useContext ? ctx : null);
   };
+  // The composer. The old head — icon, title, slogan — is gone: the page
+  // header already says «المدرب», and it said it twice.
+  const composer = h('section', {
+    class: 'coach-ask' + (idle ? '' : ' answered'), 'data-coach-ask': 'true',
+  }, h('div', { class: 'coach-row' },
+    input,
+    h('button', {
+      class: 'btn primary', onClick: submit, 'data-coach-submit': 'true',
+      ...(busy ? { disabled: 'disabled' } : {}),
+    }, busy ? t('coach_asking') : t('coach_ask')),
+  ));
 
   // The handoff. Shown only while a session is actually running, because the
   // rest of the time there is nothing to hand off and the row would be chrome.
   const context = activeCoachContext();
-  if (context) {
-    root.appendChild(h('div', { class: 'coach-context', 'data-coach-context': 'true' },
-      h('div', { class: 'coach-context-text' },
-        h('span', { class: 'coach-context-label' }, t('coach_context_label')),
-        ' ',
-        h('bdi', { class: 'ltr-run' }, context.name),
-      ),
-      h('label', { class: 'coach-context-toggle' },
-        h('input', {
-          type: 'checkbox', 'data-coach-context-toggle': 'true',
-          ...(settings.coach_use_context !== false ? { checked: 'checked' } : {}),
-          onChange: (event) => {
-            settings.coach_use_context = event.target.checked;
-            saveLocal();
-            renderCoach();
-          },
-        }),
-        h('span', {}, t('coach_context_use')),
-      ),
-    ));
-  }
-
-  // The ask box is the subject of this screen ONLY while the screen is empty.
-  const answered = coachState.status !== 'idle';
-  root.appendChild(h('section', { class: 'coach-ask' + (answered ? ' answered' : ''), 'data-coach-ask': 'true' },
-    answered ? null : h('div', { class: 'coach-ask-head' },
-      h('span', { class: 'coach-ask-mark' }, icon('coach', 22)),
-      h('div', {},
-        h('div', { class: 'coach-ask-title' }, t('coach_ask_title')),
-        h('div', { class: 'coach-ask-sub' }, t('coach_intro')),
-      ),
+  const contextRow = context ? h('div', { class: 'coach-context', 'data-coach-context': 'true' },
+    h('div', { class: 'coach-context-text' },
+      h('span', { class: 'coach-context-label' }, t('coach_context_label')),
+      ' ',
+      h('bdi', { class: 'ltr-run' }, context.name),
     ),
-    h('div', { class: 'coach-row' },
-      input,
-      h('button', {
-        class: 'btn primary', onClick: submit, 'data-coach-submit': 'true',
-        ...(busy ? { disabled: 'disabled' } : {}),
-      }, busy ? t('coach_asking') : t('coach_ask')),
+    h('label', { class: 'coach-context-toggle' },
+      h('input', {
+        type: 'checkbox', 'data-coach-context-toggle': 'true',
+        ...(settings.coach_use_context !== false ? { checked: 'checked' } : {}),
+        onChange: (event) => {
+          settings.coach_use_context = event.target.checked;
+          saveLocal();
+          renderCoach();
+        },
+      }),
+      h('span', {}, t('coach_context_use')),
     ),
-  ));
+  ) : null;
 
-  if (coachState.status === 'idle') {
-    root.appendChild(h('div', { class: 'coach-block' },
-      h('div', { class: 'coach-block-label' }, t('coach_try')),
-      // The chips go through the same path as the typed question, context and
-      // all. They used to call askCoach() bare, so tapping a chip mid-session
-      // silently ignored the switch he had just left on.
-      h('div', { class: 'coach-chips' }, COACH_EXAMPLES.map((example) => h('button', {
-        class: 'btn tiny',
-        onClick: () => { input.value = t(example); submit(); },
-      }, t(example)))),
+  if (idle) {
+    fromLog = false;
+    if (contextRow) root.appendChild(contextRow);
+    root.appendChild(composer);
+
+    const log = coachLog();
+    // A question he asked that produced no answer worth keeping is not in the
+    // log, so the chip is the only way back to it. One that IS in the log sits
+    // below with what it answered, and does not need to be offered twice.
+    const answered = new Set(log.map((entry) => entry.question));
+    const recent = (state.coach_recent || []).filter((question) => question && !answered.has(question));
+    // The chips go through the same path as the typed question, context and
+    // all. They used to call askCoach() bare, so tapping a chip mid-session
+    // silently ignored the switch he had just left on.
+    const askThis = (question) => () => { input.value = question; submit(); };
+    root.appendChild(h('div', {
+      class: 'coach-chips', ...(recent.length ? { 'data-coach-recent': 'true' } : {}),
+    },
+      recent.map((question) => h('button', {
+        type: 'button', class: 'chip coach-chip-recent', onClick: askThis(question),
+      }, question)),
+      COACH_EXAMPLES.map((example) => h('button', {
+        type: 'button', class: 'chip', onClick: askThis(t(example)),
+      }, t(example))),
     ));
 
-    // Roughly 57% of this screen was empty — measured, 481px of 844.
-    const recent = (state.coach_recent || []).filter(Boolean);
-    if (recent.length) {
-      root.appendChild(h('div', { class: 'coach-block', 'data-coach-recent': 'true' },
-        h('div', { class: 'coach-block-label' }, t('coach_recent')),
-        h('div', { class: 'coach-chips' }, recent.map((question) => h('button', {
-          class: 'btn tiny ghost',
-          onClick: () => { input.value = question; submit(); },
-        }, question))),
-      ));
-    }
-    root.appendChild(h('footer', { class: 'coach-scope', 'data-coach-scope': 'true' },
+    if (log.length) root.appendChild(coachLogSection(log));
+    // Kept in the DOM in every idle state; when the log is empty it is the
+    // whole empty state, and it is an honest one — it says what the coach can
+    // and cannot answer rather than inventing something to fill the page.
+    root.appendChild(h('footer', {
+      class: 'coach-scope' + (log.length ? '' : ' alone'), 'data-coach-scope': 'true',
+    },
       h('div', { class: 'coach-scope-line' }, t('coach_scope_books')),
       h('div', { class: 'coach-scope-note' }, t('coach_scope_note')),
     ));
     return;
   }
 
+  // Say so when this is an answer he already has rather than one just returned.
+  if (coachState.restored) {
+    root.appendChild(h('div', { class: 'coach-restored', 'data-coach-restored': 'true' },
+      h('span', {}, t(fromLog ? 'coach_log_past' : 'coach_restored')),
+      h('button', {
+        type: 'button', class: 'btn tiny ghost',
+        onClick: () => {
+          const wasLog = fromLog;
+          setCoachState({ status: 'idle', question: '', results: [], answer: null, error: '' });
+          fromLog = false;
+          // Reading an older entry must not throw away the last answer.
+          if (!wasLog) {
+            delete state[COACH_LAST_KEY];
+            saveLocal();
+          }
+          renderCoach();
+        },
+      }, t(fromLog ? 'coach_ask_new' : 'coach_clear')),
+    ));
+  }
+  // The question stands over its answer, so the field below can be empty and
+  // ready for the next one instead of holding the one already answered.
+  if (coachState.question) {
+    root.appendChild(h('div', { class: 'eyebrow coach-question' }, coachState.question));
+  }
+
+  renderCoachBody(root);
+
+  // The way back to the notebook. Without it a fresh answer is a dead end: the
+  // restored banner is the only other exit and it is not rendered for an answer
+  // that has just arrived, so the log he came for was unreachable until he paid
+  // for another question. Not shown beside the banner, which already exits.
+  const log = coachLog();
+  const backToLog = log.length && !coachState.restored
+    ? h('button', {
+        type: 'button', class: 'btn tiny ghost coach-back',
+        onClick: () => {
+          setCoachState({ status: 'idle', question: '', results: [], answer: null, error: '' });
+          fromLog = false;
+          renderCoach();
+        },
+      }, t('coach_log_title'))
+    : null;
+  root.appendChild(h('section', { class: 'section coach-again' },
+    h('div', { class: 'section-head' }, h('div', { class: 'eyebrow' }, t('coach_another')), backToLog),
+    // Inside the section, so the band stays directly above the field it
+    // changes rather than above the heading of the block that holds it.
+    contextRow,
+    composer,
+  ));
+}
+
+// Everything between the question and the composer: the notice, or the answer
+// and the passages it was built from.
+function renderCoachBody(root) {
   if (coachState.status === 'loading') {
     root.appendChild(h('div', { class: 'notice', 'data-coach-loading': 'true' }, t('coach_searching')));
     return;
@@ -262,21 +426,9 @@ function renderCoachAnswer(root) {
   const answer = coachState.answer;
   const results = coachState.results;
 
-  // Say so when this is yesterday's answer rather than one just returned.
-  if (coachState.restored) {
-    root.appendChild(h('div', { class: 'coach-restored', 'data-coach-restored': 'true' },
-      h('span', {}, t('coach_restored')),
-      h('button', {
-        type: 'button', class: 'btn tiny ghost',
-        onClick: () => {
-          setCoachState({ status: 'idle', question: '', results: [], answer: null, error: '' });
-          delete state[COACH_LAST_KEY];
-          saveLocal();
-          renderCoach();
-        },
-      }, t('coach_clear')),
-    ));
-  }
+  // The «this is one you already have» banner is rendered by renderCoach()
+  // above the question, so an older answer is labelled before it is read
+  // rather than after — and so the over-budget branch cannot print it twice.
 
   // `answered` alone is not enough: the model returns the flag and the source
   // list independently, so {answered: true, used: []} is reachable. An answer
@@ -286,9 +438,11 @@ function renderCoachAnswer(root) {
   // in a book he paid for, so it is a separate state rather than a badge on
   // the same card.
   const webUrls = answer && Array.isArray(answer.citations) ? answer.citations.filter(isSafeHttpUrl) : [];
-  const fromWeb = answer && answer.status === 'ok' && answer.source === 'web' && answer.text
-    && webUrls.length > 0;
-  const isAnswer = answer && answer.status === 'ok' && answer.answered && answer.text && cited.length > 0 && !fromWeb;
+  // The same judgement the log writes by, so the notebook can never hold a
+  // sentence this screen would refuse to print.
+  const kind = coachAnswerKind(answer);
+  const fromWeb = kind === 'web';
+  const isAnswer = kind === 'books';
   const unsourced = answer && answer.status === 'ok' && answer.answered && answer.text
     && cited.length === 0 && !fromWeb;
   const isRefusal = (answer && answer.status === 'ok' && !answer.answered) || unsourced;

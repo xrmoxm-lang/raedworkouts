@@ -91,12 +91,19 @@ test('D18 and D19 retain 8–10 compounds and a detrained history-first seed', (
   assert.match(rawData.PROGRAMME.notes.join(' '), /logged history/i);
 });
 
-test('warm-up phase has a 5–10 minute treadmill, ten-rep drills, 15-minute cap, and no upper leg drills', () => {
+test('warm-up phase has a 5–10 minute treadmill, sourced drill reps, 15-minute cap, and no upper leg drills', () => {
   const upper = rawData.SESSION_WARMUPS.upper;
   const lower = rawData.SESSION_WARMUPS.lower;
   assert.deepEqual(Array.from(upper.treadmill_minutes), [5, 7, 10]);
   assert.equal(upper.cap_minutes, 15);
-  assert.ok(upper.drills.every((drill) => drill.reps === 10));
+  // Reps come from the source, not from a caption: [PPL] gives 12 arm swings,
+  // 15 cable external rotations per side and 12 leg swings per leg; arm circles
+  // are [ML]'s 10 per side. Every drill carries its own count (2026-09-08 audit).
+  const sourced = { arm_swings: 12, arm_circles: 10, cable_external_rotation: 15, front_back_leg_swings: 12, side_side_leg_swings: 12 };
+  for (const drill of [...upper.drills, ...lower.drills]) {
+    assert.ok(Number.isInteger(drill.reps) && drill.reps >= 8, `${drill.id} must carry a real rep count`);
+    if (sourced[drill.id] != null) assert.equal(drill.reps, sourced[drill.id], `${drill.id} reps must match the source`);
+  }
   assert.equal(upper.drills.some((drill) => /leg/i.test(drill.id)), false, 'Upper days hard-block leg drills');
   assert.equal(lower.drills.some((drill) => /leg/i.test(drill.id)), true);
 });

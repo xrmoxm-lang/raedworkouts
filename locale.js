@@ -203,6 +203,8 @@ export const LOCALE = Object.freeze({
   drill_clips_hint: pair('Tap to watch. Ticking a drill above is what marks it done.', 'اضغط للمشاهدة. التأشير على الحركة فوق هو ما يحسبها منتهية.'),
   review_exercises: pair('Go back to the exercises', 'رجوع إلى التمارين'),
   why_calibrate: pair('No logged history yet — pick a weight you can control and log it. Today is the calibration.', 'لا سجلّ بعد — اختر وزنًا تتحكّم فيه وسجّله. اليوم معايرة.'),
+  // research/06 §5.3 R6: two sessions under the rep floor walk the load back one step.
+  why_regress: pair('Two sessions under {reps} reps — down one step ({kg} kg) and earn it back', 'ما وصلت {reps} تكرارات مرتين — نزّل درجة ({kg} كغ) وارجع اكسبها'),
   why_first_exposure: pair('First time — use the seeded load, then log what really happened.', 'أول مرة — استعمل الوزن المبدئي، ثم سجّل ما حدث فعلًا.'),
   why_reentry_seed: pair('⚡ Re-entry seed: {kg} kg. Let completed reps find the level; do not grind.', '⚡ وزن بداية العودة: {kg} كغ. دع التكرارات تجد المستوى، ولا تعاند.'),
   why_last_logged: pair('Use the last logged load and complete the prescribed reps.', 'استعمل آخر وزن مسجّل وأكمل التكرارات المطلوبة.'),
@@ -694,7 +696,8 @@ export const LOCALE = Object.freeze({
   treadmill_walk: pair('1. Treadmill walk', '1. مشي على المشاية'),
   choose_treadmill: pair('Choose 5–10 min, then tap done.', 'اختر 5–10 دقائق، ثم اضغط تم.'),
   drills: pair('2. Drills', '2. حركات تحضيرية'),
-  ten_reps_each: pair('10 reps each.', '10 تكرارات لكل حركة.'),
+  // The drills carry their own rep counts from the source (12 / 15 / 10); the caption no longer flattens them.
+  ten_reps_each: pair('Reps as listed beside each drill.', 'التكرارات كما هي مذكورة بجانب كل حركة.'),
   warmup_warning: pair('⚠ Warm-up: ', '⚠ إحماء: '),
   rest_done: pair('Rest done 💪', 'انتهت الراحة 💪'),
   rest_over: pair('Rest over — get back to it.', 'انتهت الراحة — ارجع للمجموعة.'),
@@ -986,6 +989,37 @@ export const LOCALE = Object.freeze({
   settings_sync_row: pair('Sync', 'المزامنة'),
   // personal_records carries a trophy emoji; the end screen carries none.
   personal_records_plain: pair('Personal records', 'أرقام شخصية'),
+  // ---- v17r2: library ----
+  // The header no longer says «tap any group to expand» — there are no groups
+  // to expand. library_count_hint is kept for an older cached shell.
+  library_count_word: pair('exercises', 'تمرينًا'),
+  library_filter_label: pair('Filter by body part', 'التصفية حسب الجزء'),
+  library_filter_all: pair('All', 'الكل'),
+  // Distinct from no_exercises_match: the library filters by NAME, and saying
+  // so is what tells him the word he typed is the thing that found nothing.
+  library_no_name_match: pair('No exercise by that name', 'لا يوجد تمرين بهذا الاسم'),
+  library_custom_mark: pair('Custom', 'مخصص'),
+  library_clips_label: pair('Clips', 'المقاطع'),
+  // The row's clip mark is a glyph and a number; this names it for a reader.
+  library_clip_count: pair('Clips: {n}', 'المقاطع: {n}'),
+  // `alternatives` carries a trailing colon for an inline run; this is a label.
+  library_alternatives: pair('Similar exercises', 'تمارين مشابهة'),
+  // ---- v17r2: coach ----
+  // The notebook of questions. `coach_recent` («سألت قريباً») still labels
+  // nothing — the chips it fed are unlabelled now — but this is the heading
+  // over the answers themselves, which is a different thing from a chip row.
+  coach_log_title: pair('You asked before', 'سألت قبل'),
+  // The tag on a log row. `coach_from_web` is the full sentence the answer
+  // itself carries; a row needs two words that fit beside a date.
+  coach_source_web: pair('From the internet', 'من الإنترنت'),
+  // The composer keeps its place under an answer, so asking the next question
+  // never means scrolling back to the top.
+  coach_another: pair('Another question', 'سؤال آخر'),
+  // Opening an older entry says which kind of «already answered» this is:
+  // coach_restored is the last answer coming back by itself after a reload,
+  // this one is an answer he deliberately went and re-opened.
+  coach_log_past: pair('An answer you already have', 'جواب عندك من قبل'),
+  coach_ask_new: pair('Ask something new', 'اسأل شيئًا جديدًا'),
 });
 
 const englishIndex = new Map(Object.entries(LOCALE).map(([key, value]) => [value.en, key]));

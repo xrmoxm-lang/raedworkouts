@@ -1,8 +1,14 @@
-/* The exercise library. */
+/* The exercise library: one catalogue, one sheet.
+ *
+ * v17r2 — Raed: «ما أحس أنها مرتبة بشكل جيد». It was three levels of nested
+ * accordions (part → muscle → exercise) whose rows all looked alike, each one
+ * expanding INLINE into clips, chips and buttons, so the page never read as a
+ * list of exercises. Now: a filter rail of parts, one flat `.section` per
+ * muscle, and everything an exercise carries lives in its bottom sheet. */
 
 import { $, confirmAction, h, icon, toast, toastSaved } from '../core/dom.js';
 import { muscleLabel, t, tf } from '../core/i18n.js';
-import { render, router } from '../core/shell.js';
+import { render } from '../core/shell.js';
 import { saveLocal, state } from '../core/store.js';
 import {
   LIB_HIERARCHY,
@@ -26,6 +32,9 @@ import { buildVideoTile } from '../ui/kit.js';
 // id maps to its own semantic locale key so the screen never looks a string up
 // by its English source.
 const GROUP_LABEL_KEY = { upper: 'upper_body', arms: 'arms', lower: 'lower_body', core: 'core' };
+// Every muscle key a part owns, so an exercise can be counted against the part
+// without walking its sub-groups twice.
+const groupKeys = (group) => Object.values(group.submuscles).flatMap((sub) => sub.keys);
 
 const closeSheet = () => $('#modal-overlay').classList.remove('show');
 const openSheet = () => $('#modal-overlay').classList.add('show');
@@ -70,211 +79,293 @@ function editJNUrlPrompt(exerciseId) {
   openSheet();
 }
 
-// The library's search box, held here instead of on `window._libSearch`. Same
-// behaviour: it survives a re-render and resets on reload.
+// The library's search box and its part filter, held here instead of on
+// `window._libSearch`. Same behaviour: they survive a re-render, reset on reload.
 let libSearch = '';
+let libFilter = 'all';
+// exercise id -> its rendered list row, so hiding one clip redraws that row
+// instead of the whole catalogue (which used to scroll him away from it).
+const rowIndex = new Map();
+
+const matchesSearch = (ex) => {
+  const q = libSearch.trim().toLowerCase();
+  if (!q) return true;
+  return (ex.name + ' ' + (ex.name_ar || '') + ' ' + (ex.primary || []).join(' ')).toLowerCase().includes(q);
+};
 
 export function renderLibrary() {
   const root = $('#page-library');
   root.innerHTML = '';
+  rowIndex.clear();
   const allEx = getAllExercises();
+
   root.appendChild(h('div', { class: 'page-header' },
     h('h1', {}, t('exercise_library')),
     h('div', { class: 'sub' },
       h('span', { class: 'num' }, String(allEx.length)),
       ' ',
-      t('library_count_hint'),
+      t('library_count_word'),
     ),
   ));
 
   // The input is built ONCE and kept. It used to be destroyed and rebuilt on
   // every keystroke by re-rendering the whole page, so the field lost focus
   // after the first character and he could not type a second one.
-  const results = h('div', { class: 'lib-results' });
   const searchInput = h('input', {
     type: 'search', class: 'search-input',
     placeholder: t('library_search_placeholder'),
     'aria-label': t('library_search_placeholder'),
     value: libSearch,
-    onInput: (e) => { libSearch = e.target.value; renderResults(results); },
+    onInput: (e) => { libSearch = e.target.value; paint(); },
   });
   root.appendChild(h('div', { class: 'search-row' }, searchInput));
 
+  const rail = h('div', { class: 'cluster lib-filters', role: 'group', 'aria-label': t('library_filter_label') });
+  const results = h('div', { class: 'lib-results' });
+  // The rail's counts follow the search, so when a word matches nothing under
+  // the part he is filtered to, the rail says which part it DID match in.
+  const paint = () => { paintRail(rail, paint); paintResults(results); };
+
+  root.appendChild(rail);
+  root.appendChild(results);
   root.appendChild(h('button', {
-    class: 'btn full',
+    class: 'btn full lib-add',
     onClick: () => openAddCustomExerciseModal(),
   }, icon('plus', 16), h('span', {}, t('custom_exercise_button'))));
 
-  root.appendChild(results);
-  renderResults(results);
+  paint();
 }
 
-function renderResults(results) {
-  results.innerHTML = '';
-  const allEx = getAllExercises();
-  const search = libSearch || '';
-  const searching = search.trim().length > 0;
+function paintRail(rail, paint) {
+  rail.innerHTML = '';
+  const matches = getAllExercises().filter(matchesSearch);
+  const chip = (id, label, n) => h('button', {
+    type: 'button',
+    class: 'chip' + (libFilter === id ? ' active' : ''),
+    'aria-pressed': libFilter === id ? 'true' : 'false',
+    onClick: () => { libFilter = id; paint(); },
+  }, h('span', {}, label), h('span', { class: 'num' }, String(n)));
 
-  // Filter exercises by search (applied globally, then re-grouped)
-  const q = search.toLowerCase();
-  const matchesSearch = (ex) => {
-    if (!searching) return true;
-    return (ex.name + ' ' + (ex.name_ar || '') + ' ' + (ex.primary || []).join(' ')).toLowerCase().includes(q);
-  };
-
-  const filteredEx = allEx.filter(matchesSearch);
-
-  if (!filteredEx.length) {
-    results.appendChild(h('div', { class: 'empty' }, t('no_exercises_match')));
-    return;
-  }
-
-  // Render hierarchy
+  rail.appendChild(chip('all', t('library_filter_all'), matches.length));
   for (const group of LIB_HIERARCHY) {
-    const groupExercises = [];
-    const groupSections = [];
-    for (const [subKey, subInfo] of Object.entries(group.submuscles)) {
-      const subExercises = filteredEx.filter(ex => exerciseInGroup(ex, subInfo.keys));
-      if (subExercises.length === 0) continue;
-      groupExercises.push(...subExercises);
-      groupSections.push({ key: subKey, info: subInfo, exercises: subExercises });
-    }
-    if (groupExercises.length === 0) continue;
-
-    const groupCount = groupExercises.length;
-    const groupOpen = searching || group.id === 'upper'; // open Upper by default; open all when searching
-    const groupDetails = h('details', {
-      class: 'lib-group',
-      ...(groupOpen ? { open: '' } : {}),
-    });
-    groupDetails.appendChild(h('summary', { class: 'lib-group-summary' },
-      h('span', { class: 'label' }, t(GROUP_LABEL_KEY[group.id] || 'exercise_library')),
-      h('span', { class: 'count num' }, String(groupCount)),
+    const keys = groupKeys(group);
+    rail.appendChild(chip(
+      group.id,
+      t(GROUP_LABEL_KEY[group.id] || 'exercise_library'),
+      matches.filter(ex => exerciseInGroup(ex, keys)).length,
     ));
-
-    for (const section of groupSections) {
-      const subDetails = h('details', {
-        class: 'lib-sub',
-        ...(searching ? { open: '' } : {}),
-      });
-      subDetails.appendChild(h('summary', { class: 'lib-sub-summary' },
-        h('span', { class: 'label' }, muscleLabel(section.info.keys[0])),
-        h('span', { class: 'count num' }, String(section.exercises.length)),
-      ));
-      const grid = h('div', { class: 'lib-grid' });
-      section.exercises.forEach(ex => grid.appendChild(renderLibExerciseCard(ex)));
-      subDetails.appendChild(grid);
-      groupDetails.appendChild(subDetails);
-    }
-    results.appendChild(groupDetails);
   }
 }
 
-// Redraw ONE card in place. Toggling a clip used to re-render the whole screen,
+function paintResults(results) {
+  results.innerHTML = '';
+  rowIndex.clear();
+  const matches = getAllExercises().filter(matchesSearch);
+  let shown = 0;
+
+  for (const group of LIB_HIERARCHY) {
+    if (libFilter !== 'all' && libFilter !== group.id) continue;
+    for (const sub of Object.values(group.submuscles)) {
+      const list = matches.filter(ex => exerciseInGroup(ex, sub.keys));
+      if (!list.length) continue;
+      shown += list.length;
+      results.appendChild(h('section', { class: 'section lib-section' },
+        h('div', { class: 'section-head' },
+          h('div', { class: 'eyebrow' }, muscleLabel(sub.keys[0])),
+          h('span', { class: 'num' }, String(list.length)),
+        ),
+        h('div', { class: 'list' }, list.map(exerciseRow)),
+      ));
+    }
+  }
+
+  if (!shown) results.appendChild(h('div', { class: 'empty' }, t('library_no_name_match')));
+}
+
+// One catalogue row. `.ex` stays on it so `#page-library .ex` still matches.
+// A div with role=button rather than a <button>: the row is flow content
+// (two stacked lines and a figure), which a <button> may not contain.
+function exerciseRow(ex) {
+  const clips = buildExerciseVideos(ex.id, ex).length;
+  const open = () => openExerciseSheet(ex.id);
+  const row = h('div', {
+    class: 'row is-button ex', role: 'button', tabindex: '0',
+    'data-library-exercise': ex.id,
+    onClick: open,
+    onKeydown: (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open();
+    },
+  },
+    h('div', { class: 'row-lead' }, figure(ex.primary || [], ex.secondary || [], 's40')),
+    h('div', { class: 'row-body' },
+      h('div', { class: 'row-title' }, h('bdi', { class: 'ltr-run' }, ex.name)),
+      // The Arabic name where there is one; 45 of the 78 have none, and the
+      // muscle it trains is the next most useful thing to say about it.
+      h('div', { class: 'row-hint' }, ex.name_ar || muscleLabel((ex.primary || [])[0])),
+    ),
+    h('div', { class: 'row-trail' },
+      // The mark is a drawn ::before, so on its own the row would announce the
+      // bare number. The label names it inside the row's own accessible name.
+      clips ? h('span', {
+        class: 'lib-clips',
+        title: tf('library_clip_count', { n: clips }),
+        'aria-label': tf('library_clip_count', { n: clips }),
+      }, h('span', { class: 'num' }, String(clips))) : null,
+      ex.is_custom ? h('span', { class: 'chip lib-mark' }, t('library_custom_mark')) : null,
+      // Plain `.chevron`, not `.chevron.forward`: measured at 390×844 in RTL
+      // the `.forward` rule rotates it 135° and it points UP.
+      h('span', { class: 'chevron', 'aria-hidden': 'true' }),
+    ),
+  );
+  rowIndex.set(ex.id, row);
+  return row;
+}
+
+// Redraw ONE row in place. Toggling a clip used to re-render the whole screen,
 // which collapsed the exercise he was looking at and scrolled him away from it.
-function refreshCard(exerciseId, card) {
+function refreshRow(exerciseId) {
+  const row = rowIndex.get(exerciseId);
+  const ex = getAllExercises().find(e => e.id === exerciseId);
+  if (!row || !ex || !row.isConnected) return;
+  row.replaceWith(exerciseRow(ex));
+}
+
+// «+ فيديو» and «عدّل رابط JN» each replace the sheet's own content with their
+// own. When that one closes, the exercise comes back rather than dropping him
+// on the list with no idea which exercise he was reading.
+function subSheet(exerciseId, open) {
+  const overlay = $('#modal-overlay');
+  const watch = new MutationObserver(() => {
+    if (overlay.classList.contains('show')) return;
+    watch.disconnect();
+    setTimeout(() => openExerciseSheet(exerciseId), 0);
+  });
+  watch.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+  open();
+}
+
+// Everything the inline card used to hold, in the sheet: the cue, the clip
+// strip with its per-clip visibility toggles, both clip actions, the
+// alternatives, and the delete for a custom exercise.
+function openExerciseSheet(exerciseId) {
   const ex = getAllExercises().find(e => e.id === exerciseId);
   if (!ex) { renderLibrary(); return; }
-  const next = renderLibExerciseCard(ex);
-  if (card.classList.contains('expanded')) next.classList.add('expanded');
-  card.replaceWith(next);
-}
+  const m = $('#modal');
+  m.innerHTML = '';
 
-// Per-exercise card builder, shared between Library renders
-function renderLibExerciseCard(ex) {
-  const card = h('div', { class: 'ex' });
-  const head = h('div', { class: 'ex-head', onClick: () => card.classList.toggle('expanded') },
-    figure(ex.primary || [], ex.secondary || [], 's40'),
-    h('div', { class: 'ex-info' },
-      h('h4', {}, h('bdi', { class: 'ltr-run' }, ex.name)),
-      h('div', { class: 'meta' },
-        h('span', { class: 'muscle-tag' }, muscleLabel(ex.primary[0])),
-        ex.name_ar || '',
-      ),
-    ),
-    // The chevron is drawn by the stylesheet; the element stays so the rotation
-    // has something to hang on.
-    h('div', { class: 'ex-status', 'aria-hidden': 'true' }),
-  );
-  const body = h('div', { class: 'ex-body' });
-  if (ex.cue) body.appendChild(h('div', { class: 'cue' }, icon('spark', 15), h('span', {}, ex.cue)));
-  const customVids = state.custom_videos[ex.id] || [];
-  const allVideos = buildExerciseVideos(ex.id, ex, { includeHidden: true });
-  if (allVideos.length) {
-    body.appendChild(h('div', { class: 'tiny muted clip-hint' }, t('video_tap_hint')));
-    body.appendChild(h('div', { class: 'video-row' },
-      allVideos.map(v => {
-        const hidden = isVideoHidden(ex.id, videoIdentity(v));
-        const wrap = h('div', { class: 'video-thumb-wrap' + (hidden ? ' hidden-video' : '') });
-        const link = buildVideoTile(v);
-        // Toggle button overlay
-        const toggle = h('button', {
-          type: 'button',
-          class: 'video-toggle' + (hidden ? ' off' : ' on'),
-          title: hidden ? t('hidden_video') : t('showing_video'),
-          'aria-label': hidden ? t('hidden_video') : t('showing_video'),
-          onClick: (e) => {
-            e.preventDefault(); e.stopPropagation();
-            toggleVideoVisibility(ex.id, videoIdentity(v));
-            refreshCard(ex.id, card);
-          },
-        }, hidden ? '⊘' : '✓');
-        wrap.appendChild(link);
-        wrap.appendChild(toggle);
-        return wrap;
-      })
+  const tags = [
+    ...(ex.primary || []).map(key => h('span', { class: 'muscle-tag' }, muscleLabel(key))),
+    ...(ex.secondary || []).map(key => h('span', { class: 'muscle-tag secondary' }, muscleLabel(key))),
+  ];
+  m.appendChild(h('div', { class: 'xs-head' },
+    h('h3', {}, h('bdi', { class: 'ltr-run' }, ex.name)),
+    ex.name_ar ? h('div', { class: 'xs-sub' }, ex.name_ar) : null,
+    tags.length ? h('div', { class: 'cluster lib-tags' }, tags) : null,
+  ));
+
+  if (ex.cue) {
+    m.appendChild(h('section', { class: 'xs-section' },
+      h('div', { class: 'cue' }, icon('spark', 15), h('span', {}, ex.cue))));
+  }
+
+  const clipSection = h('section', { class: 'xs-section' });
+  const paintClips = () => {
+    clipSection.innerHTML = '';
+    const allVideos = buildExerciseVideos(ex.id, ex, { includeHidden: true });
+    clipSection.appendChild(h('div', { class: 'xs-label' }, t('library_clips_label')));
+    if (allVideos.length) {
+      clipSection.appendChild(h('div', { class: 'tiny muted clip-hint' }, t('video_tap_hint')));
+      clipSection.appendChild(h('div', { class: 'video-row' },
+        allVideos.map(v => {
+          const hidden = isVideoHidden(ex.id, videoIdentity(v));
+          const wrap = h('div', { class: 'video-thumb-wrap' + (hidden ? ' hidden-video' : '') });
+          wrap.appendChild(buildVideoTile(v));
+          wrap.appendChild(h('button', {
+            type: 'button',
+            class: 'video-toggle' + (hidden ? ' off' : ' on'),
+            title: hidden ? t('hidden_video') : t('showing_video'),
+            'aria-label': hidden ? t('hidden_video') : t('showing_video'),
+            onClick: (e) => {
+              e.preventDefault(); e.stopPropagation();
+              toggleVideoVisibility(ex.id, videoIdentity(v));
+              paintClips();
+              refreshRow(ex.id);
+            },
+          }, hidden ? '⊘' : '✓'));
+          return wrap;
+        })));
+    } else {
+      clipSection.appendChild(h('div', { class: 'xs-empty' }, t('no_saved_video')));
+    }
+
+    const actions = h('div', { class: 'xs-grid' });
+    actions.appendChild(h('button', {
+      class: 'btn xs-action',
+      // Same validation as the training screen: one path, one rule.
+      onClick: () => subSheet(ex.id, () => addCustomVideo(ex.id)),
+      // One <span>, not the label passed straight in: `.xs-action` is a COLUMN
+      // flex box, and h() splits «عدّل رابط JN» into a text node plus a
+      // <bdi> — two flex items, which stacked «JN» under its own label.
+    }, h('span', {}, t('video_add_button'))));
+    actions.appendChild(h('button', {
+      class: 'btn xs-action',
+      onClick: () => subSheet(ex.id, () => editJNUrlPrompt(ex.id)),
+    }, h('span', {}, jnHasCustomOverride(ex.id) ? t('video_edit_jn_custom_plain') : t('video_edit_jn_plain'))));
+    if ((state.custom_videos[ex.id] || []).length) {
+      actions.appendChild(h('button', {
+        class: 'btn xs-action xs-wide danger',
+        onClick: () => {
+          confirmAction({
+            title: t('video_clear_custom'),
+            body: t('video_clear_confirm'),
+            confirmLabel: t('video_clear_custom'),
+          }).then((yes) => {
+            if (yes) {
+              delete state.custom_videos[ex.id];
+              saveLocal();
+            }
+            // confirmAction closes the sheet to ask; either answer comes back
+            // to the exercise he was reading.
+            openExerciseSheet(ex.id);
+          });
+        },
+      }, h('span', {}, t('video_clear_custom'))));
+    }
+    clipSection.appendChild(actions);
+  };
+  paintClips();
+  m.appendChild(clipSection);
+
+  const alternatives = (ex.alternatives || [])
+    .map(altId => getAllExercises().find(e => e.id === altId))
+    .filter(Boolean);
+  if (alternatives.length) {
+    m.appendChild(h('section', { class: 'xs-section' },
+      h('div', { class: 'xs-label' }, t('library_alternatives')),
+      // These used to call router('library') — they scrolled the page to the
+      // top and did nothing else. A named alternative opens that exercise.
+      h('div', { class: 'cluster alt-row' }, alternatives.map(alt => h('button', {
+        type: 'button', class: 'chip',
+        onClick: () => openExerciseSheet(alt.id),
+      }, h('bdi', { class: 'ltr-run' }, alt.name)))),
     ));
   }
 
-  const actions = h('div', { class: 'cluster ex-actions' });
-  actions.appendChild(h('button', { class: 'btn tiny', onClick: () => {
-    // Same validation as the training screen: one path, one rule.
-    addCustomVideo(ex.id);
-    refreshCard(ex.id, card);
-  }}, t('video_add_button')));
-  actions.appendChild(h('button', {
-    class: 'btn tiny',
-    onClick: () => editJNUrlPrompt(ex.id),
-  }, jnHasCustomOverride(ex.id) ? t('video_edit_jn_custom_plain') : t('video_edit_jn_plain')));
-  if (customVids.length) {
-    actions.appendChild(h('button', { class: 'btn tiny ghost', onClick: () => {
-      confirmAction({
-        title: t('video_clear_custom'),
-        body: t('video_clear_confirm'),
-        confirmLabel: t('video_clear_custom'),
-      }).then((yes) => {
-        if (!yes) return;
-        delete state.custom_videos[ex.id];
-        saveLocal();
-        refreshCard(ex.id, card);
-      });
-    }}, t('video_clear_custom')));
-  }
-  body.appendChild(actions);
-
-  if (ex.alternatives?.length) {
-    body.appendChild(h('div', { class: 'alt-row' },
-      h('span', { class: 'tiny muted' }, t('alternatives')),
-      ex.alternatives.map(altId => {
-        const alt = getAllExercises().find(e => e.id === altId);
-        return alt ? h('a', { class: 'chip', onClick: (e) => { e.preventDefault(); router('library'); }, href: '#library' },
-          h('bdi', { class: 'ltr-run' }, alt.name)) : null;
-      })
-    ));
-  }
-  // Custom-exercise: allow delete
   if (ex.is_custom) {
-    body.appendChild(h('div', { class: 'cluster ex-actions' },
+    m.appendChild(h('section', { class: 'xs-section' },
       h('button', {
-        class: 'btn tiny danger ghost',
+        class: 'btn full danger',
         onClick: () => {
           confirmAction({
             title: t('delete_custom_exercise'),
             body: tf('delete_custom_exercise_body', { name: ex.name }),
             confirmLabel: t('delete_custom_exercise'),
           }).then((yes) => {
-            if (!yes) return;
+            if (!yes) { openExerciseSheet(ex.id); return; }
             deleteCustomExercise(ex.id);
+            closeSheet();
             renderLibrary();
             toastSaved(t('deleted'));
           });
@@ -282,9 +373,9 @@ function renderLibExerciseCard(ex) {
       }, icon('trash', 16), h('span', {}, t('delete_custom_exercise_plain'))),
     ));
   }
-  card.appendChild(head);
-  card.appendChild(body);
-  return card;
+
+  m.appendChild(h('button', { class: 'btn full xs-done', onClick: closeSheet }, t('done')));
+  openSheet();
 }
 
 // ---- Add custom exercise modal -------------------------------

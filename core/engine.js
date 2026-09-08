@@ -473,6 +473,19 @@ export function suggestNextWeight(exercise_id, planned) {
       }
     }
   }
+  // research/06 §5.3 R6 and 22 §2: a working set BELOW the bottom of the range on
+  // two consecutive sessions walks the load back one equipment step (never below
+  // 0). The two-session gate above already makes him re-earn the step.
+  const bottomReps = workingRepTarget(planned);
+  const fellShort = (sets) => sets.some((s) => Number.isFinite(Number(s.reps)) && Number(s.reps) < bottomReps);
+  if (last2.length === 2 && bump > 0 && Number(lastTopSet.weight) > 0) {
+    const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
+    if (fellShort(workingSets) && prevSets.length && fellShort(prevSets)) {
+      const lowered = roundToGymIncrement(Math.max(0, Number(lastTopSet.weight) - bump), bump);
+      const weight = lowered < Number(lastTopSet.weight) ? lowered : Math.max(0, Number(lastTopSet.weight) - bump);
+      return { weight, note: tf('why_regress', { reps: bottomReps, kg: bump }) };
+    }
+  }
   // Deliberately NOT for accessories: one easy session is the moment to add a
   // rep, not load. They only graduate on the two-session branch above.
   if (allHitTarget && finalEffort === 'easy' && bump > 0 && !isAccessory) {
@@ -630,6 +643,19 @@ const REENTRY_RPE = {
   2: { compound: [6, 7, 7], isolation: [7, 8, 8] },
 };
 export function reEntryPlan(plan, exercise) {
+  // research/20 §9.4: the week-5 rotation re-opens the damage window per movement.
+  // A newly introduced isolation exercise takes its first exposure at two working
+  // sets with RPE 9 capped to 8, then graduates — in every cycle, not only the first.
+  const isolation = Boolean(exercise?.pattern && exercise.pattern.startsWith('isolation'));
+  if (derivedWeek() === 5 && isolation && !getLastPerformance(plan.exercise_id)) {
+    const cap = (v) => (v == null ? v : Math.min(Number(v), 8));
+    return {
+      ...plan,
+      sets: Math.min(Number(plan.sets) || 0, 2) || 2,
+      rpe_set1: cap(plan.rpe_set1), rpe_set2: cap(plan.rpe_set2), rpe_set3: null,
+      reentry_week: 5,
+    };
+  }
   if (derivedCycle() !== 1) return plan;
   // The experience selector controls the RPE cap, not the load: research/06 §6.3
   // deletes the load multiplier. Someone already training is not re-entering.
