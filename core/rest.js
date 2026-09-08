@@ -3,6 +3,7 @@
 
 import { $, icon, toast } from '../core/dom.js';
 import { t } from '../core/i18n.js';
+import { nativeRestStart, nativeRestStop } from '../core/native.js';
 import { nsKey, safeGetItem, safeRemoveItem, safeSetItem, settings, state } from '../core/store.js';
 
 // ---- Rest timer --------------------------------------------
@@ -20,6 +21,7 @@ export function startRest(seconds) {
   persistRestDeadline(restTimer.end);
   // Ask for notification permission once, on first rest start
   if (settings.notifications) requestNotifPermissionIfNeeded();
+  nativeRestStart(restTimer.end, restTimer.total);
   runRestCountdown();
 }
 function runRestCountdown() {
@@ -43,6 +45,7 @@ function runRestCountdown() {
       persistRestDeadline(null);
       el.style.display = 'none';
       document.body.classList.remove('resting');
+      nativeRestStop('end');
       if (settings.vibrate && navigator.vibrate) navigator.vibrate([200,100,200]);
       toast(t('rest_done'));
       fireRestEndNotification();
@@ -61,6 +64,8 @@ export function restoreRestTimer() {
   if (!state.active_session) { persistRestDeadline(null); return; }
   restTimer.end = end;
   if (end - Date.now() > 500) {
+    // A relaunch mid-rest re-creates the Live Activity for what is left.
+    nativeRestStart(end, Math.max(1, end - Date.now()));
     runRestCountdown();
     return;
   }
@@ -78,6 +83,7 @@ export function cancelRest() {
   const el = $('#rest-timer');
   if (el) el.style.display = 'none';
   document.body.classList.remove('resting');
+  nativeRestStop('cancel');
 }
 
 

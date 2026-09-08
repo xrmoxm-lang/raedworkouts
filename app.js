@@ -29,6 +29,7 @@ import {
   syncToCloud,
   welcomeProfiles,
 } from './core/sync.js';
+import { scheduleNativeSummary } from './core/native.js';
 import { applyTheme } from './core/theme.js';
 import { renderCoach } from './ui/coach.js';
 import { renderSessionEnd } from './ui/end.js';
@@ -87,6 +88,8 @@ function render() {
   if (route === 'settings') renderSettings();
   if (route === 'help') router('settings');
   if (route === 'end') renderSessionEnd();
+  // The native widget mirrors whatever the screen just drew.
+  scheduleNativeSummary();
 }
 function router(route) {
   window.location.hash = route;
