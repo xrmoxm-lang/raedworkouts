@@ -1,0 +1,3 @@
+App/www/
+*.xcodeproj/
+build/

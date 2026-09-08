@@ -1,0 +1,101 @@
+name: RaedworkoutsGo
+options:
+  bundleIdPrefix: com.raedmohammed
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    DEVELOPMENT_TEAM: 93M7QN4Q5U
+    CODE_SIGN_STYLE: Automatic
+    # iPhone only. Without this, a portrait-only app trips the iPad
+    # multitasking check ("All interface orientations must be supported").
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  RaedworkoutsGo:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App
+        excludes:
+          - "www"
+          - "www/**"
+      # A folder reference (blue folder): the web app keeps its own directory
+      # layout inside the bundle, so `raed://app/core/native.js` is one file
+      # lookup and nothing has to be re-declared when a module is added.
+      - path: App/www
+        type: folder
+      - Shared
+      - Resources
+    dependencies:
+      - target: RaedworkoutsGoWidget
+        embed: true
+    preBuildScripts:
+      # Every build carries the web app that is in the worktree right now.
+      - name: Sync web app into www
+        script: '"$PROJECT_DIR/Tools/sync-www.sh"'
+        basedOnDependencyAnalysis: false
+    entitlements:
+      path: RaedworkoutsGo.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.raedmohammed.raedworkouts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.raedmohammed.raedworkouts
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Raedworkouts Go
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSupportsIndirectInputEvents: true
+        # Portrait-only is deliberate; without this the iPad multitasking check
+        # demands every orientation.
+        UIRequiresFullScreen: true
+        NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.raedmohammed.raedworkouts
+            CFBundleURLSchemes:
+              - raedworkouts
+        # The bundled page talks to raed-hp.tail53bd35.ts.net (sync),
+        # raedworkouts-v16.vercel.app (the coach proxy), img.youtube.com,
+        # i.ytimg.com and open.spotify.com — all https. Web content only; the
+        # app's own URLSession keeps full ATS.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
+  RaedworkoutsGoWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - Widget
+      - Shared
+    entitlements:
+      path: RaedworkoutsGoWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.raedmohammed.raedworkouts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.raedmohammed.raedworkouts.widget
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Raedworkouts
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+schemes:
+  RaedworkoutsGo:
+    build:
+      targets:
+        RaedworkoutsGo: all
+        RaedworkoutsGoWidget: all
+    run:
+      config: Debug
