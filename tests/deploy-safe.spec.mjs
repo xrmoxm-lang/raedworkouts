@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = pathToFileURL(path.join(repoRoot, 'index.html')).href;

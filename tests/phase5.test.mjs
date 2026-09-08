@@ -13,6 +13,7 @@ import {
   runProgrammeReferenceMigrations,
 } from '../domain/programme.js';
 import { weeklyVolume } from '../domain/volume.js';
+import { appSource } from '../scripts/app-source.mjs';
 
 async function legacyData() {
   const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
@@ -425,7 +426,7 @@ test('the programme clock and scoped swaps survive a repeating cycle and a legac
   //    counted the v15 sessions the migration deliberately preserves, so a
   //    restore or import dropped him into an arbitrary week — possibly a deload
   //    he had not earned.
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const app = await appSource();
   const counter = app.match(/function completedSessionCount\(\)[\s\S]*?\n\}/)?.[0];
   assert.ok(counter, 'completedSessionCount must exist');
   assert.ok(/rotation_order/.test(counter),

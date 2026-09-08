@@ -8,7 +8,7 @@
 // of those had its own targeted test; none of them proved the app still works
 // as a whole. This does, and it is the test to run first when something feels
 // wrong.
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 test.use({ viewport:{width:390,height:844} });
 test('a whole workout, start to finish, on a fresh profile', async ({ page }) => {
   const errs=[]; page.on('pageerror',e=>errs.push(e.message));
@@ -34,7 +34,7 @@ test('a whole workout, start to finish, on a fresh profile', async ({ page }) =>
         const ins=[...row.querySelectorAll('input')];
         if (ins.length>=2) { ins[0].value='20'; ins[0].dispatchEvent(new Event('input',{bubbles:true}));
                              ins[1].value='10'; ins[1].dispatchEvent(new Event('input',{bubbles:true})); }
-        const eff=row.parentElement?.querySelector('.effort-strip button'); if (eff) eff.click();
+        const eff=row.nextElementSibling?.classList?.contains('effort-strip') ? row.nextElementSibling.querySelector('button') : null; if (eff) eff.click();
         const chk=row.querySelector('.set-check'); if (chk) { chk.click(); ticked++; }
         await new Promise(r=>setTimeout(r,60));
       }

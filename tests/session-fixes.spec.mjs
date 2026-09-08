@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
 
@@ -198,7 +198,7 @@ test('number inputs force Latin digits so no keyboard switch is needed', async (
   await expect(weight).toHaveAttribute('inputmode', 'decimal');
 });
 
-// app.js is an ES module, so `state` and swapExercise() are not on window.
+// The client is a set of ES modules, so `state` and swapExercise() are not on window.
 // These drive the real UI instead, which is the better test: it exercises the
 // swap button, the alternatives list and the scope modal exactly as Raed does.
 async function openSwap(page) {
@@ -387,14 +387,15 @@ test('the home banner never prints the session name twice', async ({ page }) => 
   // shape to stop it pushing the set grid down the screen. The duplication this
   // test guards can only occur on the PRE-session banner, which still has the
   // heading/subtitle pair.
-  if (await banner.locator('h2').count() === 0) {
+  // v17: the pre-session name is an h1 (DESIGN-SYSTEM §3); the invariant is unchanged.
+  if (await banner.locator('h1, h2').count() === 0) {
     await expect(banner).toHaveClass(/running-line/);
     const line = (await banner.textContent()).trim();
     expect(line.length, 'the one-line header still says something').toBeGreaterThan(0);
     return;
   }
 
-  const title = (await banner.locator('h2').textContent()).trim();
+  const title = (await banner.locator('h1, h2').first().textContent()).trim();
   const sub = await banner.locator('p').count() ? (await banner.locator('p').first().textContent()).trim() : '';
   // The subtitle used to fall back to the FULL name when a session had no
   // " — " half, so the card printed its own title a second line down.
@@ -588,8 +589,11 @@ test('the effort picker appears by itself when the second-to-last set is ticked'
   }
 
   await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(1);
-  const faces = await page.locator('.effort-strip .effort-emoji').allTextContents();
-  expect(faces.join('')).toBe('😌💪🥵');
+  // v17 dropped the three faces: the word IS the choice now, and the stylesheet
+  // draws the coloured rule per position. Same invariant — three labelled
+  // choices exist, in the same order, easiest first.
+  const words = await page.locator('.effort-strip .effort-word').allTextContents();
+  expect(words).toEqual(['سهل', 'متوسط', 'صعب جدًا']);
 
   await page.locator('.effort-strip .effort-picker button').nth(1).click();
   await page.waitForTimeout(600);
@@ -870,7 +874,9 @@ test('the PR-summary setting actually controls the PR summary', async ({ page })
   });
   await page.waitForTimeout(800);
   const readsSetting = await page.evaluate(async () => {
-    const source = await (await fetch('./app.js')).text();
+    // renderSessionEnd moved to ui/end.js when the client was split; app.js is
+    // the boot file now and no longer carries a screen.
+    const source = await (await fetch('./ui/end.js')).text();
     // The setting must be READ somewhere that renders, not only written.
     return /settings\.show_pr_summary\s*!==\s*false/.test(source);
   });

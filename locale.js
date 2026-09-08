@@ -38,6 +38,7 @@ export const LOCALE = Object.freeze({
     'Stop at {n} — this week is for moving well, not for adding load',
     'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
   coach_asking: pair('Asking…', 'يسأل…'),
+  coach_ask_title: pair('Ask your library', 'اسأل مكتبتك'),
   coach_recent: pair('You asked recently', 'سألت قريباً'),
   // The rest-day banner. Its branch existed but could never be reached, so every
   // day of the week announced itself as a gym day.
@@ -59,6 +60,72 @@ export const LOCALE = Object.freeze({
   last_sync_hint: pair('last sync {when}', 'آخر مزامنة {when}'),
   programme_hint: pair('week {week} · cycle {cycle}', 'الأسبوع {week} · الدورة {cycle}'),
   coach_hint_settings: pair('model and spending', 'الموديل والمصروف'),
+  wellbeing_question: pair('How has this week felt? Tap anything that applies.', 'كيف حسّيت هذا الأسبوع؟ اضغط اللي ينطبق عليك.'),
+  sign_joint_aches: pair('Aching joints', 'وجع مفاصل'),
+  sign_exhausted: pair('Run down', 'مرهق ومتعب'),
+  sign_sore: pair('Very sore', 'عضلاتي موجعة مرة'),
+  sign_no_motivation: pair('No motivation', 'ما لي نفس أتمرّن'),
+  sign_poor_sleep: pair('Sleeping badly', 'نومي مو زين'),
+  wellbeing_save: pair('Save', 'احفظ'),
+  wellbeing_all_good: pair('All good', 'كله تمام'),
+  wellbeing_noted: pair('Noted. Asked again next week.', 'تمام. بسألك مرة ثانية الأسبوع الجاي.'),
+  deload_booked: pair('Next week is a deload week.', 'الأسبوع الجاي أسبوع تخفيف.'),
+  deload_booked_why: pair(
+    'Two or more warning signs together. One set less per exercise and a lighter target effort, then straight back to where you were.',
+    'ظهرت علامتان أو أكثر مع بعض. مجموعة أقل بكل تمرين وجهد أخف، وبعدها ترجع من نفس المكان.'),
+  deload_running: pair('Deload week — lighter on purpose', 'أسبوع تخفيف — خفيف عن قصد'),
+  calibrated_from_ramp: pair(
+    'Working sets set to {kg} kg, from the ramp set that came back easy.',
+    'حطّيت مجموعات العمل على {kg} كغ، من مجموعة الإحماء اللي طلعت سهلة.'),
+  why_probe_floor: pair(
+    'First time here. Start at the lightest setting and climb one step each ramp set — the working weight comes from whichever one feels easy.',
+    'أول مرة على هذا التمرين. ابدأ بأخف وزن وارفع درجة وحدة كل مجموعة إحماء — وزن العمل بيطلع من اللي تحسّها سهلة.'),
+  warmup_felt_light: pair(
+    'Warm-up felt light — working sets nudged up to {kg} kg.',
+    'الإحماء طلع سهل — رفعت مجموعات العمل إلى {kg} كغ.'),
+  warmup_felt_heavy: pair(
+    'Warm-up felt heavy — easing into the first set at {kg} kg. Hit the target and it counts.',
+    'الإحماء طلع ثقيل — نبدأ أول مجموعة بـ {kg} كغ. لو وصلت الهدف فهي محسوبة.'),
+  superset_next: pair('Straight into {name} — no rest.', 'على طول إلى {name} — بلا راحة.'),
+  effort_label: pair('Effort', 'الجهد'),
+  why_machine_reps: pair(
+    'This machine carries its own weight, so reps are what progress. Last time {reps} — aim for {target}.',
+    'هذا الجهاز بأوزانه، فالتقدّم بالتكرارات. آخر مرة {reps} — الهدف {target}.'),
+  coach_over_budget: pair('Written answers are paused this month.', 'الأجوبة المكتوبة موقوفة هذا الشهر.'),
+  coach_over_budget_hint: pair(
+    'The monthly ceiling was reached ({month} of {cap}). Your books still answered — the passages are below. It resets at the start of next month.',
+    'وصلنا سقف الشهر ({month} من {cap}). كتبك جاوبت — المقاطع تحت. يرجع أول الشهر الجاي.'),
+  rest_override: pair('Use my rest time everywhere', 'استعمل وقت راحتي في كل التمارين'),
+  rest_override_desc: pair(
+    'Off, each exercise uses the rest the programme prescribes. On, they all use the number above — for a day you are short of time. Supersets stay at zero either way.',
+    'مطفي: كل تمرين يستعمل الراحة اللي يحددها البرنامج. مشغّل: كلها تستعمل الرقم فوق — ليوم وقتك فيه ضيق. السوبرست يبقى بلا راحة في الحالتين.'),
+  superset_go: pair('Go to {name}', 'روح إلى {name}'),
+  superset_mode: pair('Supersets', 'السوبرست'),
+  superset_mode_desc: pair(
+    'Only affects the A1/A2 pairs the programme marks. Automatic moves you to the partner after each set; manual just offers the link; off treats them as ordinary exercises.',
+    'يخصّ فقط أزواج A1/A2 اللي يحددها البرنامج. تلقائي: ينقلك للتمرين الثاني بعد كل مجموعة. يدوي: يعطيك زر تروح فيه بنفسك. مطفي: يتعامل معهما كتمرينين عاديين.'),
+  superset_auto: pair('Automatic', 'تلقائي'),
+  superset_manual: pair('Manual', 'يدوي'),
+  superset_off: pair('Off', 'مطفي'),
+  order_section: pair('Order', 'الترتيب'),
+  move_earlier: pair('Move earlier', 'قدّمه'),
+  move_later: pair('Move later', 'أخّره'),
+  order_position: pair('Now {n} of {total}. Kept for next time.', 'الآن {n} من {total}. محفوظ للمرات الجاية.'),
+  order_reset: pair('Reset to the programme order', 'رجّع ترتيب البرنامج'),
+  order_reset_done: pair('Back to the programme order from the next session.', 'يرجع ترتيب البرنامج من الجلسة الجاية.'),
+  tap_log: pair('Record my taps', 'سجّل ضغطاتي'),
+  tap_log_desc: pair(
+    'For a review session. Records which control you pressed and when — never what you typed. Stays on this phone until you export it. Turning it off erases it.',
+    'لجلسة مراجعة. يسجّل أي زر ضغطت ومتى — ما يسجّل اللي تكتبه أبداً. يبقى في جوالك حتى تصدّره بنفسك. وإذا طفيته ينمسح.'),
+  tap_log_count: pair('{n} taps recorded. Export and send them over.', '{n} ضغطة مسجّلة. صدّرها وأرسلها.'),
+  tap_log_export: pair('Export', 'صدّر'),
+  clips_section: pair('Clips', 'المقاطع'),
+  show_clips_in_workout: pair('Show clips during the workout', 'أظهر المقاطع أثناء التمرين'),
+  clip_shown_tap_hide: pair('Showing — tap to hide', 'ظاهر — اضغط للإخفاء'),
+  clip_hidden_tap_show: pair('Hidden — tap to show', 'مخفي — اضغط للإظهار'),
+  no_clips_for_exercise: pair('No clips for this exercise yet.', 'ما فيه مقاطع لهذا التمرين بعد.'),
+  coach_restored: pair('Your last answer', 'آخر جواب سألت عنه'),
+  coach_clear: pair('New question', 'سؤال جديد'),
   bodyweight_out_of_range: pair(
     'That does not look like a bodyweight. Enter a number between {min} and {max} kg.',
     'هذا ما يبدو وزن جسم. أدخل رقماً بين {min} و{max} كجم.'),
@@ -66,6 +133,13 @@ export const LOCALE = Object.freeze({
   effort_target_moderate: pair('moderate', 'متوسط'),
   effort_target_hard: pair('hard', 'صعب'),
   effort_target_near_failure: pair('close to failure', 'قريب من الفشل'),
+  // Short forms, used only when three targets sit on one line. The long ones
+  // above read well alone — «خفيف — بقصد» is the whole story when every set
+  // shares a target — and wrap the row when there are three of them.
+  effort_short_easy: pair('easy', 'خفيف'),
+  effort_short_moderate: pair('moderate', 'متوسط'),
+  effort_short_hard: pair('hard', 'صعب'),
+  effort_short_near_failure: pair('near failure', 'شبه الفشل'),
   superset_with: pair('Superset — no rest before {name}', 'سوبرست — بلا راحة قبل {name}'),
   extra_set: pair('extra set', 'مجموعة زائدة'),
   // Appending is not swapping: it adds a movement at the END without replacing
@@ -129,6 +203,8 @@ export const LOCALE = Object.freeze({
   drill_clips_hint: pair('Tap to watch. Ticking a drill above is what marks it done.', 'اضغط للمشاهدة. التأشير على الحركة فوق هو ما يحسبها منتهية.'),
   review_exercises: pair('Go back to the exercises', 'رجوع إلى التمارين'),
   why_calibrate: pair('No logged history yet — pick a weight you can control and log it. Today is the calibration.', 'لا سجلّ بعد — اختر وزنًا تتحكّم فيه وسجّله. اليوم معايرة.'),
+  // research/06 §5.3 R6: two sessions under the rep floor walk the load back one step.
+  why_regress: pair('Two sessions under {reps} reps — down one step ({kg} kg) and earn it back', 'ما وصلت {reps} تكرارات مرتين — نزّل درجة ({kg} كغ) وارجع اكسبها'),
   why_first_exposure: pair('First time — use the seeded load, then log what really happened.', 'أول مرة — استعمل الوزن المبدئي، ثم سجّل ما حدث فعلًا.'),
   why_reentry_seed: pair('⚡ Re-entry seed: {kg} kg. Let completed reps find the level; do not grind.', '⚡ وزن بداية العودة: {kg} كغ. دع التكرارات تجد المستوى، ولا تعاند.'),
   why_last_logged: pair('Use the last logged load and complete the prescribed reps.', 'استعمل آخر وزن مسجّل وأكمل التكرارات المطلوبة.'),
@@ -158,7 +234,11 @@ export const LOCALE = Object.freeze({
   // own 33 Nippard works, and it says so when they do not cover the question.
   // The copy promises exactly that and no more: an answer FROM the books, with
   // the passages it used shown underneath.
-  coach_intro: pair('Ask your own library. The answer is built from your books, and the passages it used are shown underneath.', 'اسأل مكتبتك. الجواب مبنيّ على كتبك، والمقاطع التي استُعملت تظهر تحته.'),
+  // The heading above it now says «اسأل مكتبتك», so this no longer repeats it —
+  // it says what happens after you ask.
+  coach_intro: pair(
+    'The answer is built from your books, with the passages it used shown underneath.',
+    'الجواب مبنيّ على كتبك، والمقاطع اللي استُعملت تظهر تحته.'),
   coach_placeholder: pair('Ask about training or nutrition…', 'اسأل عن التمرين أو التغذية…'),
   coach_ask: pair('Ask', 'اسأل'),
   coach_try: pair('Try one of these:', 'جرّب واحدًا من هذه:'),
@@ -536,7 +616,10 @@ export const LOCALE = Object.freeze({
   runner_music_handoff: pair('{platform} — press play, then forget about it:', '{platform} — شغّل ثم ركّز في التمرين:'),
   // Phase 6 keeps v15's Home music-card layout, but T1 makes its app copy
   // Arabic. Playlist titles below remain literal Spotify titles.
-  home_spotify_handoff: pair('🎧 Spotify — press play, then forget about it:', '🎧 سبوتيفاي — شغّل وانسَ الموضوع:'),
+  // Kept so an older cached shell still resolves it; the live line is
+  // home_music_handoff, which names whichever platform he actually chose.
+  home_spotify_handoff: pair('Spotify — press play, then forget about it:', 'سبوتيفاي — شغّل وانسَ الموضوع:'),
+  home_music_handoff: pair('{platform} — press play, then forget about it:', '{platform} — شغّل وانسَ الموضوع:'),
   runner_active_started: pair('Active · started {time}', 'جارية · بدأت {time}'),
   runner_add_set: pair('＋ Add set', '+ مجموعة'),
   warmup_spotify: pair('▶ Spotify — press play', 'سبوتيفاي — شغّل'),
@@ -567,7 +650,7 @@ export const LOCALE = Object.freeze({
   no_exercises_match: pair('No exercises match.', 'لا توجد تمارين مطابقة.'),
   no_exercise_available: pair('No exercise is available in this session.', 'لا يوجد تمرين متاح في هذه الجلسة.'),
   no_saved_video: pair('No saved video for this exercise.', 'لا يوجد شرح محفوظ لهذا التمرين.'),
-  add_custom_exercise: pair('➕ Add Custom Exercise', '➕ أضف تمريناً مخصصاً'),
+  add_custom_exercise: pair('Add Custom Exercise', 'أضف تمريناً مخصصاً'),
   add_video: pair('+ Add video', '+ أضف شرحاً'),
   custom_exercise_intro: pair('Adds a new exercise to your library. Saved permanently. You can delete it anytime.', 'يضيف تمريناً جديداً إلى مكتبتك. يُحفظ دائماً ويمكنك حذفه متى شئت.'),
   name_english: pair('Name (English)', 'الاسم بالإنجليزية'),
@@ -613,7 +696,8 @@ export const LOCALE = Object.freeze({
   treadmill_walk: pair('1. Treadmill walk', '1. مشي على المشاية'),
   choose_treadmill: pair('Choose 5–10 min, then tap done.', 'اختر 5–10 دقائق، ثم اضغط تم.'),
   drills: pair('2. Drills', '2. حركات تحضيرية'),
-  ten_reps_each: pair('10 reps each.', '10 تكرارات لكل حركة.'),
+  // The drills carry their own rep counts from the source (12 / 15 / 10); the caption no longer flattens them.
+  ten_reps_each: pair('Reps as listed beside each drill.', 'التكرارات كما هي مذكورة بجانب كل حركة.'),
   warmup_warning: pair('⚠ Warm-up: ', '⚠ إحماء: '),
   rest_done: pair('Rest done 💪', 'انتهت الراحة 💪'),
   rest_over: pair('Rest over — get back to it.', 'انتهت الراحة — ارجع للمجموعة.'),
@@ -690,7 +774,9 @@ export const LOCALE = Object.freeze({
   showing_video: pair('Showing — tap to hide from session', 'ظاهر — اضغط لإخفائه من التمرين'),
   clear_custom: pair('Clear custom', 'امسح المخصص'),
   remove_videos: pair('Remove all custom videos for this exercise?', 'هل تمسح كل الشروح المخصصة لهذا التمرين؟'),
-  delete_custom_exercise: pair('🗑 Delete this custom exercise', '🗑 احذف هذا التمرين المخصص'),
+  delete_custom_exercise: pair('Delete this custom exercise', 'احذف هذا التمرين المخصص'),
+  // Same label without the emoji: the button now carries a drawn icon instead.
+  delete_custom_exercise_plain: pair('Delete this custom exercise', 'احذف هذا التمرين المخصص'),
   deleted: pair('Deleted.', 'تم الحذف.'),
   paste_youtube: pair('Paste a YouTube link to add to this exercise:', 'الصق رابط يوتيوب لإضافته لهذا التمرين:'),
   jn_url_updated: pair('JN URL updated.', 'تم تحديث رابط JN.'),
@@ -701,7 +787,7 @@ export const LOCALE = Object.freeze({
     'Deletes "{name}" from your library. This cannot be undone.',
     'يحذف «{name}» من مكتبتك. ما فيه رجعة.'),
 
-  profile: pair('👤 Profile', '👤 الملف'),
+  profile: pair('Profile', 'الملف'),
   display_name: pair('Display name', 'اسم العرض'),
   shown_profile_tiles: pair('Shown on profile tiles.', 'يظهر في بطاقات الملفات.'),
   training_split: pair('Training split', 'تقسيم التمرين'),
@@ -715,8 +801,8 @@ export const LOCALE = Object.freeze({
   notifications: pair('Background notifications', 'إشعارات في الخلفية'),
   on: pair('On', 'مفعّل'),
   off: pair('Off', 'متوقف'),
-  cloud_sync: pair('☁️ Cloud sync', '☁️ المزامنة السحابية'),
-  cloud_data: pair('☁️ Cloud & Data', '☁️ السحابة والبيانات'),
+  cloud_sync: pair('Cloud sync', 'المزامنة السحابية'),
+  cloud_data: pair('Cloud & Data', 'السحابة والبيانات'),
   test: pair('Test', 'اختبر'),
   restore_backup: pair('Restore from backup...', 'استعد من نسخة احتياطية…'),
   download_data: pair('Download my data', 'نزّل بياناتي'),
@@ -870,6 +956,70 @@ export const LOCALE = Object.freeze({
   programme_note_block_b: pair('Block B retains the same primary compounds and rotates only the listed isolation slots.', 'الكتلة ب تُبقي المركّبات الأساسية كما هي، ولا تبدّل إلا تمارين العزل المذكورة.'),
   programme_note_history_seed: pair('Seed each first working weight from logged history where it exists; the ramp probe is the fallback, not the default.', 'ابدأ كل وزن عمل أول من سجلّك حين يوجد؛ والتدرّج الاستكشافي بديل عند غيابه لا الأصل.'),
   programme_note_reentry: pair('Weeks 1–2 are a re-entry ramp: cap effort and eccentric volume, never deliberately under-load a detrained lifter.', 'الأسبوعان 1–2 تدرّج عودة: قيّد الجهد وحجم الحركة السالبة، ولا تُنقص الوزن عمدًا على من ترك التدريب وعاد.'),
+  // ---- v17: library + history ----
+  library_count_hint: pair('exercises · tap any group to expand', 'تمرينًا · اضغط أي مجموعة لتوسيعها'),
+  library_search_placeholder: pair('Search exercises…', 'ابحث عن تمرين…'),
+  custom_exercise_button: pair('Custom exercise', 'تمرين مخصص'),
+  name_arabic: pair('Name (Arabic)', 'الاسم بالعربي'),
+  arabic_name_example: pair('e.g. Cross-body cable fly', 'مثال: تفتيح كيبل عرضي'),
+  // The same two labels as video_edit_jn / video_edit_jn_custom, without the
+  // pencil emoji: v17 carries no emoji outside the exercise gear.
+  video_edit_jn_plain: pair('Edit JN URL', 'عدّل رابط JN'),
+  video_edit_jn_custom_plain: pair('JN URL (custom)', 'رابط JN (مخصّص)'),
+  history_sessions_word: pair('sessions logged', 'جلسة مسجّلة'),
+  bodyweight_latest: pair('Latest', 'آخر قياس'),
+  bodyweight_log_action: pair('Log it', 'سجّل'),
+  // A session whose stored name is missing and whose programme entry is gone.
+  // It used to print the raw session_id, and before that «undefined».
+  session_generic: pair('Session', 'جلسة'),
+  // Was a trophy emoji on the set that set the record.
+  pr_mark: pair('Personal record', 'رقم شخصي'),
+  revision_word: pair('revision', 'مراجعة'),
+  // ---- v17: session runner ----
+  // The same field as search_any_exercise without the magnifier emoji: v17
+  // carries no emoji outside the exercise gear, and a glyph inside a
+  // placeholder is read aloud as «magnifying glass» before the instruction.
+  search_any_exercise_plain: pair('Search any exercise…', 'ابحث عن أي تمرين…'),
+  // ---- v17: settings + welcome + end ----
+  // Group labels for the seven Settings disclosures. Two of them keep wording
+  // the existing `preferences` / `cloud_data` entries do not carry, so they get
+  // their own keys rather than silently changing what the group is called.
+  settings_group_preferences: pair('Preferences (settings group)', 'تفضيلات'),
+  settings_group_data: pair('Cloud and data (settings group)', 'سحب البيانات'),
+  settings_sync_row: pair('Sync', 'المزامنة'),
+  // personal_records carries a trophy emoji; the end screen carries none.
+  personal_records_plain: pair('Personal records', 'أرقام شخصية'),
+  // ---- v17r2: library ----
+  // The header no longer says «tap any group to expand» — there are no groups
+  // to expand. library_count_hint is kept for an older cached shell.
+  library_count_word: pair('exercises', 'تمرينًا'),
+  library_filter_label: pair('Filter by body part', 'التصفية حسب الجزء'),
+  library_filter_all: pair('All', 'الكل'),
+  // Distinct from no_exercises_match: the library filters by NAME, and saying
+  // so is what tells him the word he typed is the thing that found nothing.
+  library_no_name_match: pair('No exercise by that name', 'لا يوجد تمرين بهذا الاسم'),
+  library_custom_mark: pair('Custom', 'مخصص'),
+  library_clips_label: pair('Clips', 'المقاطع'),
+  // The row's clip mark is a glyph and a number; this names it for a reader.
+  library_clip_count: pair('Clips: {n}', 'المقاطع: {n}'),
+  // `alternatives` carries a trailing colon for an inline run; this is a label.
+  library_alternatives: pair('Similar exercises', 'تمارين مشابهة'),
+  // ---- v17r2: coach ----
+  // The notebook of questions. `coach_recent` («سألت قريباً») still labels
+  // nothing — the chips it fed are unlabelled now — but this is the heading
+  // over the answers themselves, which is a different thing from a chip row.
+  coach_log_title: pair('You asked before', 'سألت قبل'),
+  // The tag on a log row. `coach_from_web` is the full sentence the answer
+  // itself carries; a row needs two words that fit beside a date.
+  coach_source_web: pair('From the internet', 'من الإنترنت'),
+  // The composer keeps its place under an answer, so asking the next question
+  // never means scrolling back to the top.
+  coach_another: pair('Another question', 'سؤال آخر'),
+  // Opening an older entry says which kind of «already answered» this is:
+  // coach_restored is the last answer coming back by itself after a reload,
+  // this one is an answer he deliberately went and re-opened.
+  coach_log_past: pair('An answer you already have', 'جواب عندك من قبل'),
+  coach_ask_new: pair('Ask something new', 'اسأل شيئًا جديدًا'),
 });
 
 const englishIndex = new Map(Object.entries(LOCALE).map(([key, value]) => [value.en, key]));

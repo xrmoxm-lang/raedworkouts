@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import { loadCatalogue } from '../domain/catalogue.js';
 import { initialiseProgressionState, progressExercise } from '../domain/progression.js';
 import { assessSubstitution } from '../domain/substitutions.js';
+import { appSource as readAppSource } from '../scripts/app-source.mjs';
 
 async function legacyData() {
   const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
@@ -15,7 +16,7 @@ async function legacyData() {
 }
 
 const rawData = await legacyData();
-const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+const appSource = await readAppSource();
 const styleSource = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const catalogue = loadCatalogue(rawData.EXERCISES);
 const legPress = catalogue.get('leg_press');
@@ -90,12 +91,19 @@ test('D18 and D19 retain 8–10 compounds and a detrained history-first seed', (
   assert.match(rawData.PROGRAMME.notes.join(' '), /logged history/i);
 });
 
-test('warm-up phase has a 5–10 minute treadmill, ten-rep drills, 15-minute cap, and no upper leg drills', () => {
+test('warm-up phase has a 5–10 minute treadmill, sourced drill reps, 15-minute cap, and no upper leg drills', () => {
   const upper = rawData.SESSION_WARMUPS.upper;
   const lower = rawData.SESSION_WARMUPS.lower;
   assert.deepEqual(Array.from(upper.treadmill_minutes), [5, 7, 10]);
   assert.equal(upper.cap_minutes, 15);
-  assert.ok(upper.drills.every((drill) => drill.reps === 10));
+  // Reps come from the source, not from a caption: [PPL] gives 12 arm swings,
+  // 15 cable external rotations per side and 12 leg swings per leg; arm circles
+  // are [ML]'s 10 per side. Every drill carries its own count (2026-09-08 audit).
+  const sourced = { arm_swings: 12, arm_circles: 10, cable_external_rotation: 15, front_back_leg_swings: 12, side_side_leg_swings: 12 };
+  for (const drill of [...upper.drills, ...lower.drills]) {
+    assert.ok(Number.isInteger(drill.reps) && drill.reps >= 8, `${drill.id} must carry a real rep count`);
+    if (sourced[drill.id] != null) assert.equal(drill.reps, sourced[drill.id], `${drill.id} reps must match the source`);
+  }
   assert.equal(upper.drills.some((drill) => /leg/i.test(drill.id)), false, 'Upper days hard-block leg drills');
   assert.equal(lower.drills.some((drill) => /leg/i.test(drill.id)), true);
 });
@@ -103,12 +111,26 @@ test('warm-up phase has a 5–10 minute treadmill, ten-rep drills, 15-minute cap
 test('session UI keeps the removal list out and wires one-thumb logging and the warm-up gate', () => {
   assert.match(appSource, /renderWarmupPhase/);
   assert.match(appSource, /isFinalWorkingSet && !set\.effort/);
-  assert.match(appSource, /Finish this exercise’s ramp set first/);
+  // The GATE, not a copy of its wording. This matched a raw English literal that
+  // lived inside toggleRunnerSet — a duplicate of the rule that was removed with
+  // the other eleven dead functions on 2026-09-05. The rule itself never moved:
+  // the live set-check handler refuses a working set while a ramp is unticked
+  // and toasts t('finish_ramp_first'). Asserting the English string meant this
+  // test would also have passed on a dead copy while the live path was broken.
+  assert.match(appSource, /finish_ramp_first/);
+  assert.match(appSource, /prior\.is_warmup && !prior\.completed/);
   assert.doesNotMatch(appSource, /Last session not fully logged/);
   assert.doesNotMatch(appSource, /Focus mode/);
   assert.doesNotMatch(appSource, /Cues on/);
   assert.doesNotMatch(appSource, /Cue:\s/);
-  assert.match(styleSource, /grid-template-columns:\s*30px minmax\(72px, 1fr\) minmax\(64px, 0\.8fr\) 48px/);
+  // The invariant, not the v15 literal: a set row is ONE grid of four tracks —
+  // mark, weight, reps, done — and the done column is a real thumb target (≥44px).
+  const grid = styleSource.match(/\.set-grid-headers,\s*\.set-grid\s*\{[^}]*grid-template-columns:\s*([^;]+);/);
+  assert.ok(grid, 'the set row grid must be declared once for headers and rows');
+  const tracks = grid[1].trim().split(/\s+(?![^(]*\))/);
+  assert.equal(tracks.length, 4, `set row must have four tracks, got ${grid[1]}`);
+  const done = Number.parseInt(tracks[3], 10);
+  assert.ok(done >= 44, `the done column must be a thumb target, got ${tracks[3]}`);
 });
 
 function syntheticCatalogue() {

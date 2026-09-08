@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+import { appSource } from '../scripts/app-source.mjs';
+
 import {
   applyWorkingSetAttempt,
   hasValidWorkingValues,
@@ -67,9 +69,11 @@ test('Overnight runner deployment precaches its imported policy modules under a 
   // well-formed, and every module app.js imports is precached — a module missing
   // from SHELL breaks the app offline, silently.
   assert.match(source, /const VERSION = 'v\d+';/, 'the service worker needs a well-formed cache version');
-  const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8');
-  const imported = [...appSource.matchAll(/from '(\.\/domain\/[^']+)'/g)].map((m) => m[1]);
-  assert.ok(imported.length, 'expected app.js to import domain modules');
+  // core/ and ui/ import the same modules one directory up, so both spellings
+  // are normalised to the './domain/…' form the SHELL list uses.
+  const client = await appSource();
+  const imported = [...client.matchAll(/from '\.\.?\/(domain\/[^']+)'/g)].map((m) => `./${m[1]}`);
+  assert.ok(imported.length, 'expected the client to import domain modules');
   for (const module of imported) {
     assert.ok(source.includes(`'${module}'`), `${module} is imported but missing from the service-worker SHELL, so the app breaks offline`);
   }
@@ -128,7 +132,7 @@ test('skipping an exercise records what he did NOT do, and never retracts what h
 // used the two-set number for both, so all sixteen single-ramp rows in his
 // programme warmed up at 50% when his own source says 60%.
 test('ramp loads follow the sourced table for the prescribed number of sets', async () => {
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const app = await appSource();
   const body = app.match(/function rampLoadsFor\(weight, count, step\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(body, 'rampLoadsFor must exist');
   // Rebuild the two helpers it depends on, so this tests the real arithmetic.

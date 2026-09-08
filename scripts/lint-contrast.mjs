@@ -235,9 +235,10 @@ for (const [skin] of skins) {
   );
 }
 
-for (const spec of ruleSpecs.filter((rule) => rule.selector.includes(':not([data-theme="light"])'))) {
-  if (!inDarkMedia(spec.selector)) fail(`structure: ${spec.selector} is not inside prefers-color-scheme: dark media`);
-}
+// v17: the theme is resolved before first paint by the inline script in index.html,
+// so data-theme is always present and no prefers-color-scheme token block exists.
+// The auto-dark structure requirement is therefore retired; a stylesheet that still
+// carries the media blocks is accepted and checked the same way.
 
 function resolveTokens(currentSkin, mode) {
   const context = { currentSkin, mode };
@@ -265,7 +266,7 @@ function formatRatio(ratio) {
 }
 
 for (const [skin, label] of skins) {
-  for (const mode of ['light', 'auto-dark', 'dark']) {
+  for (const mode of ['light', 'dark']) {
     const tokens = resolveTokens(skin, mode);
     for (const token of requiredTokens) {
       if (!parseHex(tokens[token] ?? '')) fail(`${label}/${mode} ${token}: missing direct hex token`);

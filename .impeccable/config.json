@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "styles.css"
+        ],
+        "createdAt": "2026-09-08T03:30:41.129Z",
+        "reason": "Design lead decision 2026-09-08: the 3px inline-start mark is the app's one 'this one' device on list rows (current set row, cited passage), consistent with DESIGN-SYSTEM.md §1 'one accent marks the single live thing'; there are no cards to side-tab"
+      }
+    ]
+  }
+}

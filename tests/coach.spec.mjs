@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
 // The coach moved off :8444 — Tailscale Funnel serves only 443, 8443 and 10000,
@@ -6,13 +6,35 @@ const appUrl = process.env.APP_URL || 'http://localhost:8877';
 // switched on. It rides the 443 funnel on /coach now, and the path is /answer:
 // the server runs the same retrieval and then writes the answer from what it
 // found, so the OpenAI key never reaches this page.
-const COACH = 'https://raed-hp.tail53bd35.ts.net/coach/answer';
+// Same-origin since the access key moved off the client into api/coach.js on
+// Vercel. The app no longer knows the upstream URL or the key at all, so the
+// thing to intercept is the proxy route it actually calls.
+const COACH = 'http://localhost:8877/api/coach?route=answer';
 
 const answer = (text, used) => ({ status: 'ok', answered: true, text, used, model: 'gpt-5.6-luna' });
 const refusal = (text) => ({ status: 'ok', answered: false, text, used: [] });
 
+// domcontentloaded, not networkidle: this app registers a service worker whose
+// own requests keep the network busy, so under parallel workers networkidle
+// sometimes never settles and a test that passes alone every time fails the full
+// run on a 20s goto timeout. The waits below are explicit anyway.
 async function openCoach(page) {
-  await page.goto(appUrl, { waitUntil: 'networkidle' });
+  // The sync host, blocked host-wide.
+  //
+  // This file named the hostname in its COACH constant and routed exactly one
+  // path — /coach/answer — so the guard in videos.test.mjs, which only looked
+  // for the hostname anywhere in the file, passed while every other request to
+  // that host went straight through to Raed's live server. It did: on
+  // 2026-09-05 his real cloud row was carrying `coach_last_answer` from a test
+  // fixture (model "gpt-5.6-luna") and a coach_recent list reading «السؤال
+  // الأول», «السؤال الثاني». Removed at rev 645; his 4 sessions and 24 PRs were
+  // untouched, and that was luck, not design.
+  //
+  // Registered BEFORE the /coach/answer route in each test? No — Playwright
+  // matches the most recently added route first, so the specific COACH route
+  // registered in the test body still wins over this catch-all.
+  await page.route('https://raed-hp.tail53bd35.ts.net:8443/**', (r) => r.abort());
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tile = [...document.querySelectorAll('.profile-tile')].find((el) => /Raed/.test(el.textContent));
@@ -36,7 +58,7 @@ async function openCoach(page) {
       } catch (_) { /* a value we cannot parse is not a session */ }
     }
   });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
@@ -509,15 +531,97 @@ test('a refused key reads as a refusal, not as a dead server or an empty answer'
   console.log('COACH_UNAUTHORIZED_DISTINGUISHED');
 });
 
-test('every request carries the access key', async ({ page }) => {
-  let sentKey = null;
+// This test used to assert the OPPOSITE — that every request carried the access
+// key — because the key lived in app.js and the coach was called directly. It
+// does not any more: api/coach.js on Vercel holds it and the browser never sees
+// it. The invariant inverted, so the test did too, and what it protects is the
+// more important half.
+test('the browser never sends the access key, because it no longer has one', async ({ page }) => {
+  let headers = null;
+  let target = null;
   await page.route(COACH, (route) => {
-    sentKey = route.request().headers()['x-coach-key'] || null;
+    headers = route.request().headers();
+    target = route.request().url();
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'no_match', message: 'no match', results: [] }) });
   });
   await openCoach(page);
   await ask(page);
-  // Without it the public endpoint answers 401 and the coach is simply dead.
-  expect(sentKey).toBeTruthy();
-  expect(sentKey.length).toBeGreaterThan(20);
+
+  expect(headers, 'the app must still be calling the coach').toBeTruthy();
+  expect(headers['x-coach-key'], 'a key in the browser is a key anyone can read').toBeFalsy();
+  // Same-origin, so the secret stays on the server that holds it.
+  expect(target).toContain('/api/coach');
+  expect(target, 'the client must not know the upstream host either').not.toContain('ts.net');
+});
+
+// The sequence he actually performs in the gym: ask, go log the set the answer
+// was about, come back. coachState was memory only, so coming back showed the
+// empty ask screen and the only way to see the answer again was to pay for it
+// again — /answer is the one metered call in this app.
+test('the last answer survives leaving the app, and says it is the last one', async ({ page }) => {
+  let calls = 0;
+  await page.route(COACH, (route) => {
+    calls += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        answer: answer('دقيقتان إلى ثلاث بين المجموعات المركّبة. (The Hypertrophy Handbook، صفحة ٤٤)', [0]),
+        results: [
+          { text: 'rest 2-3 minutes between sets of compound exercises', work: 'The Hypertrophy Handbook', page: 44, score: 0.91 },
+        ],
+      }),
+    });
+  });
+  await openCoach(page);
+  await ask(page, 'كم راحة بين المجموعات');
+  await expect(page.locator('[data-coach-answer]')).toContainText('دقيقتان');
+  expect(calls).toBe(1);
+
+  // Leave and come back the hard way — a full reload, which is what closing the
+  // PWA and reopening it does.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
+    if (tab) tab.click();
+  });
+  await page.waitForTimeout(400);
+
+  await expect(page.locator('[data-coach-answer]')).toContainText('دقيقتان');
+  // The passage the answer cites came back with it, or the citation is a
+  // dangling reference and the answer is unverifiable.
+  await expect(page.locator('[data-coach-passage]')).toContainText('The Hypertrophy Handbook');
+  // Restored, not re-fetched: no second metered call.
+  expect(calls).toBe(1);
+  // And it says so rather than passing an old answer off as a fresh one.
+  await expect(page.locator('[data-coach-restored]')).toBeVisible();
+
+  // «سؤال جديد» clears it back to the ask screen with its suggestions.
+  await page.locator('[data-coach-restored] button').click();
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-coach-answer]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-scope]')).toBeVisible();
+});
+
+// An error is about a moment that has passed. Restoring «الخادم غير متاح» onto a
+// screen he opens the next morning would be a statement about now that is not
+// true, so only a successful answer is ever kept.
+test('a failed answer is not the thing that comes back tomorrow', async ({ page }) => {
+  await page.route(COACH, (route) => route.fulfill({ status: 503, contentType: 'text/html', body: '<html>down</html>' }));
+  await openCoach(page);
+  await ask(page, 'متى أسوي ديلود');
+  await expect(page.locator('[data-coach-error]')).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const tab = [...document.querySelectorAll('.tab')].find((el) => /المدرب/.test(el.textContent));
+    if (tab) tab.click();
+  });
+  await page.waitForTimeout(400);
+  await expect(page.locator('[data-coach-error]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-restored]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-scope]')).toBeVisible();
 });

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+import { appSource as readAppSource } from '../scripts/app-source.mjs';
+
+const appSource = await readAppSource();
 const localeSource = await readFile(new URL('../locale.js', import.meta.url), 'utf8');
 const styleSource = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 

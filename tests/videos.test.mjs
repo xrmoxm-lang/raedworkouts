@@ -3,7 +3,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 
-const APP_SOURCE = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+import { appSource } from '../scripts/app-source.mjs';
+
+// app.js + core/**/*.js + ui/**/*.js. The client is no longer one file, and a
+// gate that still read app.js alone would be checking the boot file only.
+const APP_SOURCE = await appSource();
 
 async function legacyData() {
   const source = await readFile(new URL('../data.js', import.meta.url), 'utf8');
@@ -101,7 +105,7 @@ test('clips confirmed removed from YouTube are retired, not silently left in pla
 // rendered the literal English word "saved" on an Arabic-only screen.
 test('locale.js defines each key exactly once, and defines everything app.js asks for', async () => {
   const src = await readFile(new URL('../locale.js', import.meta.url), 'utf8');
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  const app = await appSource();
   const { LOCALE } = await import('../locale.js');
 
   const seen = new Map();
@@ -131,24 +135,20 @@ test('locale.js defines each key exactly once, and defines everything app.js ask
 // The suite fails if a THIRTEENTH appears, which is the moment the next
 // superset_group is created and the only moment it is cheap to notice.
 const KNOWN_DEAD_FUNCTIONS = new Set([
-  // Superseded by the inline handlers on the v15-style card that shipped in
-  // Phase 6. The card carries its own copies of this logic.
-  'toggleRunnerSet', 'addRunnerSet', 'resetCurrentRunnerSet', 'moveRunnerExercise',
-  'completeRunnerWarmup', 'runnerLongPress',
-  // The session preview was retired 2026-08-28 at Raed's request; the plan is
-  // already on home.
-  'previewedSession', 'discardActiveSessionFromHome',
-  // Help moved into the collapsed Settings groups in Phase 6 to free its tab for
-  // the coach; router() redirects 'help' to 'settings'. #page-help in index.html
-  // is the matching leftover.
-  'renderHelp',
-  // Helpers whose callers were replaced by domain/runner-session.js equivalents.
-  'isPRSet', 'isLoggableWeight', 'currentPlaylistPlatform',
+  // Emptied 2026-09-05. All twelve were removed at Raed's word — «إذا ما تستاهل
+  // خلاص نشيلها». Each was genuinely superseded, and moveRunnerExercise was
+  // checked by hand first because he had just asked for exercise reordering:
+  // it navigated the CURSOR between exercises and was replaced by Prev/Next, so
+  // it is not the feature he wants.
+  //
+  // 2026-09-08: prescribedEffortKey was deleted; the fence shrank with it.
 ]);
 
 test('no NEW function is left defined but never called', async () => {
-  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
-  const defined = [...app.matchAll(/^(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)].map((m) => m[1]);
+  const app = await appSource();
+  // `export function` counts too, or the split would have made this vacuous for
+  // every function a screen imports.
+  const defined = [...app.matchAll(/^(?:export )?(?:async )?function ([A-Za-z_]\w*)\s*\(/gm)].map((m) => m[1]);
   const dead = defined.filter((name) => {
     const uses = app.match(new RegExp(`\\b${name}\\b`, 'g')) || [];
     return uses.length <= 1; // its own definition and nothing else
@@ -231,12 +231,33 @@ test('every browser test blocks the live sync host before it opens the app', asy
   for (const file of files) {
     const src = await readFile(new URL(file, dir), 'utf8');
     if (!/page\.goto\(/.test(src)) continue;
-    // Either it aborts the host itself, or it calls a helper that does.
-    const guards = /raed-hp\.tail53bd35\.ts\.net/.test(src);
-    if (!guards) unguarded.push(file);
+    // Tightened 2026-09-05. The check used to be "does the hostname appear
+    // anywhere in this file", and coach.spec.mjs passed it by naming the host in
+    // a constant while routing ONE path on it. Everything else — /state, the
+    // pushes and the pulls — reached Raed's live server, and it showed: his real
+    // cloud row had a test fixture's coach answer and a coach_recent list of
+    // «السؤال الأول»/«السؤال الثاني» in it.
+    //
+    // A gate that passes on a mention rather than on the behaviour is worse than
+    // no gate: it certifies the bug. What actually protects his data is a route
+    // covering the WHOLE host, so require exactly that — the sync port, which is
+    // where state is written.
+    //
+    // Matching only a literal URL was too strict and flagged deploy-safe.spec.mjs,
+    // which is correctly guarded through a `const syncOrigin = ...` and a
+    // template literal. So resolve those bindings first, then require a
+    // host-wide route through the literal or through one of them.
+    const SYNC_ORIGIN = 'https://raed-hp.tail53bd35.ts.net:8443';
+    const aliases = [...src.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*['"`]https:\/\/raed-hp\.tail53bd35\.ts\.net:8443['"`]/g)]
+      .map((m) => m[1]);
+    const patterns = [
+      new RegExp(`page\\.route\\(\\s*['"\`]${SYNC_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/\\*\\*['"\`]`),
+      ...aliases.map((name) => new RegExp(`page\\.route\\(\\s*\`\\$\\{${name}\\}\\/\\*\\*\``)),
+    ];
+    if (!patterns.some((re) => re.test(src))) unguarded.push(file);
   }
   assert.deepEqual(unguarded, [],
-    'a test that opens the app without blocking the sync host writes to his real cloud data');
+    'a test that opens the app without a host-wide block on the sync port writes to his real cloud data');
 });
 
 
@@ -261,4 +282,84 @@ test('no native confirm/prompt/alert survives anywhere reachable', () => {
   });
   assert.deepEqual(offenders, [],
     'a PWA shell can suppress a native dialog, so the tap silently does nothing — use confirmAction()');
+});
+
+// Added 2026-09-05. A hidden clip was remembered by its POSITION in the list —
+// 'mohannad_0', 'mohannad_1' — and this file's own «clips confirmed removed from
+// YouTube are retired» test is the proof that the list is not stable.
+//
+// Measured on incline_chest_press before the fix: hide the second clip
+// (wMksQXD01K0), retire the first, and 'mohannad_1' names o0Ud3RU59hw instead.
+// A clip he deliberately hid comes back, a different one vanishes, silently.
+test('a hidden clip is remembered by which clip it is, not by where it sat', async () => {
+  const src = await appSource();
+
+  // The stored key is derived from the clip's own identity.
+  assert.match(src, /const videoIdentity = \(video\) =>[^\n]*video\.id[^\n]*'yt:'/,
+    'the hide key must come from the clip id, not its index');
+
+  // Every visibility call goes through it. A single surviving `v.key` here is
+  // the whole bug back again.
+  const visibilityCalls = [...src.matchAll(/(?:isVideoHidden|toggleVideoVisibility)\([^)]*\)/g)].map((m) => m[0]);
+  assert.ok(visibilityCalls.length >= 3, `expected the three visibility call sites, saw ${visibilityCalls.length}`);
+  for (const call of visibilityCalls) {
+    if (/^(?:isVideoHidden|toggleVideoVisibility)\((?:exerciseId|key)/.test(call)) continue; // the definitions
+    assert.ok(/videoIdentity\(/.test(call) || /\bkey\b\s*\)$/.test(call),
+      `visibility keyed by position again: ${call}`);
+  }
+
+  // And the choices already stored get converted once, rather than silently
+  // meaning something different after the next retirement.
+  assert.match(src, /function migrateVideoHiddenKeys\(\)/);
+  assert.match(src, /migrateVideoHiddenKeys\(\);/);
+});
+
+// Added 2026-09-06. The coach access key shipped inside app.js — every browser
+// that opened the site received a credential for a service that spends real
+// money per question. A $25/month server ceiling bounds the damage; not shipping
+// the secret is the actual fix. api/coach.js holds it now.
+//
+// Asserted at source level because this is the kind of thing a well-meaning
+// "restore the direct call, the proxy is slow" change puts straight back.
+test('no service credential is shipped to the browser', async () => {
+  const app = await appSource();
+
+  // The literal that used to be here, and any sibling of it. Long opaque
+  // base64-ish runs in an assignment are what a key looks like.
+  //
+  // SYNC_KEY is exempt, and the exemption is the finding rather than a
+  // convenience. It is a 48-character credential in public JavaScript that
+  // guards his training HISTORY — a bigger prize than the books the coach key
+  // guarded. Raed accepted that trade when sync was built and it is recorded in
+  // the project notes, so it is not being changed quietly at the end of a long
+  // session: rerouting sync means putting a proxy on the path that SAVES HIS
+  // SETS, and two silent data-loss paths were found on that path this week.
+  // It needs its own pass, with its own measurements. Listed for him.
+  const ACCEPTED = new Set(['SYNC_KEY']);
+  // Match on the VALUE's shape, not on the name containing "KEY". The first cut
+  // flagged SYNC_OVERRIDE_KEY, which is the NAME of a localStorage entry
+  // ('raedworkouts_sync_override') and not a secret at all. A credential here is
+  // a long unbroken alphanumeric run; an identifier has separators and no
+  // entropy.
+  const looksLikeSecret = (value) => /^[A-Za-z0-9]{24,}$/.test(value) && /\d/.test(value);
+  const assignments = [...app.matchAll(/const\s+(\w+)\s*=\s*'([^']*)'/g)];
+  for (const [, name, value] of assignments) {
+    if (ACCEPTED.has(name)) continue;
+    assert.ok(!looksLikeSecret(value),
+      `${name} looks like a credential (${value.length} chars) and app.js is public`);
+  }
+  // The exemption must stay honest: if SYNC_KEY ever leaves app.js, delete it
+  // from ACCEPTED rather than leaving a licence behind for the next one.
+  assert.match(app, /const SYNC_KEY = '/, 'SYNC_KEY moved — drop it from ACCEPTED');
+
+  // And the coach is reached through the proxy, not the funnel directly.
+  assert.match(app, /const COACH_URL = '\/api\/coach'/);
+  assert.doesNotMatch(app, /fetch\([^)]*ts\.net\/coach/);
+  assert.doesNotMatch(app, /'X-Coach-Key'/);
+
+  // The proxy exists, forwards only the routes the app uses, and takes its key
+  // from the environment rather than carrying one.
+  const proxy = await readFile(new URL('../api/coach.js', import.meta.url), 'utf8');
+  assert.match(proxy, /process\.env\.COACH_KEY/);
+  assert.doesNotMatch(proxy, /oQq1nm/);
 });

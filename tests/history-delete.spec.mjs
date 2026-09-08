@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // The app ships Raed's real sync credentials and points at his real server, so
 // ANY test that navigates without blocking that host pushes whatever it does to

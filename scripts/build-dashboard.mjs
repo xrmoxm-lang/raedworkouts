@@ -72,8 +72,8 @@ const phases = [
     checks: [
       { label: 'Final-set effort brake', done: await has('domain/progression.js', 'very_hard on the final working set blocked') },
       { label: '8–10 compound programme', done: await has('data.js', "reps: '8-10'") },
-      { label: 'Real ordered warm-up phase', done: await has('app.js', 'renderWarmupPhase') && await has('data.js', 'SESSION_WARMUPS') },
-      { label: 'Scoped ledger substitutions', done: await has('domain/substitutions.js', 'classifySubstitutionLedger') && await has('app.js', 'showSubstitutionScopeModal') },
+      { label: 'Real ordered warm-up phase', done: await has('ui/warmup.js', 'renderWarmupPhase') && await has('data.js', 'SESSION_WARMUPS') },
+      { label: 'Scoped ledger substitutions', done: await has('domain/substitutions.js', 'classifySubstitutionLedger') && await has('ui/exercise-card.js', 'showSubstitutionScopeModal') },
       { label: 'Phase 2 behaviour tests', done: await has('tests/phase2.test.mjs', 'D16/D17 effort') },
     ],
   },

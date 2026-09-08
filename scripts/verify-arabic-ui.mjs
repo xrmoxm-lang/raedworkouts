@@ -11,9 +11,13 @@ import {
   ALLOWED_WARMUP_DRILL_NAMES,
   LOCALE,
 } from '../locale.js';
+import { appSourceFiles } from './app-source.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const appSource = fs.readFileSync(path.join(repoRoot, 'app.js'), 'utf8');
+// app.js + core/**/*.js + ui/**/*.js. Scanning app.js alone would leave every
+// screen unchecked now that the client is split across modules.
+const sourceFiles = await appSourceFiles();
+const appSource = sourceFiles.map((file) => file.source).join('\n');
 const styleSource = fs.readFileSync(path.join(repoRoot, 'styles.css'), 'utf8');
 const dataSource = fs.readFileSync(path.join(repoRoot, 'data.js'), 'utf8');
 const failures = [];
@@ -63,7 +67,12 @@ const requiredTerms = {
   runner_skip_warmup: 'تخطّي الإحماء',
   runner_finish_warmup: 'أكمل الإحماء',
   warmup_spotify: 'سبوتيفاي — شغّل',
-  home_spotify_handoff: '🎧 سبوتيفاي — شغّل وانسَ الموضوع:',
+  // The live line is home_music_handoff now: this one hardcoded «سبوتيفاي» and
+  // printed it whatever platform he had chosen, which he reported twice. The old
+  // key is kept only so an older cached shell still resolves something, and its
+  // emoji went with the rest of them.
+  home_spotify_handoff: 'سبوتيفاي — شغّل وانسَ الموضوع:',
+  home_music_handoff: '{platform} — شغّل وانسَ الموضوع:',
   kg: 'kg',
 };
 for (const [key, expected] of Object.entries(requiredTerms)) {
@@ -150,14 +159,14 @@ for (const title of allowedPlaylists) {
 for (const name of allowedProperNouns) {
   // The locale map counts, exactly as it does for abbreviations on the next
   // line. The product name moved into LOCALE.app_name so a rename happens in
-  // one place; requiring a literal in app.js would force it to be duplicated.
+  // one place; requiring a literal in the client would force it to be duplicated.
   require(
     appSource.includes(name) || JSON.stringify(LOCALE).includes(name),
-    `proper-noun allow-list contains a name absent from app.js and the locale map: ${name}`,
+    `proper-noun allow-list contains a name absent from the client and the locale map: ${name}`,
   );
 }
 for (const abbreviation of allowedProperNounAbbreviations) {
-  require(appSource.includes(`'${abbreviation}'`) || appSource.includes(`\"${abbreviation}\"`) || JSON.stringify(LOCALE).includes(abbreviation), `proper-noun abbreviation allow-list contains a value absent from app.js or the locale map: ${abbreviation}`);
+  require(appSource.includes(`'${abbreviation}'`) || appSource.includes(`\"${abbreviation}\"`) || JSON.stringify(LOCALE).includes(abbreviation), `proper-noun abbreviation allow-list contains a value absent from the client or the locale map: ${abbreviation}`);
 }
 
 // Static UI copy goes through h(), which localizes all text children and the
@@ -186,15 +195,17 @@ const isAllowedRawRun = (value) => (
 );
 const copySink = /\bh\(|\btoast\(|\bsetUiText\(|\bprompt\(|\bconfirm\(|\bplaceholder\s*:|\btitle\s*:|aria-label/;
 const literal = /(['"])((?:\\.|(?!\1).)*)\1/g;
-for (const [offset, line] of appSource.split('\n').entries()) {
-  if (!copySink.test(line)) continue;
-  for (const match of line.matchAll(literal)) {
-    const value = match[2].replace(/\\(['"])/g, '$1');
-    const normalized = value.trim();
-    if (!normalized || !isHumanCopy(value) || isAllowedRawRun(normalized)) continue;
-    const key = resolveMapped(value);
-    if (key) translatedKeys.add(key);
-    else noteMissing(unmappedSource, value, `app.js:${offset + 1}`);
+for (const file of sourceFiles) {
+  for (const [offset, line] of file.source.split('\n').entries()) {
+    if (!copySink.test(line)) continue;
+    for (const match of line.matchAll(literal)) {
+      const value = match[2].replace(/\\(['"])/g, '$1');
+      const normalized = value.trim();
+      if (!normalized || !isHumanCopy(value) || isAllowedRawRun(normalized)) continue;
+      const key = resolveMapped(value);
+      if (key) translatedKeys.add(key);
+      else noteMissing(unmappedSource, value, `${file.name}:${offset + 1}`);
+    }
   }
 }
 

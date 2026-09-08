@@ -6,11 +6,12 @@
  *   - Images + YouTube thumbnails → cache-first (rarely change).
  *   - Sync API → network-only. API failures must reject; never return HTML.
  *
- * IMPORTANT: bump VERSION on every deploy that changes app.js / styles.css /
- * index.html. The new SW installs in the background, calls skipWaiting(), and
- * the page (see app.js) reloads itself once to apply — no manual force-refresh.
+ * IMPORTANT: bump VERSION on every deploy that changes app.js, core/*, ui/*,
+ * styles.css or index.html. The new SW installs in the background, calls
+ * skipWaiting(), and the page (see app.js) reloads itself once to apply — no
+ * manual force-refresh.
  */
-const VERSION = 'v90';
+const VERSION = 'v110';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is
@@ -23,10 +24,34 @@ const SHELL = [
   './styles.css',
   './data.js',
   './app.js',
+  './core/coach.js',
+  './core/dom.js',
+  './core/engine.js',
+  './core/gym.js',
+  './core/i18n.js',
+  './core/rest.js',
+  './core/session.js',
+  './core/shell.js',
+  './core/store.js',
+  './core/sync.js',
+  './core/theme.js',
+  './core/videos.js',
+  './ui/coach.js',
+  './ui/end.js',
+  './ui/exercise-card.js',
+  './ui/history.js',
+  './ui/home.js',
+  './ui/kit.js',
+  './ui/library.js',
+  './ui/settings.js',
+  './ui/warmup.js',
+  './ui/welcome.js',
+  './ui/figure.js',
   './locale.js',
   './domain/skin-suggestions.mjs',
   './domain/substitutions.js',
   './domain/programme.js',
+  './domain/deload.js',
   './domain/sync-identity.js',
   './domain/runner-session.js',
   './manifest.webmanifest',
@@ -43,6 +68,16 @@ const SHELL = [
   './img/body_quads.png',
   './img/body_glutes.png',
   './img/body_calves.png',
+  './fonts/IBMPlexSansArabic-400-arabic.woff2',
+  './fonts/IBMPlexSansArabic-500-arabic.woff2',
+  './fonts/IBMPlexSansArabic-600-arabic.woff2',
+  './fonts/IBMPlexSansArabic-700-arabic.woff2',
+  './fonts/IBMPlexSansArabic-400-latin.woff2',
+  './fonts/IBMPlexSansArabic-500-latin.woff2',
+  './fonts/IBMPlexSansArabic-600-latin.woff2',
+  './fonts/IBMPlexSansArabic-700-latin.woff2',
+  './fonts/IBMPlexMono-500-latin.woff2',
+  './fonts/IBMPlexMono-600-latin.woff2',
 ];
 
 self.addEventListener('install', (e) => {
@@ -88,6 +123,16 @@ function isCoreAsset(url) {
 function isSyncHost(url) {
   return url.hostname.endsWith('.ts.net') || url.hostname === 'raed-hp.tail53bd35.ts.net';
 }
+// The coach proxy. SAME-ORIGIN since the access key moved off the client, which
+// means it stopped being caught by the cross-origin network-only rule at the
+// bottom and became eligible for the shell logic instead. A cached answer would
+// be wrong; worse, an /api failure could have been served the app's HTML, and
+// `res.json()` on a page of markup throws — which the coach reports as «the
+// library is unreachable». That exact mistake is already documented one file
+// over, in askCoach's status-before-body note.
+function isApiRequest(url) {
+  return url.origin === location.origin && url.pathname.startsWith('/api/');
+}
 function isYoutubeThumb(url) {
   return url.hostname === 'img.youtube.com';
 }
@@ -112,8 +157,9 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // 1) Sync API → network-only. Offline callers should receive a real failure.
-  if (isSyncHost(url)) {
+  // 1) Sync API and the coach proxy → network-only. Offline callers should
+  //    receive a real failure, never a cached or substituted body.
+  if (isSyncHost(url) || isApiRequest(url)) {
     e.respondWith(fetch(req));
     return;
   }

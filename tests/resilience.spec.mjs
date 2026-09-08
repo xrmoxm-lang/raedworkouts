@@ -4,7 +4,7 @@
 // the whole suite was green. They are written against observable behaviour —
 // what the phone does, what he sees — not against the implementation, so they
 // keep working if the code underneath is rewritten.
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 const appUrl = process.env.APP_URL || 'http://localhost:8877';
 
@@ -142,6 +142,12 @@ test('every control is at least 44px to the thumb, even where it looks smaller',
       // Only judge controls fully inside the viewport; a half-scrolled button
       // point-tests as zero and would fail for the wrong reason.
       if (b.top < 0 || b.bottom > innerHeight || b.left < 0 || b.right > innerWidth) return;
+      // Same reason, other edge: a control that sits under the fixed tab bar
+      // while the page can still scroll is one scroll away, not a small target.
+      // A control under the bar with NOTHING left to scroll is still a defect.
+      const bar = document.querySelector('.tab-bar:not(.hidden)')?.getBoundingClientRect();
+      const canScroll = document.documentElement.scrollHeight - innerHeight - scrollY > 1;
+      if (bar && canScroll && b.bottom > bar.top) return;
       const w = reachable(el, 1, 0) + reachable(el, -1, 0);
       const h = reachable(el, 0, 1) + reachable(el, 0, -1);
       // 43 not 44: the probe steps outward from the centre pixel, so a 44px
@@ -203,7 +209,8 @@ test('a running rest survives a reload', async ({ page }) => {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1500);
   const visible = await page.evaluate(() => document.querySelector('#rest-timer')?.style.display);
-  expect(visible, 'the countdown must resume after a reload').toBe('flex');
+  // v17: the dock lays out as a grid; the invariant is that it is showing, not how.
+  expect(visible, 'the countdown must resume after a reload').not.toBe('none');
 });
 
 // ---------------------------------------------------------------------------
@@ -617,10 +624,17 @@ test('the card states the effort the programme asks for, and says it differently
   await boot(page);
   await intoSession(page);
 
-  const normal = await page.evaluate(() =>
-    document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
-  expect(normal, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل/);
-  expect(normal, 'and it still explains what earns a load increase').toContain('ليرتفع الوزن');
+  // Two lines since 2026-09-05: the rep goal, and the effort under it. They were
+  // one line, and three effort words after the goal sentence wrapped into a
+  // run-on. Read each from its own element.
+  const read = () => page.evaluate(() => ({
+    goal: document.querySelector('[data-reps-goal]')?.textContent?.trim() || '',
+    effort: document.querySelector('[data-prescribed-effort]')?.textContent?.trim() || '',
+  }));
+
+  const normal = await read();
+  expect(normal.effort, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل|شبه الفشل/);
+  expect(normal.goal, 'and it still explains what earns a load increase').toContain('ليرتفع الوزن');
 
   // 44 completed sessions = week 12 = the deload block.
   await page.evaluate(() => {
@@ -641,10 +655,9 @@ test('the card states the effort the programme asks for, and says it differently
   await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
   await page.waitForTimeout(1000);
 
-  const deload = await page.evaluate(() =>
-    document.querySelector('[data-reps-goal]')?.textContent?.trim() || '');
-  expect(deload, 'the deload must ask for less effort, in words').toContain('خفيف');
-  expect(deload, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
+  const deload = await read();
+  expect(deload.effort, 'the deload must ask for less effort, in words').toContain('خفيف');
+  expect(deload.goal, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
 });
 
 // ---------------------------------------------------------------------------
@@ -727,7 +740,8 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
       parsed.forced_next_session = 'upper_a';
       localStorage[key] = JSON.stringify(parsed);
     }, completed);
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'load' });
+    await page.locator('.welcome-screen, [data-home-overview]').first().waitFor({ timeout: 15000 });
     await page.waitForTimeout(900);
     await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
     await page.waitForTimeout(800);
@@ -739,7 +753,9 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
       const entry = parsed.active_session.exercises.chest_press_machine;
       return {
         sets: (entry?.sets || []).filter((s) => !s.is_warmup).length,
-        goal: document.querySelector('[data-reps-goal]')?.textContent?.trim() || '',
+        // The effort moved to its own line on 2026-09-05, so that it can state
+        // one word PER SET instead of the hardest of the three.
+        effort: document.querySelector('[data-prescribed-effort]')?.textContent?.trim() || '',
       };
     });
   };
@@ -748,17 +764,17 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
   // effort band the app has words for.
   const w1 = await atWeek(0);
   expect(w1.sets, 'week 1 caps first exposure at two working sets').toBe(2);
-  expect(w1.goal).toContain('خفيف');
+  expect(w1.effort).toContain('خفيف');
 
   // Week 2: full sets, one band up.
   const w2 = await atWeek(4);
   expect(w2.sets, 'week 2 restores the full prescription').toBe(3);
-  expect(w2.goal).toContain('متوسط');
+  expect(w2.effort).toContain('متوسط');
 
   // Week 3: the ramp is over.
   const w3 = await atWeek(8);
   expect(w3.sets).toBe(3);
-  expect(w3.goal, 'week 3 is Block A as printed').toContain('صعب');
+  expect(w3.effort, 'week 3 is Block A as printed').toContain('صعب');
 });
 
 // ---------------------------------------------------------------------------

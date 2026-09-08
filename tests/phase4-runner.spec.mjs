@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './_fixtures.mjs';
 
 // The app ships Raed's real sync credentials and points at his real server, so
 // ANY test that navigates without blocking that host pushes whatever it does to
@@ -96,7 +96,9 @@ test('v15 session on Home has one music card, English exercise names, videos, an
   await expect(home.locator('[data-home-v15-spotify] a')).toHaveCount(2);
   await expect(home.locator('[data-home-v15-spotify] a bdi')).toHaveCount(2);
   await expect(home.locator('[data-v15-session-progress]')).toHaveCount(1);
-  await expect(home.locator('.ex.expanded .ex-thumb.body-img')).toHaveCount(1);
+  // v17: the card carries the body illustration as a drawn figure rather than a
+  // PNG background. Same invariant — the stage shows the anatomy exactly once.
+  await expect(home.locator('.ex.expanded .figure')).toHaveCount(1);
   await expect(home.locator('.ex.expanded .video-row')).toHaveCount(1);
   await expect(home.locator('.ex.expanded h4 bdi')).toHaveText('Chest Press Machine');
   await expect(home).not.toContainText(/Focus mode|وضع التركيز|Cues on|التلميحات|Cue:|Session notes|Today: Last session not fully logged/i);

@@ -968,12 +968,15 @@ const programmeSessionsFrom = (rowsBySession) => UPPER_LOWER_SESSION_ORDER.map((
 const DELOAD_RPE_FLOOR = 6;
 const deloadOverlay = (row) => {
   const cut = (value) => (value == null ? null : Math.max(DELOAD_RPE_FLOOR, value - 2));
+  const sets = Math.max(1, (row.work_sets || 1) - 1);
+  // The set that goes takes its effort target with it: a 2-set row becomes one
+  // set with one target, not one set drawn under two.
   return {
     ...row,
-    work_sets: Math.max(1, (row.work_sets || 1) - 1),
+    work_sets: sets,
     rpe_set1: cut(row.rpe_set1),
-    rpe_set2: cut(row.rpe_set2),
-    rpe_set3: null,          // the third working set is the one that goes
+    rpe_set2: sets >= 2 ? cut(row.rpe_set2) : null,
+    rpe_set3: null,
     deload: true,
   };
 };
@@ -1029,8 +1032,20 @@ const PROGRAMME = {
 };
 
 // ---- v16 session warm-up phases -----------------------------
-// The general phase is deliberately short: treadmill first, then ten-rep
-// drills, then each exercise's own ramp rows. Upper never includes leg drills.
+// The general phase is deliberately short: treadmill first, then the drills,
+// then each exercise's own ramp rows. Upper never includes leg drills.
+//
+// Drill reps are the SOURCE's, not a flat 10. Every drill here was carrying 10
+// because the UI caption says «10 reps each», and three of them are not tens.
+// research/07 §1.1 resolves the one conflict explicitly — «where [PPL] and [ML]
+// disagree (12 vs 10 per side on the swings ...), the app uses [PPL]»:
+//   Arm swings            12      [PPL L:1388] «Arm Swings | 1 | 12»
+//   Arm circles           10/side [ML L11107]  — the only drill [PPL] lacks
+//   Cable external rot.   15/side [PPL L:1393] «15 each side»; [ML L11134] agrees
+//   Front/back leg swing  12/leg  [PPL L:1370] «12 each leg» (leg days only)
+//   Side/side leg swing   12/leg  [PPL L:1379] «12 each leg» (leg days only)
+// The «/side» and «/leg» qualifiers have nowhere to live in this shape yet, so
+// the number is the per-side number, as it already was for arm circles.
 // Warm-up drills carry a `videos` array like the catalogue exercises do. It was
 // missing entirely, so there was nowhere for a warm-up demo to live and no way
 // for Raed to add one. Empty until he fills warmup-picker.html — a blank beats a
@@ -1040,9 +1055,9 @@ const SESSION_WARMUPS = {
     cap_minutes: 15,
     treadmill_minutes: [5, 7, 10],
     drills: [
-      { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: ['https://youtube.com/shorts/lzR7tzI1JUI'] },
+      { id: 'arm_swings', movement: 'Arm swings', reps: 12, videos: ['https://youtube.com/shorts/lzR7tzI1JUI'] },
       { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: ['https://youtube.com/shorts/XTbPqeswd-Y'] },
-      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: ['https://youtu.be/n17FcALDB60'] },
+      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 15, videos: ['https://youtu.be/n17FcALDB60'] },
       { id: 'cable_internal_rotation', movement: 'Cable internal rotation', reps: 10, videos: ['https://youtube.com/shorts/kBhQ4B7rl0w'] },
     ],
   },
@@ -1050,15 +1065,15 @@ const SESSION_WARMUPS = {
     cap_minutes: 15,
     treadmill_minutes: [5, 7, 10],
     drills: [
-      { id: 'arm_swings', movement: 'Arm swings', reps: 10, videos: ['https://youtube.com/shorts/lzR7tzI1JUI'] },
+      { id: 'arm_swings', movement: 'Arm swings', reps: 12, videos: ['https://youtube.com/shorts/lzR7tzI1JUI'] },
       { id: 'arm_circles', movement: 'Arm circles', reps: 10, videos: ['https://youtube.com/shorts/XTbPqeswd-Y'] },
       // Raed asked for bodyweight squats in the leg warm-up, and not as an
       // option: "مو optional، حط squatting". Before the swings, so the knees and
       // hips move through full range before anything ballistic.
       { id: 'bodyweight_squat', movement: 'Bodyweight squat', reps: 10, videos: ['https://youtube.com/shorts/n_xLyzPEX7A'] },
-      { id: 'front_back_leg_swings', movement: 'Front/back leg swings', reps: 10, videos: ['https://youtube.com/shorts/ya7xU4Obypg'] },
-      { id: 'side_side_leg_swings', movement: 'Side/side leg swings', reps: 10, videos: ['https://youtube.com/shorts/fDZozdHbXww'] },
-      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 10, videos: ['https://youtu.be/n17FcALDB60'] },
+      { id: 'front_back_leg_swings', movement: 'Front/back leg swings', reps: 12, videos: ['https://youtube.com/shorts/ya7xU4Obypg'] },
+      { id: 'side_side_leg_swings', movement: 'Side/side leg swings', reps: 12, videos: ['https://youtube.com/shorts/fDZozdHbXww'] },
+      { id: 'cable_external_rotation', movement: 'Cable external rotation', reps: 15, videos: ['https://youtu.be/n17FcALDB60'] },
       { id: 'cable_internal_rotation', movement: 'Cable internal rotation', reps: 10, videos: ['https://youtube.com/shorts/kBhQ4B7rl0w'] },
     ],
   },
@@ -1069,7 +1084,12 @@ const ATHLETE = {
   name: 'Raed',
   goal: 'Body recomposition — muscle gain + fat loss',
   experience: 'Detrained lifter returning after a 2-year layoff',
-  schedule: 'Tuesday + Saturday AM',
+  // Carried over from v15 unchanged, where it matched a selectable two-day
+  // full-body programme. v16 runs Nippard's 4-day Upper/Lower and the rotation
+  // is driven by completed history, never by weekday — getTodayPlannedSession()
+  // has no weekday lookup at all. Nothing reads this field today; correcting it
+  // so a future reader is not handed a schedule the app has never followed.
+  schedule: '4 days/week Upper/Lower — no fixed weekdays',
   session_cap_min: 80,
   bodyweight_kg: 82,
   protein_target_g: '130–160',
