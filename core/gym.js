@@ -23,7 +23,15 @@ export function launchGymApp() {
   // at: `UIApplication.open` reports whether the app was there. No visibility
   // heuristic, no 1.2s wait, and nothing that could navigate the page away.
   if (nativeAvailable()) {
-    postNative('open_gym', { scheme, fallback });
+    // The shell can ask iOS what is actually installed, which the browser never
+    // could. `override` is his own instruction and stays whole — a Shortcut URL
+    // is the only way to open an app that declares no scheme, and IN2 Fitness
+    // declares none (19 candidates probed on his phone, none installed).
+    postNative('open_gym', {
+      override,
+      scheme: override ? '' : (safeLaunchUrl(settings.gym_launch_scheme) || 'scope.bit://'),
+      fallback: safeLaunchUrl(settings.gym_launch_fallback) || 'https://apps.apple.com/sa/app/in2-fitness/id1536137282',
+    });
     return;
   }
 

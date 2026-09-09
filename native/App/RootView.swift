@@ -16,11 +16,19 @@ struct RootView: View {
                 // in front again, so the Island stops counting a rest that is over.
                 bridge.endFinishedRests()
                 WidgetCenter.shared.reloadAllTimelines()
+                // Which scheme the gym app actually answers is a fact about his
+                // phone, not about our guess — ask iOS and keep the answer.
+                GymLauncher.refreshCache()
             }
-            .onOpenURL { _ in
+            .onOpenURL { url in
                 // `raedworkouts://…` from the Live Activity or the widget: the
                 // app coming forward is the whole point, and it already has.
                 bridge.endFinishedRests()
+                // …except `gymfail`, which is Shortcuts telling us the shortcut
+                // he was meant to have is not there.
+                if url.host == "gymfail" || url.path.contains("gymfail") {
+                    bridge.gymShortcutMissing()
+                }
             }
     }
 }
