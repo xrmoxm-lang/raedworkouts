@@ -11,7 +11,7 @@
  * skipWaiting(), and the page (see app.js) reloads itself once to apply — no
  * manual force-refresh.
  */
-const VERSION = 'v112';
+const VERSION = 'v113';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is

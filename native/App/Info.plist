@@ -18,8 +18,6 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -31,19 +29,43 @@
 			</array>
 		</dict>
 	</array>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>scope.bit</string>
+		<string>scopebit</string>
+		<string>scope</string>
+		<string>bit</string>
+		<string>bitfitness</string>
+		<string>bitfit</string>
+		<string>b-it</string>
+		<string>in2</string>
+		<string>in2fitness</string>
+		<string>in2fit</string>
+		<string>in2app</string>
+		<string>in2gym</string>
+		<string>in2-fitness</string>
+		<string>bitscope</string>
+		<string>scopefitness</string>
+		<string>scopeapp</string>
+		<string>bitapp</string>
+		<string>in2sa</string>
+		<string>in2ksa</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
 		<true/>
 	</dict>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<key>NSSupportsLiveActivities</key>
 	<true/>
-	<key>UIRequiresFullScreen</key>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>UIRequiresFullScreen</key>
+	<true/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

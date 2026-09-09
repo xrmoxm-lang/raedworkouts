@@ -64,6 +64,30 @@ targets:
           - CFBundleURLName: com.raedmohammed.raedworkouts
             CFBundleURLSchemes:
               - raedworkouts
+        # `canOpenURL` answers false for any scheme not listed here, so this list
+        # and GymLauncher.candidates must stay in step. iOS allows 50; these are
+        # the plausible spellings for IN2 Fitness (bundle `scope.bit`, brand
+        # b-it-fitness, Scope Software Solutions).
+        LSApplicationQueriesSchemes:
+          - scope.bit
+          - scopebit
+          - scope
+          - bit
+          - bitfitness
+          - bitfit
+          - b-it
+          - in2
+          - in2fitness
+          - in2fit
+          - in2app
+          - in2gym
+          - in2-fitness
+          - bitscope
+          - scopefitness
+          - scopeapp
+          - bitapp
+          - in2sa
+          - in2ksa
         # The bundled page talks to raed-hp.tail53bd35.ts.net (sync),
         # raedworkouts-v16.vercel.app (the coach proxy), img.youtube.com,
         # i.ytimg.com and open.spotify.com — all https. Web content only; the
