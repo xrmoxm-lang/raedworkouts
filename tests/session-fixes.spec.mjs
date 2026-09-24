@@ -627,7 +627,9 @@ test('a finished session shows the time it took, not the exercise card again', a
   await expect(page.locator('#page-home .ex')).toHaveCount(0);
   await expect(page.locator('[data-finish-session]')).toHaveCount(1);
   // The elapsed time is the one number he cannot reconstruct from the log later.
-  await expect(page.locator('.session-done-time')).toContainText(/دقيقة|دقائق|دقيقتان/);
+  // Raed 2026-09-22: «not 80 min, 1:20». It is a clock reading now, so the old
+  // «45 دقيقة» assertion would pass only on the format he asked us to drop.
+  await expect(page.locator('.session-done-time')).toHaveText(/^\d{1,2}:\d{2}(?::\d{2})?$/);
 
   // He can still go back in without undoing the completion.
   await page.locator('#page-home .btn.ghost.full').first().click();

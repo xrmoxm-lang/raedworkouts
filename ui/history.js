@@ -9,6 +9,7 @@ import { render, router } from '../core/shell.js';
 import { saveLocal, settings, state } from '../core/store.js';
 import { restoreRevision, syncFetch, syncUserQuery } from '../core/sync.js';
 import { getAllExercises } from '../core/videos.js';
+import { cardioSummaryLine } from '../ui/cardio.js';
 
 const dateLocale = () => (activeLanguage() === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US');
 // Numbers the user reads wear .num, including the ones Intl produces. Splitting
@@ -147,6 +148,10 @@ function historyCard(sess, total, peak, byId) {
       ' · ',
       h('span', { class: 'num' }, fmtKgTotal(total.kg)), ' ', t('kg'),
     ),
+    // The cool-down, muted, on the row itself — one line, the same words the
+    // block used. Without it the log says he lifted and is silent about the
+    // twenty minutes he then spent on the treadmill to beat a number.
+    cardioSummaryLine(sess.cardio, { muted: true }),
     h('div', { class: 'summary' },
       // Was `ex.name.split(' ')[0]`, which fed a bare English word to the locale
       // resolver: «Chest Press Machine» became the muscle «الصدر» and «Lat

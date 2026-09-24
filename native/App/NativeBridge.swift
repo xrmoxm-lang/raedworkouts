@@ -27,7 +27,6 @@ final class NativeBridge: NSObject, WKScriptMessageHandler {
     /// only exist before we have ended it.
     private var sweptLegacyActivities = false
     /// Reset by a relaunch on purpose — he may have added the shortcut since.
-    private static var gymShortcutMissingThisLaunch = false
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let payload = message.body as? [String: Any],
@@ -202,33 +201,15 @@ final class NativeBridge: NSObject, WKScriptMessageHandler {
             return
         }
 
-        // Nothing is installed under any name we know. Shortcuts can open any
-        // app by name, and x-callback tells us when the shortcut is missing —
-        // so a missing shortcut lands on the App Store rather than stranding him
-        // in the Shortcuts app. Tried at most ONCE per launch: if it is not
-        // there, bouncing him through Shortcuts on every press is worse than
-        // the store, and a fresh launch retries in case he has added it since.
-        if !Self.gymShortcutMissingThisLaunch, let shortcut = URL(string: RW.gymShortcutURL) {
-            UIApplication.shared.open(shortcut, options: [:]) { opened in
-                if opened {
-                    StatusLog.gym("ran shortcut \(RW.gymShortcutName)")
-                } else {
-                    StatusLog.gym("no_scheme_no_shortcut")
-                    Self.openFallback(fallback)
-                }
-            }
-            return
-        }
+        // Nothing is installed under any name we know, so the store page is the
+        // honest destination: for an app already on the phone it shows «Open».
+        // Raed 2026-09-23: «The IN2 shortcut is not working, and I'm not using
+        // it. Just return to the previous one.» The Shortcuts x-callback hop that
+        // sat here (round 3) is gone with that ruling — a missing shortcut bounced
+        // him through the Shortcuts app before the store, which was worse than
+        // the store alone.
         StatusLog.gym("no_scheme_installed")
         Self.openFallback(fallback)
-    }
-
-    /// Shortcuts answered our x-error: the «IN2» shortcut does not exist on this
-    /// phone. The store page is then the only honest destination.
-    func gymShortcutMissing() {
-        Self.gymShortcutMissingThisLaunch = true
-        StatusLog.gym("shortcut_missing:\(RW.gymShortcutName)")
-        Self.openFallback(URL(string: "https://apps.apple.com/sa/app/in2-fitness/id1536137282"))
     }
 
     private static func openFallback(_ fallback: URL?) {

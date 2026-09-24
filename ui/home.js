@@ -15,8 +15,8 @@ import {
   suggestNextWeight,
 } from '../core/engine.js';
 import {
-  arabicMinutes,
   displaySuggestedWeight,
+  fmtElapsed,
   fmtKgTotal,
   fmtTime,
   localISODate,
@@ -34,12 +34,14 @@ import {
   setSessionDoneDismissed,
   showSessionPreview,
 } from '../core/session.js';
+import { cancelRest, restClockText } from '../core/rest.js';
 import { render, router } from '../core/shell.js';
 import { profileProteinRange, saveLocal, settings, state } from '../core/store.js';
 import { PLATFORM_INFO, getAllExercises, getCurrentPlaylists } from '../core/videos.js';
 import { isCountableWorkingSet, isRunnerExerciseResolved } from '../domain/runner-session.js';
 import { renderExerciseCard } from '../ui/exercise-card.js';
 import { figure } from '../ui/figure.js';
+import { renderCardioBlock } from '../ui/cardio.js';
 import { renderWarmupPhase } from '../ui/warmup.js';
 
 // A stat's number, sized so it can never leave its column. The digit count is
@@ -179,11 +181,13 @@ export function renderHome() {
   const context = h('div', { class: 'home-context', 'data-home-context': 'true' });
   root.appendChild(context);
 
-  if (state.active_session) {
-    context.appendChild(h('button', { class: 'btn primary full', 'data-home-continue': 'true', onClick: () => router('home') },
-      t('continue_session')
-    ));
-  }
+  // There used to be a «واصل التمرين» button here, rendered only when a session
+  // was running — which is precisely when `body.session-active .home-context`
+  // sets display:none on the box it lived in. It could not be seen by anyone,
+  // ever, and it routed to the screen it was already on. Removed rather than
+  // relocated: while a session runs, home IS the runner, so there is nowhere
+  // for a continue button to lead. The copy key is kept for the day one is
+  // wanted somewhere reachable.
 
   context.appendChild(buildWeekStrip());
 
@@ -270,6 +274,10 @@ export function renderHome() {
       // ما تطلع الصفحة اللي فوق الكبيرة".
       if (!sessionDoneDismissed && exEntries.every(([, entry]) => isRunnerExerciseResolved(entry))) {
         root.appendChild(buildSessionDonePanel(a, exEntries));
+        // The cool-down sits between the summary and the save, because that is
+        // where it happens: the lifting is done, the treadmill is next, and the
+        // session is not yet closed.
+        root.appendChild(renderCardioBlock(a));
         root.appendChild(h('div', { class: 'session-close' },
           h('button', { class: 'btn primary full', 'data-finish-session': 'true', onClick: endSession }, t('finish_and_save_session')),
           h('button', { class: 'btn ghost full', onClick: () => { setFocusExerciseIdx(0); setSessionDoneDismissed(true); render(); } }, t('review_exercises')),
@@ -335,6 +343,29 @@ export function renderHome() {
         setFocusExerciseIdx(nextIdx);
         render();
       });
+
+      // The rest countdown, IN FLOW, one hairline row between the set grid's
+      // quiet lines and the nav (ROUND5-FABLE-BRIEF §A.1). It is always in the
+      // DOM while he is lifting and simply `hidden` when no rest is running, so
+      // starting a rest never has to re-render the card he is typing into —
+      // core/rest.js unhides it and paints it from `restTimer`.
+      //
+      // A line in the ledger, not a billboard: 20px mono, not the dock's 30;
+      // ink on paper with the accent only on the draining bar, which is the one
+      // live thing.
+      root.appendChild(h('div', {
+        class: 'rest-row', 'data-rest-inline': 'true', 'data-rest-surface': 'inline', hidden: true,
+      },
+        h('span', { class: 'eyebrow' }, t('rest_label')),
+        // aria-live off for the same reason as the dock: it reprints every 200ms.
+        h('span', { class: 'rt-time num', 'aria-live': 'off' }, restClockText()),
+        h('span', { class: 'rt-bar', 'aria-hidden': 'true' }),
+        h('button', {
+          class: 'rt-cancel', 'data-rest-cancel': 'true',
+          'aria-label': t('cancel_rest'),
+          onClick: cancelRest,
+        }, '✕'),
+      ));
 
       // Prev / Next nav. Classed rather than inline-styled so the touch-target
       // floor in styles.css can reach it — as an anonymous <div> these two were
@@ -414,8 +445,7 @@ export function renderHome() {
 // means restoring the function and its one call in the rest-day branch.
 
 export function buildSessionDonePanel(active, entries) {
-  const started = new Date(active.started_at);
-  const minutes = Math.max(1, Math.round((Date.now() - started.getTime()) / 60000));
+  const elapsed = fmtElapsed(active.started_at);
   let sets = 0;
   let volume = 0;
   let skipped = 0;
@@ -429,9 +459,12 @@ export function buildSessionDonePanel(active, entries) {
   }
   return h('section', { class: 'session-done', 'data-session-done': 'true' },
     h('h2', {}, t('session_done_title')),
-    // No .num here: the line is «45 دقيقة», and forcing direction:ltr on a
-    // mixed run moves the numeral to the wrong side of its own word.
-    h('p', { class: 'session-done-time' }, arabicMinutes(minutes)),
+    // .num IS right here, unlike the «45 دقيقة» line this replaced: a clock
+    // reading is pure Latin digits and colons, so forcing LTR keeps 1:20:45 in
+    // the order it was written instead of letting RTL reverse the groups.
+    // Raed 2026-09-22 asked for the hour format over a raw minute count.
+    h('div', { class: 'eyebrow' }, t('session_duration')),
+    h('p', { class: 'session-done-time num' }, elapsed),
     h('div', { class: 'session-done-stats tiny muted' },
       tf('session_done_sets', { n: sets }),
       ' · ',

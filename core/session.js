@@ -1,6 +1,7 @@
 /* The live workout: start, edit, skip, swap, finish. Owns focusExerciseIdx. */
 
 import { confirmAction, toast } from '../core/dom.js';
+import { defaultCardio } from '../domain/cardio.js';
 import {
   derivedBlock,
   exercisePrefs,
@@ -20,6 +21,7 @@ import { resolveBlockSkinBoundary, showSkinSuggestion } from '../core/theme.js';
 import { getAllExercises } from '../core/videos.js';
 import {
   applyWorkingSetAttempt,
+  hasValidWorkingValues,
   isCountableWorkingSet,
   isRunnerExerciseResolved,
   isRunnerSetResolved,
@@ -148,6 +150,10 @@ function startSession(session) {
     started_at: new Date().toISOString(),
     phase: 'warmup',
     warmup: createSessionWarmup(session),
+    // The cool-down is part of the session record from the start, exactly like
+    // the warm-up, so a session archived without one stays distinguishable from
+    // an older session that never had the field at all.
+    cardio: defaultCardio(settings.speed_unit),
     exercises,
   };
   // The restored v15 view is cursor-based: every new session starts at its
@@ -262,9 +268,18 @@ export function endSession() {
   const a = state.active_session;
   // Compute completed flag
   const entries = Object.values(a.exercises);
-  const anyResolved = entries.some(isRunnerExerciseResolved);
+  // «Was anything logged?» is a question about WORK, not about finished exercises.
+  // It used to ask `isRunnerExerciseResolved`, which is true only when EVERY
+  // working set of a movement is resolved — so a session where he did 2 of 3
+  // sets on each movement (the ordinary shape of a workout cut short) counted as
+  // empty: the only affirmative button was «تجاهل الجلسة» and it wiped the lot
+  // with no undo. Measured on 2026-09-23: 6 countable sets and 4800 kg held in
+  // `active_session`, and the dialog said «لم تُسجَّل أي مجموعة».
+  // The partial-session branch twenty lines below already does the right thing;
+  // it was simply unreachable.
+  const anyWork = entries.some((item) => (item.sets || []).some(isCountableWorkingSet));
   const unresolved = entries.filter((item) => !isRunnerExerciseResolved(item)).length;
-  if (!anyResolved) {
+  if (!anyWork) {
     // Same reasoning as the delete guard: never leave a discard to a dialog the
     // shell can suppress. Async, so endSession returns and the caller re-enters.
     confirmAction({
@@ -397,9 +412,34 @@ function runnerEntries(activeSession = state.active_session) {
 
 // Every weight/reps edit goes through here, because editing is recovery: a row
 // he flagged invalid becomes countable again the moment he corrects it.
+/**
+ * Returns true when the edit DEMOTED a completed working set — i.e. the row on
+ * screen must stop showing a ✓. The caller repaints that one row rather than
+ * re-rendering, because this fires on every character he types and a render
+ * would take the caret with it.
+ */
 export function applySetEdit(set, property, value) {
-  if (!set) return;
+  if (!set) return false;
   set[property] = value;
+  // A ticked set whose numbers are erased must stop LOOKING ticked. Clearing
+  // the weight box (the field select-alls on focus, so select-then-delete is
+  // exactly the gesture the app invites when he goes back to correct a load)
+  // wrote '' over a `completed: true` set. `hasValidWorkingValues` then rejects
+  // it, so `isCountableWorkingSet` is false and the set silently leaves stats,
+  // volume, history, PRs and «آخر مرة» — while the row kept `.done` and the ✓.
+  // Measured 2026-09-23: {weight:'', reps:12, completed:true} → {sets:0, vol:0}.
+  // The row returning to `.current` is the honest signal.
+  let demoted = false;
+  if ((property === 'weight' || property === 'reps')
+      && !set.is_warmup && set.completed === true && !set.skipped
+      && !hasValidWorkingValues(set)) {
+    set.completed = false;
+    demoted = true;
+  }
+  // A corrected number is a new claim, so the fat-finger guard re-arms. Without
+  // this, «800» prompted once, he fixed it to 80, and a later slip back to 800
+  // on the same row would have ticked straight through the check.
+  if (property === 'weight' && set.weight_checked) set.weight_checked = false;
   if ((property === 'weight' || property === 'reps') && (set.invalid || set.invalid_prompted)) {
     // A corrected row is eligible for a normal log again. The retained invalid
     // record remains in already-ended sessions; an active session stays
@@ -411,6 +451,7 @@ export function applySetEdit(set, property, value) {
   // box and saveLocal() serialises the entire state — history included —
   // twice, once for state and once for settings that did not change.
   scheduleSetEditPersist();
+  return demoted;
 }
 let setEditTimer = null;
 export function scheduleSetEditPersist() {

@@ -24,11 +24,6 @@ struct RootView: View {
                 // `raedworkouts://…` from the Live Activity or the widget: the
                 // app coming forward is the whole point, and it already has.
                 bridge.endFinishedRests()
-                // …except `gymfail`, which is Shortcuts telling us the shortcut
-                // he was meant to have is not there.
-                if url.host == "gymfail" || url.path.contains("gymfail") {
-                    bridge.gymShortcutMissing()
-                }
             }
     }
 }

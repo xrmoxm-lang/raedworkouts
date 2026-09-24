@@ -172,3 +172,38 @@ test('the question does not come back once it is answered', async ({ page }) => 
   await finishSession(page);
   await expect(page.locator('[data-wellbeing-check]')).toHaveCount(0);
 });
+
+// Round 5, finding #1. The test above only asserts the booked week DIFFERS from
+// the reported one, so it passed while the deload was booked a whole training
+// week late. `endSession()` pushes the finished session into history BEFORE the
+// end screen renders, so on the session that completes a week — which is also
+// the only moment the check comes due — `derivedWeek()` had already ticked, the
+// row was written against a week he had not trained, and `nextWeekId()` booked
+// the week after THAT. Measured 2026-09-23: check «1:2», deload «1:3», which
+// begins at session 9 — four more full-load sessions away. This pins both ids.
+test('finishing the fourth session of a week books the deload for the NEXT week, not the one after', async ({ page }) => {
+  await boot(page);
+  const iso = new Date().toLocaleDateString('en-CA');
+  // Three of week 1's four sessions already logged, all in this calendar week
+  // so §7.1's «he has actually trained» precondition holds.
+  const seeded = [0, 1, 2].map((i) => ({
+    date: iso, session_id: ['upper_a', 'lower_a', 'upper_b'][i],
+    started_at: `${iso}T09:00:00Z`, ended_at: `${iso}T10:00:00Z`,
+    uid: `seed-week1-${i}`, prs: [], stats: {},
+    exercises: { chest_press_machine: { sets: [{ is_warmup: false, weight: 40, reps: 10, completed: true }] } },
+  }));
+  await patchState(page, {
+    history: seeded, active_session: null, wellbeing_checks: [], triggered_deload: null,
+  });
+
+  await finishSession(page);
+  await page.locator('[data-wellbeing-sign="poor_sleep"]').click();
+  await page.locator('[data-wellbeing-sign="no_motivation"]').click();
+  await page.locator('[data-wellbeing-save]').click();
+  await page.waitForTimeout(500);
+
+  const state = await readState(page);
+  expect(state.history, 'the fourth session is logged').toHaveLength(4);
+  expect(state.wellbeing_checks[0].week_id, 'he reported on the week he just trained').toBe('1:1');
+  expect(state.triggered_deload.week_id, 'the deload belongs to the week that follows it').toBe('1:2');
+});

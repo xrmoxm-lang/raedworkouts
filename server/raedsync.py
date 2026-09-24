@@ -233,6 +233,25 @@ def completed_sets(session: dict | None) -> int:
     return total
 
 
+# Everything a state must be empty of before it can be called "this profile has
+# never trained". A client that deleted its last session still carries its PRs,
+# its bodyweight log and its per-exercise equipment memory; a client that lost
+# its local blob and booted on `defaultState()` carries none of them.
+STATE_EVIDENCE_KEYS = ("history", "prs", "bodyweight_log", "custom_exercises", "exercise_prefs", "substitutions")
+
+
+def has_training_evidence(state_obj) -> bool:
+    if not isinstance(state_obj, dict):
+        return False
+    if isinstance(state_obj.get("active_session"), dict) and state_obj["active_session"]:
+        return True
+    for key in STATE_EVIDENCE_KEYS:
+        value = state_obj.get(key)
+        if isinstance(value, (list, dict)) and len(value) > 0:
+            return True
+    return False
+
+
 def strip_obj(value, deny: set[str] | None = None):
     if isinstance(value, dict):
         out = {}
@@ -591,6 +610,28 @@ def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, i
         out["active_session"] = copy.deepcopy(winner)
         if active_has_work(loser):
             archive_active(out["history"], loser, incoming_updated_at if loser is incoming_active else head_updated_at, "recovered_draft")
+    elif head_active and incoming_active:
+        # SAME session on both sides. This branch used to be a bare
+        # `elif incoming_active:` — last writer wins, whole blob — with none of
+        # the completed_sets care merge_history (above) applies to a finished
+        # session. Measured 2026-09-23: the phone pushed the live session with 5
+        # logged sets at 17:40, a second client pushed its older copy of the SAME
+        # session (2 sets, 17:20) a moment later, and the head came back with 2.
+        # The 3 sets were not archived as `recovered_draft` the way the
+        # different-key branch above archives its loser — they were deleted, and
+        # the merged copy was handed back for the phone to apply mid-workout.
+        #
+        # Same rule as merge_session_into_history: the copy with more completed
+        # sets wins, and only a tie is settled by the clock.
+        head_count = completed_sets(head_active)
+        incoming_count = completed_sets(incoming_active)
+        if incoming_count > head_count:
+            winner = incoming_active
+        elif head_count > incoming_count:
+            winner = head_active
+        else:
+            winner = incoming_active if parse_iso(incoming_updated_at) >= parse_iso(head_updated_at) else head_active
+        out["active_session"] = copy.deepcopy(winner)
     elif incoming_active:
         out["active_session"] = copy.deepcopy(incoming_active)
     elif head_active and _clears_head_active(incoming_state, head_active):
@@ -930,16 +971,41 @@ class Handler(BaseHTTPRequestHandler):
                 # last session looks like, and it must keep working. A body that
                 # omits the key entirely is not a client with no history; it is a
                 # client that has not loaded one. Those get merged, never replace.
+                head_view = sanitize_state(head["state_json"]) if head else None
                 looks_partial = (
                     isinstance(incoming_state, dict)
                     and "history" not in incoming_state
-                    and bool((sanitize_state(head["state_json"]).get("history") if head else None))
+                    and bool(head_view.get("history") if head_view else None)
+                )
+                # The partial guard above cannot fire on a client that lost its
+                # local blob, because that client DOES send `history` — empty.
+                # `defaultState()` is byte-for-byte what "he deleted his last
+                # session" looks like. Proved 2026-09-23: a truncated state key
+                # made the app boot on defaults, and the boot push (base_rev
+                # matched, so this fast path wrote it verbatim) took 12 sessions
+                # and every PR out of the head as well.
+                #
+                # So the fast path now also refuses a body with no training
+                # evidence AT ALL against a head that has some. A real delete
+                # keeps the PRs, the bodyweight log and the equipment memory, so
+                # it still takes the fast path; a reset-looking body is merged,
+                # which hands the client its own history straight back.
+                # `mode=replace` — restore, import, undo — is untouched: that is
+                # him choosing.
+                looks_reset = (
+                    not replace_mode
+                    and head_view is not None
+                    and not has_training_evidence(incoming_state)
+                    and has_training_evidence(head_view)
                 )
                 fast_path = replace_mode or head is None or (
-                    base_rev is not None and int(base_rev) == int(current_rev or 0) and not looks_partial
+                    base_rev is not None and int(base_rev) == int(current_rev or 0)
+                    and not looks_partial and not looks_reset
                 )
                 if looks_partial and not replace_mode:
                     print(f"partial_state_guard user={canonical} bytes={len(json_dumps(incoming_state))} — merging instead of replacing", flush=True)
+                if looks_reset:
+                    print(f"empty_state_guard user={canonical} bytes={len(json_dumps(incoming_state))} head_sessions={len(head_view.get('history') or [])} — merging instead of replacing", flush=True)
                 merged = False
                 if head and not fast_path:
                     head_state = sanitize_state(head["state_json"])

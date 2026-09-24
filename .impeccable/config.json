@@ -10,7 +10,7 @@
           "styles.css"
         ],
         "createdAt": "2026-09-08T03:30:41.129Z",
-        "reason": "Design lead decision 2026-09-08: the 3px inline-start mark is the app's one 'this one' device on list rows (current set row, cited passage), consistent with DESIGN-SYSTEM.md §1 'one accent marks the single live thing'; there are no cards to side-tab"
+        "reason": "Fable (not user-confirmed): the 3px border-inline-start rail is the documented single-accent device in DESIGN-SYSTEM.md, applied to ledger rows and cited passages, which are NOT cards - .set-grid and .coach-passage carry no fill, radius or shadow. L431 is the transparent base that reserves the gutter so the live row does not shift; L566 marks the passages the coach answer actually quoted, so the rail encodes real state. RTL-correct via logical properties."
       }
     ]
   }
