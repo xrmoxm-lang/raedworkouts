@@ -96,6 +96,36 @@ export function editableWeightValue(value) {
 }
 // Arabic counts: 1 singular, 2 dual, 3-10 plural, 11+ back to singular. A short
 // session lands squarely in the 3-10 band, where «دقيقة» is wrong.
+/*
+ * A worked session is a stretch of clock time, so it is printed as clock time.
+ * Raed 2026-09-22: «i want once workout is done in an hour format like not
+ * 80 min, 1:20, or better seconds.» Eighty minutes is a number he has to convert
+ * before it means anything; 1:20:45 is the same fact already converted, and it
+ * is the one numeric format that reads identically in Arabic and English.
+ *
+ * Under an hour it stays m:ss rather than padding a leading 0: — a 47-minute
+ * session is «47:20», not «0:47:20», which is how every stopwatch he has ever
+ * used behaves.
+ */
+export function fmtClock(ms) {
+  const total = Math.max(0, Math.round(Number(ms) || 0) / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = Math.floor(total % 60);
+  const pad = (n) => String(n).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}
+
+// Elapsed time between two instants, already formatted. Returns '' when either
+// end is missing, so a session archived before this shipped prints nothing
+// rather than «NaN:aN».
+export function fmtElapsed(from, to) {
+  const a = new Date(from).getTime();
+  const b = new Date(to == null ? Date.now() : to).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return '';
+  return fmtClock(b - a);
+}
+
 export function arabicMinutes(n) {
   if (activeLanguage() !== 'ar') return tf('session_done_minutes', { n });
   if (n === 1) return t('minutes_one_ar');

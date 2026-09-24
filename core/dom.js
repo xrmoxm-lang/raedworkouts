@@ -61,18 +61,106 @@ export const localizedTextNode = (value) => {
   const fragment = document.createDocumentFragment();
   let cursor = 0;
   for (const match of localized.matchAll(LTR_RUN)) {
-    const index = match.index ?? 0;
+    let index = match.index ?? 0;
+    let text = match[0];
+    // The run's character class allows ')', so «النطاق (4.5 MET)» matched
+    // «4.5 MET)» and left the opening '(' behind in the Arabic text node. An
+    // unpaired '(' in an RTL context is MIRRORED by the bidi algorithm and is
+    // drawn as ')', which is the doubled parenthesis Raed reported in coach
+    // answers. Balance it: take the opener into the run when it is right there,
+    // and otherwise hand the closer back to the Arabic side.
+    if (text.endsWith(')') && !text.includes('(')) {
+      if (index - 1 >= cursor && localized[index - 1] === '(') { index -= 1; text = '(' + text; }
+      else { text = text.slice(0, -1); }
+    }
     if (index > cursor) fragment.appendChild(document.createTextNode(localized.slice(cursor, index)));
     const bdi = document.createElement('bdi');
     bdi.className = 'ltr-run';
-    bdi.textContent = match[0];
+    bdi.textContent = text;
     fragment.appendChild(bdi);
-    cursor = index + match[0].length;
+    cursor = index + text.length;
   }
   if (cursor < localized.length) fragment.appendChild(document.createTextNode(localized.slice(cursor)));
   return fragment;
 };
 export const setUiText = (el, value) => { el.replaceChildren(localizedTextNode(value)); };
+
+// ===== Toast clearance =====
+//
+// The toast is the only surface in the app that floats over a page it knows
+// nothing about, and at 390×844 the bottom of a page is exactly where his
+// controls live. Measured on his phone size 2026-09-23:
+//   · End screen — the 9s undo toast occupied y 713→768 while both `.end-cta`
+//     buttons sat at y 722.2→770.2. `elementFromPoint` at the centre of «تم»
+//     returned the toast's «تراجع», so the tap that means "done" called
+//     reopenSession() and pulled the session back out of history. Both CTAs
+//     measured hitH 0 for the full nine seconds.
+//   · Runner — «أنهِ الجلسة» at y 714.5→758.5 hit-tested to #toast, and the
+//     toasts that fire there in his real use are the offline ones
+//     (core/sync.js `cloud_sync_failed`, app.js `sync_failed_offline`); he
+//     trains offline.
+// In both, window.scrollY already equalled maxScroll (20px / 37px), so
+// reserving page padding the way §A.3 reserves the rest dock's height cannot
+// save it — and «scroll it out of the way» is the app asking him to do its
+// layout (ROUND5-FABLE-BRIEF §A). So the toast moves instead:
+//   1. the pill itself never takes a tap any more — `pointer-events` on
+//      `.toast` stays none even when shown, restored only on its own buttons,
+//      so the message can no longer eat a tap meant for the page (styles.css);
+//   2. and when it does land on a control it hops above it by a MEASURED amount
+//      — never a hard-coded 60 or 88 — so he can see the button he is reaching
+//      for, not just reach it.
+const TOAST_GAP = 8;          // the air the toast keeps between itself and a control
+// One hop, never a climb. The toast is parked at the bottom of the page, so the
+// controls it covers ARE the page's last ones, and clearing them is the whole
+// job — «raise the toast above the page's last control» (ROUND5 §A's reading of
+// the same defect). Chasing every control it meets on the way up was measured
+// on the runner, where the set grid is a ladder of inputs: it climbed 186px and
+// parked the message in the middle of the screen. Capped at a row-plus-pill, so
+// it can clear a 56px action row and no more.
+const TOAST_MAX_LIFT = 160;
+const TOAST_CONTROLS = 'button, a[href], input, select, textarea, summary, [role="button"]';
+
+export function syncToastClearance() {
+  if (typeof document === 'undefined') return;
+  const el = document.getElementById('toast');
+  if (!el) return;
+  // Measure from the seat the toast would take on its own, so a lift is never
+  // computed on top of a previous one.
+  el.style.setProperty('--toast-lift', '0px');
+  if (!el.classList.contains('show')) return;
+  const box = el.getBoundingClientRect();
+  if (!box.height) return;
+  let lift = 0;
+  for (const node of document.querySelectorAll(TOAST_CONTROLS)) {
+    if (node === el || el.contains(node)) continue;
+    const r = node.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;              // a hidden page reports 0×0
+    if (r.left >= box.right || r.right <= box.left) continue; // beside it, not under it
+    if (r.top >= box.bottom || r.bottom <= box.top) continue; // not in its band at all
+    lift = Math.max(lift, box.bottom - r.top + TOAST_GAP);
+  }
+  // Clamped, and kept wholly on screen: it is still a message. If a page is so
+  // dense that the hop cannot clear it, rule 1 still holds — the pill takes no
+  // taps, so nothing under it becomes unreachable.
+  lift = Math.max(0, Math.min(lift, TOAST_MAX_LIFT, box.top - 8));
+  el.style.setProperty('--toast-lift', `${Math.round(lift)}px`);
+}
+
+// Re-measured while he scrolls, but ONLY for a toast that carries an action —
+// its button is the one part of the pill that can still take a tap, so it is
+// the one that must not drift over a control. A plain message bobbing up and
+// down the screen as he scrolls would be worse than the occlusion it avoids.
+if (typeof window !== 'undefined') {
+  let frame = 0;
+  const schedule = () => {
+    const el = document.getElementById('toast');
+    if (!el || !el.classList.contains('show') || !el.querySelector('button')) return;
+    if (frame) return;
+    frame = requestAnimationFrame(() => { frame = 0; syncToastClearance(); });
+  };
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+}
 
 export const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
   const t = $('#toast');
@@ -83,12 +171,17 @@ export const toast = (msg, ms = 1800, actionLabel = '', actionFn = null) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     setUiText(btn, actionLabel);
-    btn.addEventListener('click', () => { t.classList.remove('show'); actionFn(); });
+    btn.addEventListener('click', () => { t.classList.remove('show'); syncToastClearance(); actionFn(); });
     t.appendChild(btn);
   }
   t.classList.add('show');
+  // Twice: once now, so the very first frame is already clear, and once on the
+  // next frame, when the pill's final height (wrapped Arabic, a loaded font) is
+  // known. The measurement is idempotent — it always starts from lift 0.
+  syncToastClearance();
+  requestAnimationFrame(syncToastClearance);
   clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => t.classList.remove('show'), ms);
+  toast._timer = setTimeout(() => { t.classList.remove('show'); syncToastClearance(); }, ms);
 };
 
 // Confirming a save that did not happen is worse than saying nothing.

@@ -11,7 +11,7 @@
  * skipWaiting(), and the page (see app.js) reloads itself once to apply — no
  * manual force-refresh.
  */
-const VERSION = 'v113';
+const VERSION = 'v115';
 const CACHE = 'raedworkouts-' + VERSION;
 // Deliberately NOT versioned: YouTube thumbnails do not change when the app
 // does, and re-downloading 100+ of them over gym signal after every deploy is
@@ -46,6 +46,8 @@ const SHELL = [
   './ui/library.js',
   './ui/settings.js',
   './ui/warmup.js',
+  './ui/recovery.js',
+  './ui/cardio.js',
   './ui/welcome.js',
   './ui/figure.js',
   './locale.js',
@@ -55,6 +57,14 @@ const SHELL = [
   './domain/deload.js',
   './domain/sync-identity.js',
   './domain/runner-session.js',
+  './domain/cardio.js',
+  './domain/state-merge.js',
+  // Round 5: core/engine.js now imports the canonical progression predicates
+  // and the safety clamps, which pull catalogue.js in behind them. Missing from
+  // SHELL, all three break the app offline — silently.
+  './domain/progression.js',
+  './domain/clamps.js',
+  './domain/catalogue.js',
   './manifest.webmanifest',
   './icon-192.svg',
   './icon-512.svg',

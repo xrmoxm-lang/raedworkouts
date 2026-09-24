@@ -43,6 +43,41 @@ function finalWorkingSetEffort(working) {
   return effort;
 }
 
+/**
+ * A COMPLETE exposure: every prescribed working set actually performed.
+ *
+ * research/22 §2 is canonical on how load advances («if any other document
+ * disagrees about how load advances, this one wins») and defines `hit_top` over
+ * a complete exposure, never over «whatever countable sets happen to exist».
+ * Exported because `core/engine.js` — the controller Raed actually trains
+ * against — used to re-implement this rule WITHOUT the gate, so one ticked set
+ * in each of two abandoned sessions earned a load increase (measured
+ * 2026-09-23: 1-of-3 sets twice on chest_press_machine → 22.5 kg suggested).
+ * One definition, imported by both, is the only way they cannot drift again.
+ *
+ * `>=` rather than `===`: an EXTRA working set is more work than prescribed,
+ * never less, and refusing to count it would punish him for the extra set.
+ */
+export function isCompleteExposure(workingSets, setsTarget) {
+  const target = Number(setsTarget);
+  if (!Number.isFinite(target) || target < 1) return false;
+  return (workingSets || []).length >= target;
+}
+
+/** Every working set of a COMPLETE exposure reached the top of the rep range. */
+export function hitTopOfRange(workingSets, setsTarget, repHigh) {
+  if (!isCompleteExposure(workingSets, setsTarget)) return false;
+  const high = Number(repHigh);
+  return workingSets.every((set) => Number(set.reps) >= high && set.form_ok !== false);
+}
+
+/** Any working set of a COMPLETE exposure fell under the bottom of the range. */
+export function fellBelowRepFloor(workingSets, setsTarget, repLow) {
+  if (!isCompleteExposure(workingSets, setsTarget)) return false;
+  const low = Number(repLow);
+  return workingSets.some((set) => Number.isFinite(Number(set.reps)) && Number(set.reps) < low);
+}
+
 export function defaultIncrement(exercise) {
   const pattern = exercise?.canonical_pattern || exercise?.pattern;
   return ['lower_compound', 'hinge', 'compound_quad', 'compound_hinge'].includes(pattern) ? 0.05 : 0.025;
@@ -102,9 +137,8 @@ export function progressExercise({
   const setsTarget = Number(state.sets_target);
   if (!Number.isInteger(setsTarget) || setsTarget < 1) fail('state.sets_target must be a positive integer');
   const working = completedWorkingSets(completedSets);
-  const completeExposure = working.length === setsTarget;
-  const hitTop = completeExposure && working.every((set) => Number(set.reps) >= high && set.form_ok !== false);
-  const fellBelowLow = completeExposure && working.some((set) => Number(set.reps) < low);
+  const hitTop = hitTopOfRange(working, setsTarget, high);
+  const fellBelowLow = fellBelowRepFloor(working, setsTarget, low);
   const finalEffort = finalWorkingSetEffort(working);
   const topStreak = hitTop ? Number(state.consecutive_top || 0) + 1 : 0;
   const lowStreak = fellBelowLow ? Number(state.consecutive_below_low || 0) + 1 : 0;

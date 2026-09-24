@@ -111,10 +111,42 @@ grammar inside a sheet: `.xs-head` (h3 + `.xs-sub`), `.xs-section` (`.xs-label` 
 
 Toast `#toast` — bottom-centre pill above the tab bar, ink on paper inverted, one
 line, optional action button. `.skin-suggestion` variant with two actions.
+**It is a message, not a tap target**: `pointer-events` stays `none` even when
+shown, restored only on its own buttons — measured 2026-09-23, the 9s undo toast
+covered both `.end-cta` buttons (hitH 0) and the centre of «تم» hit-tested to
+«تراجع», so the tap that saved the session reopened it. And when it does land on
+a control it hops above it by its MEASURED overlap (`--toast-lift`, written by
+`core/dom.js`; one hop, capped at 160px), so he can see the button he is
+reaching for. Any toast raised by hand rather than through `toast()` must call
+`syncToastClearance()` after adding `.show`.
 
 Rest dock `#rest-timer.rest-timer` — full-width bar docked above the tab bar:
 `.rt-ico` · `.rt-time.num` (30px mono) · `.rt-bar` (draining track, `--p` custom
 property 0–1) · `#rest-cancel.rt-cancel`. Slides up on show. Ids are fixed.
+Shown on every page EXCEPT the runner; `body.rest-docked` then reserves its
+MEASURED height (`--rest-dock-h`, written by `core/rest.js`) as bottom padding,
+so no control can sit under it.
+
+Rest row `.rest-row [data-rest-inline]` ★ — the runner's countdown, IN FLOW, one
+hairline row between the set grid's quiet lines and `.runner-nav`: `.eyebrow`
+«راحة» · `.rt-time.num` at **20px** (a line in the ledger, not the dock's
+billboard 30) · the same `.rt-bar` drained by `--p` · a 40×40
+`[data-rest-cancel].rt-cancel` at the end edge (48px hit area). Ink on paper —
+`var(--text)` on `var(--bg)`, no slab, no shadow, accent ONLY on the draining
+bar, the one live thing. Always in the DOM while he is lifting and `hidden` when
+no rest runs, so starting a rest never re-renders the card he is typing into.
+Both surfaces carry `[data-rest-surface]` and are painted from the single
+`restTimer` in `core/rest.js`, so they can never disagree; cancel from either
+cancels both. Raed 2026-09-23: the fixed dock landed on «التمرين التالي» /
+«أنهِ الجلسة» at every scroll position (measured 390×844: dock 712–772, nav
+743–787) — «ما أقدر أروح للـnext ... خصوصًا في آخر عدة».
+
+And because the row makes the page ~56px taller at exactly that moment, the
+transition into rest also brings `.runner-nav` clear of the TAB bar — measured
+with the dock already hidden: still at scrollY 0, nav 799–843 under a tab bar
+topped at 776, `elementFromPoint` = `BUTTON.tab` for both buttons. One scroll,
+on the transition only, and only while the nav is actually covered — the same
+contract `revealEffortStrip()` has kept for the effort picker since v15.
 
 Progress rail `.sess-progress` — `.sp-track` of `.sp-seg` (min 44px, 6px tall,
 `.done` accent, `.current` accent outline + taller) and `.sp-count.num` (`3/7`, LTR).
@@ -159,10 +191,58 @@ Raed 2026-09-08: the next/previous pair stays IN FLOW at 44px (never docked); «
       .done rows: good tint, inputs stay editable; .warm rows: compact (44px) and muted; .extra rows: dashed start bar; .skipped: struck
       [data-ramp-effort] ★ / .effort-strip ★ (hidden attr contract) holding .effort-picker ★ → now a .seg of three words, no emoji
     [data-reps-goal] ★ · [data-prescribed-effort] ★ · .last-time ★ — three quiet lines under the grid
+.rest-row [data-rest-inline] ★ — the countdown, in flow; hidden unless a rest is running (the fixed dock never floats over the runner)
 .runner-nav: [data-runner-prev] ★ default btn + next primary, or [data-finish-session] ★ primary on the last exercise
 .running-line carries [data-discard-session] ★ (ghost danger tiny)
 [data-session-done] ★ panel when everything is resolved
+  .eyebrow «مدة الجلسة» then .session-done-time.num ★ — a CLOCK reading, m:ss under
+  an hour and h:mm:ss over it (Raed 2026-09-22: «not 80 min, 1:20»). `.num` is
+  correct here and only here on this line: the content is pure Latin digits and
+  colons, so LTR keeps the groups in order. Never reintroduce «45 دقيقة».
+[data-cardio-block] ★ — the cool-down, between the summary and the save
 ```
+Cool-down (`ui/cardio.js` + `domain/cardio.js`): `.cardio` ★ opens with a hairline,
+not a card. `.section-head` (eyebrow «التهدئة» + the best `met_minutes` to beat) ·
+`.cardio-target [data-cardio-suggestion]` ★ — the block's ONE accent, a soft accent
+field like `.superset-note`, never a coloured rail (the rail marks the live set and
+one mark may not carry two meanings) — with `[data-cardio-apply]` ★ ·
+`.cardio-step-block`s for المدة (a `.seg` of 10/15/20/25/30), الأساس — a
+`.cardio-block-head` of «الأساس» plus `[data-cardio-pace]` ★ («المشي» / «الهرولة»),
+then `[data-cardio-field="base_speed"]` ★ and `="incline"` ★, unit in the LABEL so it
+cannot drift to the far edge of the field — and الانطلاقات (a `.seg` of seconds plus
+`.cardio-stepper` ★ and `[data-cardio-field="burst_speed"]` ★) ·
+`.cardio-ideal` the solved grade for a WALK, or `[data-cardio-base-fact]` ★
+«الأساس هرولة · 9.7 MET» for a jog · `[data-cardio-totals]` ★ repainted IN PLACE while
+he types (a full render would take the caret with it) carrying `.cardio-total-main`,
+`[data-cardio-versus]` ★, `[data-cardio-band]` ★ (`under` | `in` | `over`, walk only)
+and `[data-cardio-overfilled]` ★ · `.cardio-actions` — a
+compact ROW of `[data-cardio-log]` ★ and `[data-cardio-skip]` ★, deliberately not
+`primary full`, because the one primary action on this screen is finishing the
+session. Logged state collapses to `[data-cardio-logged]` ★ + `[data-cardio-edit]` ★.
+
+Round 5 (Raed 2026-09-23, «الوحدة ميل»): **the unit is mph**, `settings.speed_unit`
+defaults to `'mph'` and is switched by the `.seg` `[data-speed-unit]` ★ in Settings,
+which CONVERTS the live bout's speeds and says so in a toast. His 5.1 base is
+137 m/min — a jog — so the pace label, the equation, the band verdict and the
+progression order all fork on `paceKind()`: a jogged base gets the MET fact and no
+Zone 2 verdict, and its ladder is duration → bursts → burst speed → grade last,
+capped at 4%. Distance is stored in km and printed in his unit («1.35 ميل»).
+The block's intro defines its coined unit ONCE — `[data-cardio-effort-def]` ★
+«الجهد = الشدة × الدقائق (MET-min)» — written with a hyphen, not a middle dot,
+because `LTR_RUN` has no `·` and the split strands the «(» for the bidi algorithm to
+mirror. A field he CLEARS is not a zero: `[data-cardio-incomplete]` ★ «أكمل الأرقام»
+replaces the totals and `[data-cardio-log]` is disabled.
+
+`.cardio-summary-line [data-cardio-summary]` ★ — the one line that carries the bout
+off this screen: «التهدئة · 15 دقيقة · 1.35 ميل · 153 نقطة جهد», `.beaten` when it
+beat every bout before it. It sits under the end screen's `.stats-grid.four` (which
+gained the session clock as a fourth `.stat`, `session_duration`, mono step-down one
+notch lower because four cells are 88px at 390px) and `.muted` on each history row.
+
+The lifting's last tick starts NO rest and cancels a running one (`ui/exercise-card.js`,
+round 5): a rest is for the set that follows it, and after the last exercise what follows
+is the done panel and the cool-down. The dock must never sit on that form.
+
 Warm-up phase (`ui/warmup.js`): `.warmup-phase` ★ with two `.warmup-step`s,
 `.warmup-minute-picker` ★ as a `.seg`, `.warmup-drill-row` rows with `.warmup-drill` ★
 (tick button: `.drill-name`, `.drill-reps.num`, `.drill-tick`) and the drill's clip

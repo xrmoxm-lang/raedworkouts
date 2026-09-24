@@ -2,12 +2,13 @@ import { $, $$, toast } from './core/dom.js';
 import { derivedCycle } from './core/engine.js';
 import { launchGymApp } from './core/gym.js';
 import { applyLang, t, tf } from './core/i18n.js';
-import { cancelRest, initNotifications, restTimer, restoreRestTimer } from './core/rest.js';
+import { cancelRest, initNotifications, restTimer, restoreRestTimer, syncRestSurfaces } from './core/rest.js';
 import { flushSetEdit } from './core/session.js';
 import { registerShell } from './core/shell.js';
 import {
   checkStorageHeadroom,
   hasMeaningfulLocalData,
+  isStateCorrupt,
   loadLocal,
   markDirty,
   readDirtyMarker,
@@ -36,6 +37,7 @@ import { renderSessionEnd } from './ui/end.js';
 import { renderHistory } from './ui/history.js';
 import { renderHome } from './ui/home.js';
 import { renderLibrary } from './ui/library.js';
+import { showStateRecovery } from './ui/recovery.js';
 import { renderSettings } from './ui/settings.js';
 import { renderWelcome } from './ui/welcome.js';
 
@@ -88,6 +90,9 @@ function render() {
   if (route === 'settings') renderSettings();
   if (route === 'help') router('settings');
   if (route === 'end') renderSessionEnd();
+  // Where the rest countdown belongs depends on the page that was just drawn:
+  // in flow inside the runner, docked everywhere else. See core/rest.js.
+  syncRestSurfaces();
   // The native widget mirrors whatever the screen just drew.
   scheduleNativeSummary();
 }
@@ -153,7 +158,13 @@ function init() {
   });
 
   // Show profile screen on first launch (no user_id set yet)
-  if (!settings.user_id) {
+  if (isStateCorrupt()) {
+    // This phone's blob would not parse. core/store.js has quarantined it and
+    // is refusing every write and every push; boot stops here and he chooses
+    // which copy to restore. Booting on past this is what pushed an empty
+    // state over his cloud head on 2026-09-23.
+    showStateRecovery();
+  } else if (!settings.user_id) {
     renderWelcome();
   } else if (settings.sync_url && settings.sync_key) {
     // If this browser has meaningful local data but no revision marker, push first.

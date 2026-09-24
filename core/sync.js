@@ -13,7 +13,9 @@ import {
   ensureProfile,
   familyProfileSeeds,
   getLocalProfiles,
+  clearStateCorrupt,
   getSyncUrl,
+  isStateCorrupt,
   loadLocal,
   migrateProgrammeReferencesAtBoot,
   persistLocal,
@@ -62,6 +64,9 @@ export let welcomeSelectedProfile = null;
 export function setWelcomeSelectedProfile(value) { welcomeSelectedProfile = value; }
 export function schedulePush(delay = 2500) {
   if (!settings.user_id || !settings.sync_url || !settings.sync_key) return;
+  // Quarantined local state: see core/store.js. The state in memory is an empty
+  // default, and pushing it is what took the cloud copy with it.
+  if (isStateCorrupt()) return;
   clearScheduledPush();
   syncTimer = setTimeout(() => flushSync().catch(() => {}), delay);
 }
@@ -80,6 +85,10 @@ function applyRemotePayload(remote, localUserId = settings.user_id) {
   // metadata from leaking into localStorage, profile names, or later requests.
   const localId = localUserId || settings.user_id;
   if (!localId) throw new Error('Sync identity invariant failed: remote payload needs a local profile id');
+  // A whole good state has arrived from the server: that is the answer to a
+  // quarantine, so local writing is allowed again from here (the quarantined
+  // blob itself is kept — nothing deletes it but him).
+  clearStateCorrupt();
   const localLang = settings.lang;
   const localTheme = settings.theme;
   const remoteState = remote.state_json || remote.state || {};
@@ -151,6 +160,11 @@ export async function syncFetch(path, opts = {}) {
 
 export async function syncToCloud(opts = {}) {
   if (!settings.sync_url || !settings.sync_key || !settings.user_id) return false;
+  // The guard lives HERE and not only in flushSync because pagehide and
+  // visibilitychange call syncToCloud directly (app.js) — that beacon is what
+  // carried the empty state out on 2026-09-23. `replace` is the user choosing a
+  // restore, and those paths clear the flag before they get here.
+  if (isStateCorrupt() && opts.mode !== 'replace') return false;
   const userIdAtStart = settings.user_id;
   const bodyObj = {
     user_id: syncUserId(settings.user_id),
@@ -200,6 +214,7 @@ export async function syncToCloud(opts = {}) {
 
 export async function flushSync(opts = {}) {
   if (!settings.user_id) return false;
+  if (isStateCorrupt() && opts.mode !== 'replace') return false;
   while (true) {
     if (syncInFlightPromise) {
       const inFlightOk = await syncInFlightPromise.catch(() => false);
@@ -242,7 +257,10 @@ export async function flushSync(opts = {}) {
 
 export async function pullFromCloud() {
   if (!settings.sync_url || !settings.sync_key || !settings.user_id) return false;
-  if (syncDirty || readDirtyMarker(settings.user_id)) return flushSync();
+  // A dirty marker means "this device has edits the server has not seen". When
+  // the local blob is quarantined that promise is void — there are no edits,
+  // only an empty default — so the pull is allowed through. It is the recovery.
+  if (!isStateCorrupt() && (syncDirty || readDirtyMarker(settings.user_id))) return flushSync();
   let remote;
   try {
     remote = await syncFetch('/state?user=' + syncUserQuery(settings.user_id));
@@ -428,6 +446,9 @@ export async function createProfile(profile, bodyweight) {
 }
 function stashPreRestore(reason) {
   if (!settings.user_id) return;
+  // Nothing to stash: while the local blob is quarantined the in-memory state
+  // is an empty default, and an «undo» that restores emptiness is a trap.
+  if (isStateCorrupt()) return;
   const snapshot = {
     created_at: new Date().toISOString(),
     reason,
@@ -446,7 +467,10 @@ async function undoPreRestore() {
   replaceState({ ...defaultState(), ...(snapshot.state || {}) });
   replaceSettings({ ...defaultSettings(), ...retireLegacyCredentialFields(snapshot.settings || {}), ...keep });
   ensureProfile();
-  saveLocal({ sync: false });
+  // He chose this copy: local writing is allowed again, and it is authoritative
+  // — another tab's stale copy must not be merged back into a deliberate undo.
+  clearStateCorrupt();
+  saveLocal({ sync: false, authoritative: true });
   const pushed = await flushSync({ mode: 'replace' });
   applyTheme();
   render();
@@ -495,7 +519,10 @@ export async function restoreRevision(rev) {
   replaceState({ ...defaultState(), ...(snap.state_json || {}) });
   replaceSettings({ ...defaultSettings(), ...retireLegacyCredentialFields(snap.settings_json || {}), ...keep });
   ensureProfile();
-  saveLocal({ sync: false });
+  // Same as undoPreRestore: an explicit restore ends a quarantine and wins over
+  // any other context's copy.
+  clearStateCorrupt();
+  saveLocal({ sync: false, authoritative: true });
   const pushed = await flushSync({ mode: 'replace' });
   applyTheme();
   render();
@@ -512,7 +539,8 @@ export async function importJsonFile(file) {
   if (parsed.settings) replaceSettings({ ...defaultSettings(), ...retireLegacyCredentialFields(parsed.settings), ...keep });
   else replaceSettings({ ...settings, ...keep });
   ensureProfile();
-  saveLocal({ sync: false });
+  clearStateCorrupt();
+  saveLocal({ sync: false, authoritative: true });
   const pushed = await flushSync({ mode: 'replace' });
   applyTheme();
   render();

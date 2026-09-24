@@ -79,3 +79,118 @@ test('an isolation the week-5 rotation introduces starts capped: two sets, RPE 8
   // The compounds are untouched — §8.2 holds them constant through the rotation.
   expect(planned.working.chest_press_machine, 'a compound keeps its full prescription').toBe(3);
 });
+
+// Round 5, finding #2. `suggestNextWeight` computed `allHitTarget` with
+// `workingSets.every(...)` over whatever countable sets existed and had no
+// `sets_target` check at all, while research/22 §2 — canonical on how load
+// advances — defines `hit_top` over a COMPLETE exposure, and the canonical
+// `domain/progression.js` had always gated on one. So one ticked set in each of
+// two half-finished sessions promoted the load, and the note told him he had
+// completed the top of the range «في كل المجموعات».
+function abandonAfterFirstSet(state, weight) {
+  for (const session of state.history.filter((s) => s.session_id === 'upper_a').slice(-2)) {
+    const entry = session.exercises.chest_press_machine;
+    entry.sets = [
+      ...entry.sets.filter((set) => set.is_warmup),
+      { is_warmup: false, weight, reps: 10, completed: true, effort: null },
+      // The machine was taken. Two prescribed sets never happened.
+      { is_warmup: false, weight: '', reps: 10, completed: false, skipped: true },
+      { is_warmup: false, weight: '', reps: 10, completed: false, skipped: true },
+    ];
+  }
+  return state;
+}
+
+test('two abandoned exposures do not promote the load, however good the one set was', async ({ page }) => {
+  const state = abandonAfterFirstSet(structuredClone(SEED), 20);
+  await bootWith(page, state);
+  await expect(page.locator('#page-home .ex.expanded h4 bdi')).toHaveText('Chest Press Machine');
+  const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
+  // Measured before the fix: 22.5, prefilled into all three rows, with
+  // «أكملت 10 في كل المجموعات مرتين. ارفع 2.5 كغ» underneath.
+  await expect(first, 'one of three sets, twice, is not two complete exposures').toHaveAttribute('placeholder', '20');
+  // It falls through to «طابق أو تجاوز», the one note the card suppresses — so
+  // no load reasoning is printed at all, which is honest: nothing was decided.
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toHaveCount(0);
+});
+
+test('three completed sets at the top of the range, twice, still promote it', async ({ page }) => {
+  // The control for the test above: same exercise, same weight, same reps — the
+  // only difference is that the exposures are complete.
+  const state = structuredClone(SEED);
+  for (const session of state.history.filter((s) => s.session_id === 'upper_a').slice(-2)) {
+    const entry = session.exercises.chest_press_machine;
+    entry.sets = [
+      ...entry.sets.filter((set) => set.is_warmup),
+      ...[0, 1, 2].map(() => ({ is_warmup: false, weight: 20, reps: 10, completed: true, effort: null })),
+    ];
+  }
+  await bootWith(page, state);
+  const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(first).toHaveAttribute('placeholder', '22.5');
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('ارفع');
+});
+
+// Round 5, finding #3. domain/clamps.js was imported by nothing the browser
+// loads: C1-C8 were tested and never ran. The live controller now puts every
+// load it proposes that he has NOT already lifted through the pipeline, so C7
+// (an engineering absurdity filter: 2× bodyweight on a press) can stop one.
+test('a load past any sane multiple of bodyweight is held, not stepped up again', async ({ page }) => {
+  const state = structuredClone(SEED);
+  state.profile = { ...state.profile, bodyweight_kg: 82 };
+  for (const session of state.history.filter((s) => s.session_id === 'upper_a').slice(-2)) {
+    const entry = session.exercises.chest_press_machine;
+    // A corrupted import, a mis-typed 300 for 30 — however it got there, the
+    // rep criterion is met and the old controller would answer 302.5 kg.
+    entry.sets = [
+      ...entry.sets.filter((set) => set.is_warmup),
+      ...[0, 1, 2].map(() => ({ is_warmup: false, weight: 300, reps: 10, completed: true, effort: null })),
+    ];
+  }
+  await bootWith(page, state);
+  const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(first, '302.5 kg is 3.7× his bodyweight on a machine press').toHaveAttribute('placeholder', '300');
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('سقف الأمان');
+});
+
+// Round 5, finding #3's second half: `why_hold_very_hard` and `why_easy_bump`
+// are the D16/D17 effort contract on the path Raed actually trains against, and
+// neither had a test anywhere — the contract was only asserted against
+// `domain/progression.js`, which no screen could reach.
+function rewriteLastTwoUpperA(state, latest, previous) {
+  const uppers = state.history.filter((s) => s.session_id === 'upper_a').slice(-2);
+  for (const [session, sets] of [[uppers[0], previous], [uppers[1], latest]]) {
+    const entry = session.exercises.chest_press_machine;
+    entry.sets = [...entry.sets.filter((set) => set.is_warmup), ...sets];
+  }
+  return state;
+}
+const working = (reps, effort = null) => ({ is_warmup: false, weight: 20, reps, completed: true, effort });
+
+test('«صعبة جدًا» on the final set holds a load the reps had already earned', async ({ page }) => {
+  // Both exposures complete at the top of the range, so the two-session bump is
+  // earned — and D17 makes effort a brake that can only ever delay it.
+  const state = rewriteLastTwoUpperA(
+    structuredClone(SEED),
+    [working(10), working(10), working(10, 'very_hard')],
+    [working(10), working(10), working(10, 'medium')],
+  );
+  await bootWith(page, state);
+  const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(first, 'very_hard holds the load; it never lowers or raises it').toHaveAttribute('placeholder', '20');
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('صعبة جدًا');
+});
+
+test('«سهل» after one complete top exposure lands the increase a session sooner', async ({ page }) => {
+  // The previous exposure fell one rep short, so the two-session branch does not
+  // fire. D16: easy may bring a reps-earned increase forward, never create one.
+  const state = rewriteLastTwoUpperA(
+    structuredClone(SEED),
+    [working(10), working(10), working(10, 'easy')],
+    [working(9), working(9), working(9, 'medium')],
+  );
+  await bootWith(page, state);
+  const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
+  await expect(first).toHaveAttribute('placeholder', '22.5');
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('أبكر بجلسة');
+});

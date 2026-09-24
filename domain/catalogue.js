@@ -56,7 +56,15 @@ function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === 'string' && value.trim()))];
 }
 
-function canonicalPattern(legacyPattern) {
+/**
+ * Exported 2026-09-23: `core/engine.js` feeds the safety clamps exercises taken
+ * straight from data.js, which still speaks the legacy dialect
+ * ('horizontal_push', 'compound_quad'). C7's PATTERN_MULTIPLES only knows the
+ * canonical names, and its `?? PATTERN_MULTIPLES.isolation` fallback would have
+ * scored a leg press at 0.75x bodyweight — a 61.5 kg ceiling on a movement he
+ * already does at 60 kg. Translate once, here, rather than in each caller.
+ */
+export function canonicalPattern(legacyPattern) {
   return PATTERN_MAP[legacyPattern] || legacyPattern || 'isolation';
 }
 

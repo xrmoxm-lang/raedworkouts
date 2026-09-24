@@ -29,6 +29,7 @@ import {
   todayISO,
 } from '../core/i18n.js';
 import { requestNotifPermissionIfNeeded } from '../core/rest.js';
+import { convertCardioUnit, normalizeUnit } from '../domain/cardio.js';
 import { render } from '../core/shell.js';
 import {
   SYNC_KEY,
@@ -305,6 +306,40 @@ export function renderSettings() {
         { 'data-superset-mode': 'true', 'aria-label': t('superset_mode') },
       )));
   }
+
+  /*
+   * The treadmill's unit. `settings.speed_unit` shipped in round 4 read by the
+   * cool-down and settable by NOTHING — the same defect class as the PR-summary
+   * switch that was read by nothing, in the other direction.
+   *
+   * Switching it CONVERTS what he already typed rather than relabelling it,
+   * because that is what the machine does: 5.1 mph and 8.2 km/h are the same
+   * belt. Relabelling would turn his jog into a walk without him touching a
+   * number, so the toast says out loud that the numbers moved.
+   *
+   * There is deliberately no kg | lb twin beside it: nothing in the app reads
+   * `weight_unit`, and a control that changes a value no screen consults is
+   * exactly the defect this row exists to close.
+   */
+  prefs.appendChild(row(t('speed_unit'), t('speed_unit_desc'),
+    segmented(
+      [['mph', t('unit_mph'), { 'data-speed-unit-option': 'mph' }],
+        ['kmh', t('unit_kmh'), { 'data-speed-unit-option': 'kmh' }]],
+      normalizeUnit(settings.speed_unit),
+      (value) => {
+        const from = normalizeUnit(settings.speed_unit);
+        if (value === from) return;
+        settings.speed_unit = value;
+        // Only the live session's bout is rewritten. Archived bouts carry the
+        // unit they were performed in and stay readable as themselves.
+        const bout = state.active_session?.cardio;
+        if (bout) convertCardioUnit(bout, value);
+        saveLocal();
+        renderSettings();
+        toast(t('speed_unit_converted'));
+      },
+      { 'data-speed-unit': 'true', 'aria-label': t('speed_unit') },
+    )));
 
   prefs.appendChild(row(t('rest_override'), t('rest_override_desc'),
     switchControl(!!settings.rest_override, t('rest_override'),

@@ -529,8 +529,28 @@ label > input, label > select { margin-top: 6px; }
 .rt-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--bg) 22%, transparent); overflow: hidden; position: relative; }
 .rt-bar::after { content: ''; position: absolute; inset: 0; background: var(--accent); transform-origin: right center; transform: scaleX(var(--p, 1)); transition: transform 200ms linear; }
 [dir="ltr"] .rt-bar::after { transform-origin: left center; }
-.rt-cancel { width: 40px; height: 40px; border-radius: 50%; border: 0; background: color-mix(in srgb, var(--bg) 16%, transparent); color: var(--bg); font-size: 18px; display: grid; place-items: center; padding: 0; }
+.rt-cancel { width: 40px; height: 40px; border-radius: 50%; border: 0; background: color-mix(in srgb, var(--bg) 16%, transparent); color: var(--bg); font-size: 18px; display: grid; place-items: center; padding: 0; position: relative; }
+/* Hit-area floor: the circle stays 40px, the target is 48. */
+.rt-cancel::before { content: ''; position: absolute; inset: 50% auto auto 50%; width: 48px; height: 48px; transform: translate(-50%, -50%); }
 @keyframes dock-in { from { transform: translate(-50%, 16px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+/* ===== Rest, in flow (the runner) =====
+   Raed 2026-09-23: «الوقت العداد يصير تحت، ما أقدر أروح للـnext». The fixed dock
+   above sat on top of «التمرين التالي» / «أنهِ الجلسة» at every scroll position
+   (measured: dock 712-772, nav 743-787 on a 390x844 screen), so inside the
+   runner the countdown stops floating. It is a LINE IN THE LEDGER, not a
+   billboard: hairline above and below, 20px mono instead of the dock's 30, ink
+   on paper, no slab and no shadow, and the accent spent only on the draining
+   bar — the one live thing on the row. See ROUND5-FABLE-BRIEF §A.1. */
+.rest-row {
+  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center;
+  gap: 12px; min-height: 48px; padding: 4px 0; margin-top: 6px;
+  border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair);
+  background: var(--bg); color: var(--text);
+}
+.rest-row .rt-time { font-size: 20px; }
+.rest-row .rt-bar { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.rest-row .rt-cancel { background: transparent; color: var(--text-muted); }
 
 /* ===== Coach ===== */
 .coach-ask { margin-top: 8px; }
@@ -750,7 +770,9 @@ label > input, label > select { margin-top: 6px; }
 
 /* ===== Toast ===== */
 .toast {
-  position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-bottom) + 14px);
+  /* --toast-lift is MEASURED by core/dom.js: the toast lifts only as far as it
+     must to stop covering a control (0 on a page where it covers nothing). */
+  position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-bottom) + 14px + var(--toast-lift, 0px));
   transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
   width: max-content; max-width: min(92vw, 420px);
   display: flex; align-items: center; gap: 12px;
@@ -760,13 +782,27 @@ label > input, label > select { margin-top: 6px; }
   box-shadow: var(--shadow-lg); z-index: var(--z-toast);
   transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
-.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-.toast button { border: 0; background: color-mix(in srgb, var(--bg) 18%, transparent); color: var(--bg); padding: 6px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+/* Shown, but still not a tap target. It was `pointer-events: auto` over the
+   whole pill, and on 2026-09-23 the centre of «تم» on the end screen hit-tested
+   to the toast's «تراجع» — a save undone by the tap that confirmed it. Only the
+   toast's own buttons take a pointer now; the message never does. */
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: none; }
+.toast button { pointer-events: auto; border: 0; background: color-mix(in srgb, var(--bg) 18%, transparent); color: var(--bg); padding: 6px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .toast.skin-suggestion { flex-direction: column; align-items: stretch; text-align: start; }
 .skin-suggestion-copy { line-height: 1.4; }
 .skin-suggestion-actions { display: flex; gap: 8px; margin-top: 6px; }
 .skin-suggestion-actions .btn { flex: 1; min-height: 40px; }
-body.resting .toast { bottom: calc(var(--nav-h) + var(--safe-bottom) + 88px); }
+/* The toast clears the dock only while the dock is the surface being shown. On
+   the runner the countdown is in flow, so the toast keeps its normal seat. */
+body.rest-docked .toast { bottom: calc(var(--nav-h) + var(--safe-bottom) + 88px + var(--toast-lift, 0px)); }
+/* Guard rail (ROUND5-FABLE-BRIEF §A.3). Nothing reserved space for the dock, so
+   it covered the last ~60px of every page it floated over. The height is
+   MEASURED by core/rest.js into --rest-dock-h (the 60px fallback is only for
+   the frame before the first measurement); 10px is the gap the dock is parked
+   at above the tab bar, and the 24px is the page's usual breathing room. */
+body.rest-docked {
+  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--rest-dock-h, 60px) + 10px + 24px);
+}
 
 /* ===== Responsive / motion ===== */
 @media (min-width: 600px) {
@@ -1020,3 +1056,93 @@ details.advanced-settings[open] > summary::after { transform: rotate(-135deg); }
 /* Empty log: the scope note is the whole screen under the chips, so it stops
    being a footnote pinned to the bottom of a form. */
 .coach-scope.alone { margin-top: var(--space-6); }
+
+/* ---- Post-workout conditioning (Raed 2026-09-22) -------------------------
+   Sits under the finished-session summary, which is centred; this is a form,
+   so it goes back to reading from the start edge. No card, no fill around the
+   whole block — a hairline above it is the whole container, exactly as the
+   ledger rows do it. */
+.cardio { text-align: start; margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--hair); }
+.cardio-intro { margin: 0 0 var(--space-4); }
+.cardio-step-block { margin-bottom: var(--space-5); display: flex; flex-direction: column; gap: 8px; }
+.cardio-step-block > strong { font-size: 16px; font-weight: 600; }
+
+/* The one accent in the block: today's single change. Same treatment as the
+   superset note — a soft accent field, not a coloured rail — because the rail
+   is spoken for: it marks the live set, and two meanings for one mark is one
+   too many. */
+.cardio-target {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: var(--space-5); padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-label); font-size: 13.5px;
+}
+.cardio-target-line { flex: 1 1 200px; line-height: 1.5; }
+.cardio-target .btn { margin-inline-start: auto; }
+
+.cardio-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.cardio-field { flex: 1 1 140px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cardio-field-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.cardio-field-input { display: flex; align-items: center; gap: 6px; }
+/* Numbers he types use the same mono face and the same 48px floor as the set
+   ledger, so a speed and a working weight are entered the same way. */
+.cardio-num {
+  flex: 1 1 auto; min-width: 0; min-height: 48px;
+  font-family: var(--font-mono); font-size: 20px; font-weight: 500;
+  text-align: center; padding: 0 6px; direction: ltr;
+}
+.cardio-suffix { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+
+.cardio-stepper { display: flex; align-items: center; gap: 4px; }
+.cardio-step {
+  width: 48px; height: 48px; flex: 0 0 48px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elev); color: var(--text); font-size: 20px; line-height: 1;
+}
+.cardio-step[disabled] { opacity: .4; }
+.cardio-step-value {
+  flex: 1 1 auto; text-align: center; font-family: var(--font-mono);
+  font-size: 20px; font-weight: 600; direction: ltr;
+}
+
+/* The running total. The big number is the thing he is trying to beat, so it
+   gets the ledger's stat size and nothing else competes with it. */
+.cardio-totals { padding-top: var(--space-4); border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 4px; }
+.cardio-total-row { display: flex; align-items: baseline; gap: 8px; }
+.cardio-total-main { font-family: var(--font-mono); font-size: 30px; font-weight: 600; line-height: 1; }
+.cardio-total-unit { font-size: 13px; color: var(--text-muted); }
+.cardio-versus { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+/* Accent only when he is actually over the bar — otherwise it is a number, not
+   an achievement. */
+.cardio-versus.beaten { color: var(--accent-label); }
+.cardio-warn { font-size: 13px; font-weight: 600; color: var(--warning); }
+.cardio-ideal { line-height: 1.5; }
+
+/* The base section's head: «الأساس» with the pace it is being run at today,
+   quiet and on the same baseline — the label answers "which equation is this",
+   so it belongs beside the title, not in the totals. */
+.cardio-block-head { display: flex; align-items: baseline; gap: 8px; }
+.cardio-pace { font-weight: 500; }
+
+.cardio-actions { display: flex; gap: 8px; margin-top: var(--space-4); }
+.cardio-actions .btn { flex: 1 1 auto; min-height: 44px; }
+/* A disabled log button is the block refusing to record a bout priced from a
+   box he emptied. It has to LOOK refused, not merely be inert. */
+.cardio-actions .btn[disabled] { opacity: .45; }
+/* The cool-down's one line on the end screen and in the log. Accent only when
+   it beat every bout before it, the same rule .cardio-versus follows. */
+.cardio-summary-line { margin: 6px 0 0; line-height: 1.5; }
+.cardio-summary-line .num { font-family: var(--font-mono); }
+.cardio-summary-line.beaten { color: var(--accent-label); font-weight: 600; }
+#page-end .cardio-summary-line { text-align: start; margin: -12px 0 18px; }
+/* The end screen's stats grid, with the session clock as a fourth cell. Three
+   cells had 116px each at 390px; four have 87px, so the mono step-down that
+   already exists for a long volume starts one notch lower here — a 1:20:45 at
+   28px is 118px of glyphs in an 87px column. */
+.stats-grid.four { grid-template-columns: repeat(4, 1fr); }
+.stats-grid.four .num { font-size: 22px; }
+.stats-grid.four .num.s5 { font-size: 19px; }
+.stats-grid.four .num.s6 { font-size: 17px; }
+.stats-grid.four .num.s7 { font-size: 15px; }
+.stats-grid.four .lbl { font-size: 11.5px; }
+.cardio-logged { font-size: 14.5px; margin-bottom: 10px; }
+.cardio-logged .num { font-family: var(--font-mono); }

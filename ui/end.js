@@ -12,7 +12,9 @@ import {
   recordWellbeingCheck,
   wellbeingCheckDue,
 } from '../core/engine.js';
-import { fmtDate, fmtKgTotal, localizeText, t, tf } from '../core/i18n.js';
+import { fmtDate, fmtElapsed, fmtKgTotal, localizeText, t, tf } from '../core/i18n.js';
+import { bestBout } from '../domain/cardio.js';
+import { cardioSummaryLine } from '../ui/cardio.js';
 import { _endScreenSession } from '../core/session.js';
 import { settings, state } from '../core/store.js';
 import { getAllExercises } from '../core/videos.js';
@@ -119,11 +121,34 @@ export function renderSessionEnd() {
     h('h2', {}, t('session_done_title')),
     h('div', { class: 'subtitle' }, fmtDate(s.started_at), ' · ', localizeText(s.session_name)),
 
-    h('div', { class: 'stats-grid' },
+    // Four cells, not three. The session's own duration was on the done panel
+    // and then gone the moment he saved — «متى بديت … كم جلست بالنادي إلى الآن»
+    // is a thing he asks about the session AFTER it, too. A clock reading
+    // (m:ss / h:mm:ss), which is the format he ruled for on 2026-09-22.
+    // `ended_at − started_at` includes the cool-down, and that is correct: the
+    // cool-down is part of the session.
+    h('div', { class: 'stats-grid four' },
       statCell(String(stats.sets), 'sets'),
       statCell(String(stats.reps), 'reps'),
       statCell(fmtKgTotal(stats.volume_kg), 'volume_kg'),
+      statCell(fmtElapsed(s.started_at, s.ended_at) || '—', 'session_duration'),
     ),
+
+    // And the cool-down he logged, under the grid where the totals are. The
+    // accent only when it beat every bout before it — the bar he asked this
+    // block to give him. `s` is already IN history by the time this renders
+    // (endSession pushes, then shows the screen), so it is excluded by identity
+    // before the bar is computed, or it would always be its own best.
+    (() => {
+      // bestBout of this session alone is null unless it really carries a
+      // completed bout, which makes it the one guard both branches need.
+      const mine = bestBout([s]);
+      if (!mine) return null;
+      const previousBest = bestBout((state.history || []).filter((one) => one !== s));
+      return cardioSummaryLine(s.cardio, {
+        beaten: !previousBest || mine.met_minutes > previousBest.met_minutes,
+      });
+    })(),
 
     // Honour the setting. It was written and toggled in Settings and read by
     // NOTHING, so turning "show PR summary" off changed nothing on screen — a

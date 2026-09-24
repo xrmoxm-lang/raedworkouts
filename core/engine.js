@@ -14,6 +14,8 @@ import {
 import { focusExerciseIdx, setFocusExerciseIdx } from '../core/session.js';
 import { saveLocal, settings, state } from '../core/store.js';
 import { getAllExercises } from '../core/videos.js';
+import { canonicalPattern } from '../domain/catalogue.js';
+import { CLAMP_IDS, bodyweightSanityCeilingKg, ceilingAbove, clampWorkingWeight } from '../domain/clamps.js';
 import {
   REPORTED_SIGNS,
   SIGN_THRESHOLD,
@@ -24,20 +26,42 @@ import {
   weekId as makeWeekId,
 } from '../domain/deload.js';
 import { nextHistoryDrivenSession, resolveProgrammeBlock } from '../domain/programme.js';
+import { fellBelowRepFloor, hitTopOfRange } from '../domain/progression.js';
 import { isCountableWorkingSet } from '../domain/runner-session.js';
 import { assessSubstitution } from '../domain/substitutions.js';
 
 // ---- PR detection (silent) -----------------------------------
 function prScore(kg, reps) { return kg * (1 + reps / 30); }  // Epley 1RM estimate
-export function detectPR(exercise_id, kg, reps) {
+export function detectPR(exercise_id, kg, reps, set = null) {
   if (!kg || !reps) return false;
   const score = prScore(kg, reps);
   const prev = state.prs[exercise_id];
   if (!prev || score > prev.score + 0.001) {
+    // `state.prs` was a WRITE-ONLY cache, and that is what made one mistyped
+    // load permanent. Measured 2026-09-23: 900 × 12 (a fat-finger for 90) ticked
+    // once wrote score 1260; unticking left it; correcting to 90 × 12 scores 126
+    // and `detectPR` only writes on a HIGHER score, so the record was pinned to
+    // a lift he never made and no real PR on that movement could ever be
+    // detected again. The only escape in the whole app was Settings → clear ALL
+    // PRs. So the tick now carries what it displaced, and `revertPR` below puts
+    // it back. `null` is meaningful (there was no PR before), which is why the
+    // property is stamped rather than left absent.
+    if (set) set._pr_replaced = prev ? { ...prev } : null;
     state.prs[exercise_id] = { kg, reps, date: todayISO(), score };
     return true;
   }
   return false;
+}
+// Undo exactly what THIS set's tick did to `state.prs`, and nothing else — a
+// record this set never wrote is left alone, so nothing he genuinely lifted can
+// be deleted by an untick somewhere else.
+export function revertPR(exercise_id, set) {
+  if (!set || !Object.prototype.hasOwnProperty.call(set, '_pr_replaced')) return false;
+  const restored = set._pr_replaced;
+  delete set._pr_replaced;
+  if (restored) state.prs[exercise_id] = restored;
+  else delete state.prs[exercise_id];
+  return true;
 }
 // ---- Programme resolver --------------------------------------
 // The week is DERIVED from logged sessions, never stored, and only sessions
@@ -54,15 +78,28 @@ function completedSessionCount() {
 function programmeCycleLength(programme = state.programme_overrides || RW.PROGRAMME) {
   return Math.max(...(programme.blocks || []).map((block) => block.week_end || 0), 1);
 }
+// The 0-based training week a given number of logged sessions puts him in. Split
+// out from `weeksElapsed` so the deload check-in can ask about the week of the
+// session it is REPORTING on rather than the week the clock has already
+// rolled into — see `reportedWeekId` below.
+function weekIndexAfter(sessions) {
+  return Math.floor(Math.max(0, Number(sessions) || 0) / 4);
+}
 function weeksElapsed() {
-  return Math.floor(completedSessionCount() / 4);
+  return weekIndexAfter(completedSessionCount());
 }
 // 1-based: his first twelve weeks are cycle 1.
+function cycleAtWeekIndex(index) {
+  return 1 + Math.floor(index / programmeCycleLength());
+}
+function weekAtWeekIndex(index) {
+  return 1 + (index % programmeCycleLength());
+}
 export function derivedCycle() {
-  return 1 + Math.floor(weeksElapsed() / programmeCycleLength());
+  return cycleAtWeekIndex(weeksElapsed());
 }
 export function derivedWeek() {
-  return 1 + (weeksElapsed() % programmeCycleLength());
+  return weekAtWeekIndex(weeksElapsed());
 }
 export function derivedBlock() {
   const programme = state.programme_overrides || RW.PROGRAMME;
@@ -88,8 +125,29 @@ export const DELOAD_SIGN_LABEL = {
 
 function trainingWeekId() { return makeWeekId(derivedCycle(), derivedWeek()); }
 
+// The week the end-of-session check-in is asking about: the one containing the
+// session he has JUST logged.
+//
+// `endSession()` pushes the finished session into history (core/session.js:318)
+// before the end screen renders, so by the time `wellbeingCheckDue()` /
+// `recordWellbeingCheck()` run, `derivedWeek()` has already ticked on the
+// 4-session boundary — which is also the only moment the check comes due again,
+// so this was the normal path, not an edge case. The row was written against
+// the week he had not trained yet and `nextWeekId()` then booked the deload for
+// the week AFTER that one. Measured 2026-09-23: after the 4th session of week 1
+// the check recorded «1:2» and the deload was booked for «1:3», which begins at
+// session 9 — four more full-load sessions with the signs [LADDER] L551 says
+// warrant reducing load. Counting the week from `completedSessionCount() - 1`
+// puts the report on «1:1» and the deload on «1:2», the week that follows.
+function reportedWeekIndex() {
+  return weekIndexAfter(completedSessionCount() - 1);
+}
+function reportedCycle() { return cycleAtWeekIndex(reportedWeekIndex()); }
+function reportedWeek() { return weekAtWeekIndex(reportedWeekIndex()); }
+function reportedWeekId() { return makeWeekId(reportedCycle(), reportedWeek()); }
+
 function deloadSignsThisWeek() {
-  const check = (state.wellbeing_checks || []).find((row) => row.week_id === trainingWeekId());
+  const check = (state.wellbeing_checks || []).find((row) => row.week_id === reportedWeekId());
   return signsThisWeek({
     reported: check?.signs,
     strengthLoss: detectStrengthLoss(state.history || [], currentTrainingWeek()?.startISO),
@@ -101,21 +159,26 @@ export function wellbeingCheckDue() {
   // training hard yet, you don't need a deload at all» (§7.1, [LADDER] L9791).
   if ((currentTrainingWeek()?.done || 0) < 1) return false;
   if (deloadActive()) return false;
-  return !(state.wellbeing_checks || []).some((row) => row.week_id === trainingWeekId());
+  // Deduped on the SAME id the answer is recorded under, or he would be asked
+  // again on the next render of the same end screen.
+  return !(state.wellbeing_checks || []).some((row) => row.week_id === reportedWeekId());
 }
 
 // Records the answer and, if the bar is met, books the deload for the week that
 // follows. Not this week: he has already trained it, and the source prescribes
 // «reducing your training load for a week», not truncating the one in progress.
 export function recordWellbeingCheck(signs) {
-  const rows = (state.wellbeing_checks || []).filter((row) => row.week_id !== trainingWeekId());
-  rows.push({ week_id: trainingWeekId(), signs: [...new Set(signs)], at: new Date().toISOString() });
+  const reported = reportedWeekId();
+  const rows = (state.wellbeing_checks || []).filter((row) => row.week_id !== reported);
+  rows.push({ week_id: reported, signs: [...new Set(signs)], at: new Date().toISOString() });
   // Twelve weeks of check-ins is a full cycle and all any rule here looks at.
   state.wellbeing_checks = rows.slice(-12);
   const total = deloadSignsThisWeek();
   if (shouldDeload(total)) {
     state.triggered_deload = {
-      week_id: nextWeekId(derivedCycle(), derivedWeek(), programmeCycleLength()),
+      // Based on the week he REPORTED on, not on where the clock stands after
+      // the push — see `reportedWeekIndex`.
+      week_id: nextWeekId(reportedCycle(), reportedWeek(), programmeCycleLength()),
       signs: total,
       at: new Date().toISOString(),
     };
@@ -416,6 +479,135 @@ export function warmupText(planned, suggestedWeight) {
   return planned.warmup;
 }
 
+// How many working sets that exposure was PRESCRIBED. Read from the session's
+// own stored plan first: weeks 1 and 5 legitimately cap an exercise at two
+// working sets (`reEntryPlan`, research/20 §9.4), and two of two IS a complete
+// exposure — judging an old session by today's prescription would call it short
+// and freeze the load.
+function exposureSetsTarget(performance, planned) {
+  const stored = Number(performance?.planned?.sets ?? performance?.planned?.work_sets);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  const current = Number(planned?.sets ?? planned?.work_sets);
+  if (Number.isFinite(current) && current > 0) return current;
+  // Last resort for a pre-v17 row with no stored plan: the number of working
+  // ROWS the runner laid out for that exposure IS the prescription it was
+  // built from.
+  const rows = (performance?.sets || []).filter((set) => !set.is_warmup).length;
+  return rows > 0 ? rows : null;
+}
+
+// Every countable working set ever logged for this movement, oldest first,
+// reduced to ONE entry per session: the heaviest.
+//
+// C4 reads the LAST entry, so handing it raw set order would read a deliberate
+// drop set (25/25/20) as the session's load and cap the next suggestion at
+// 22 kg — walking him backwards. The controller already treats the top set as
+// the session's load (`lastTopSet` below), and so does C5's all-time best.
+function topWorkingWeightHistory(exercise_id) {
+  const out = [];
+  for (const session of state.history || []) {
+    const entry = findPerformedEntry(session, exercise_id);
+    const weights = (entry?.sets || []).filter(isCountableWorkingSet).map((set) => Number(set.weight));
+    if (!weights.length) continue;
+    out.push({ kind: 'working', valid: true, weight_kg: Math.max(...weights) });
+  }
+  return out;
+}
+
+// The eight safety clamps were written and tested and then imported by NOTHING
+// the browser loads (Round 5 finding #3): C4 (never more than 10%, or one
+// equipment step, above the last completed load), C5 (110% of the all-time
+// best) and C7 (a load past a sane multiple of bodyweight) were decorative.
+// Every load this controller proposes that he has NOT already lifted now runs
+// the pipeline. A rejection means HOLD, which is exactly how the canonical
+// `progressExercise` resolves one (`action: safety.accepted ? 'increase' : 'hold'`).
+function clampedIncrease(exercise_id, currentWeight, proposedWeight) {
+  const current = Number(currentWeight);
+  const proposed = Number(proposedWeight);
+  const logged = topWorkingWeightHistory(exercise_id);
+  // C2 refuses a non-positive load and C6 demands a probe or self-selected
+  // calibration when no positive load was ever logged. Neither is a safety
+  // question about one step taken from a weight he has already lifted, and 0 kg
+  // is a real load here (a machine carrying its own stack). Outside that band,
+  // all of C1-C8 run.
+  if (!Number.isFinite(proposed) || proposed <= 0 || !logged.length) return proposed;
+  // C4's reference is «the latest valid working load», and for THIS suggestion
+  // that is the load it steps from — which is not always the most recent
+  // session's: `getLastTwoPerformances` prefers the machine he is standing at,
+  // a whole-history scan cannot. Pin it rather than let a heavier other machine
+  // set the ceiling.
+  const history = current > 0
+    ? [...logged, { kind: 'working', valid: true, weight_kg: current }]
+    : logged;
+  const exercise = getAllExercises().find((item) => item.id === exercise_id);
+  const verdict = clampWorkingWeight({
+    // A one-row catalogue: C1 only has to resolve THIS movement, and C7 needs
+    // its canonical pattern because data.js still speaks the legacy dialect.
+    catalogue: exercise ? [{ ...exercise, canonical_pattern: canonicalPattern(exercise.pattern) }] : [],
+    exerciseId: exercise_id,
+    proposedWeightKg: proposed,
+    history,
+    equipmentStepKg: equipmentStepKg(exercise_id),
+    firstLoadSource: 'history',
+    bodyweightKg: Number(state.profile?.bodyweight_kg) || Number(RW.ATHLETE?.bodyweight_kg) || null,
+    weeklyVolume: null,
+  });
+  if (!verdict.accepted) return current;
+  // C3's quantisation is this engine's own job (`equipmentStepKg` /
+  // `roundToGymIncrement`) and it rounds DOWN, so letting the pipeline own the
+  // result would turn an earned 4 → 6.5 kg dumbbell step into 5 kg. Only a
+  // CEILING clamp may lower this number, and never below what he already lifts.
+  const ceilingFired = verdict.clamp_fired.includes(CLAMP_IDS.SESSION_RISE)
+    || verdict.clamp_fired.includes(CLAMP_IDS.ALL_TIME_CEILING);
+  return ceilingFired ? Math.max(current, Number(verdict.clamped_kg)) : proposed;
+}
+
+// The two branches that propose a load he has never lifted, and the only two
+// that need a safety verdict. If the clamps trimmed or refused the step, the
+// note says THAT instead of «ارفع 2.5 كغ» over a weight that did not move.
+function clampedIncreaseResult(exercise_id, currentWeight, proposedWeight, note) {
+  const weight = clampedIncrease(exercise_id, currentWeight, proposedWeight);
+  return weight >= Number(proposedWeight)
+    ? { weight, note }
+    : { weight, note: t('why_safety_ceiling') };
+}
+
+// ---- The load he TYPES ---------------------------------------
+// The clamps above police what the app PROPOSES. Nothing policed what he
+// enters, and that is the half that lasts: a ticked set goes straight into
+// `state.prs`, the archived session stats, `getWeeklyVolume` and the history
+// tonnage, and only `state.prs` can be undone (revertPR). Measured 2026-09-23
+// on a seeded profile: chest_press_machine 80 kg × 10 × 3 twice, then one
+// fat-fingered 800 × 10 — the set ticked, `state.prs` took score 1066.7
+// (Epley: 800 × (1 + 10/30)), and the next suggestion read 800 kg as his
+// working load. C7 (`domain/clamps.js`) already
+// knows 800 kg is not a human pressing motion; it simply had no caller on this
+// path.
+//
+// Returns the ceiling this load breaks, or null when the load is ordinary. Two
+// gates, both have to say «absurd», for the reason DECISIONS.md gives for
+// BODYWEIGHT_MIN_KG: wide enough never to argue with a real person, narrow
+// enough to catch a stray zero.
+//   · C7's multiple of bodyweight (upper_press 2×, lower_compound 4× …), and
+//   · one equipment step above his own best logged load on THAT movement —
+//     because a pec-deck stack he really pulls at 70 kg is a fact about his
+//     gym, not a typo, and must stop asking after the first time.
+// This is advisory: `ui/exercise-card.js` asks once and takes the second tap.
+// Raed's standing ruling on guards — a guard that silently swallows what he
+// entered is worse than the thing it prevents.
+export function loadSanityCeilingKg(exercise_id, kg) {
+  const weight = Number(kg);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  const exercise = getAllExercises().find((item) => item.id === exercise_id);
+  if (!exercise) return null;
+  const bodyweight = Number(state.profile?.bodyweight_kg) || Number(RW.ATHLETE?.bodyweight_kg) || null;
+  const ceiling = bodyweightSanityCeilingKg(canonicalPattern(exercise.pattern), bodyweight);
+  if (!ceiling || weight <= ceiling) return null;
+  const logged = topWorkingWeightHistory(exercise_id).map((entry) => entry.weight_kg);
+  if (logged.length && weight <= ceilingAbove(Math.max(...logged), equipmentStepKg(exercise_id))) return null;
+  return ceiling;
+}
+
 export function suggestNextWeight(exercise_id, planned) {
   // Returns { weight, note } — based on last 2 sessions
   const last2 = getLastTwoPerformances(exercise_id);
@@ -451,8 +643,21 @@ export function suggestNextWeight(exercise_id, planned) {
   const lastTopSet = workingSets.reduce(
     (best, set) => ((Number(set.weight) || 0) > (Number(best.weight) || 0) ? set : best),
     workingSets[0]);
-  const allHitTarget = workingSets.every(s => s.reps >= topReps);
+  // research/22 §2 is canonical on how load advances and defines `hit_top` over
+  // a COMPLETE exposure. This line was `workingSets.every(...)` over whatever
+  // countable sets happened to exist, with no `sets_target` check at all — so
+  // one ticked set in each of two half-finished sessions (the machine was taken
+  // after set 1) earned a load increase and the note told him he had completed
+  // the top of the range «في كل المجموعات». Measured 2026-09-23: 1 of 3 sets
+  // twice on chest_press_machine → 22.5 kg suggested and prefilled. The
+  // predicate is now imported from `domain/progression.js`, which has always
+  // had the gate, so the two controllers cannot disagree about it again.
+  const latestSetsTarget = exposureSetsTarget(latest, planned);
+  const allHitTarget = hitTopOfRange(workingSets, latestSetsTarget, topReps);
   const finalEffort = finalSet.effort || null;
+  const prevPerformance = last2[1];
+  const prevSets = (prevPerformance?.sets || []).filter(isCountableWorkingSet);
+  const prevSetsTarget = exposureSetsTarget(prevPerformance, planned);
   // Check if last 2 sessions both hit target
   const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
   // Accessories still add reps BEFORE weight — that half of the rule is sound
@@ -460,14 +665,16 @@ export function suggestNextWeight(exercise_id, planned) {
   // size of the step.
   const bump = equipmentStepKg(exercise_id);
   if (allHitTarget && last2.length === 2) {
-    const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
-    const prevAllHit = prevSets.length && prevSets.every(s => s.reps >= topReps);
+    const prevAllHit = hitTopOfRange(prevSets, prevSetsTarget, topReps);
     if (prevAllHit) {
       if (finalEffort === 'very_hard') {
         return { weight: lastTopSet.weight, note: t('why_hold_very_hard') };
       }
       if (bump > 0) {
-        return { weight: lastTopSet.weight + bump, note: tf('why_bump_twice', { reps: topReps, kg: bump }) };
+        return clampedIncreaseResult(
+          exercise_id, lastTopSet.weight, lastTopSet.weight + bump,
+          tf('why_bump_twice', { reps: topReps, kg: bump }),
+        );
       } else {
         return { weight: lastTopSet.weight, note: t('why_accessory_reps') };
       }
@@ -477,10 +684,12 @@ export function suggestNextWeight(exercise_id, planned) {
   // two consecutive sessions walks the load back one equipment step (never below
   // 0). The two-session gate above already makes him re-earn the step.
   const bottomReps = workingRepTarget(planned);
-  const fellShort = (sets) => sets.some((s) => Number.isFinite(Number(s.reps)) && Number(s.reps) < bottomReps);
+  // The completeness gate runs DOWNWARD too: this was `.some()` over an
+  // arbitrarily short set list, so two abandoned single-set sessions under the
+  // floor walked the load back on evidence of a session that never happened.
   if (last2.length === 2 && bump > 0 && Number(lastTopSet.weight) > 0) {
-    const prevSets = (last2[1].sets || []).filter(isCountableWorkingSet);
-    if (fellShort(workingSets) && prevSets.length && fellShort(prevSets)) {
+    if (fellBelowRepFloor(workingSets, latestSetsTarget, bottomReps)
+      && fellBelowRepFloor(prevSets, prevSetsTarget, bottomReps)) {
       const lowered = roundToGymIncrement(Math.max(0, Number(lastTopSet.weight) - bump), bump);
       const weight = lowered < Number(lastTopSet.weight) ? lowered : Math.max(0, Number(lastTopSet.weight) - bump);
       return { weight, note: tf('why_regress', { reps: bottomReps, kg: bump }) };
@@ -489,7 +698,10 @@ export function suggestNextWeight(exercise_id, planned) {
   // Deliberately NOT for accessories: one easy session is the moment to add a
   // rep, not load. They only graduate on the two-session branch above.
   if (allHitTarget && finalEffort === 'easy' && bump > 0 && !isAccessory) {
-    return { weight: lastTopSet.weight + bump, note: tf('why_easy_bump', { reps: topReps, kg: bump }) };
+    return clampedIncreaseResult(
+      exercise_id, lastTopSet.weight, lastTopSet.weight + bump,
+      tf('why_easy_bump', { reps: topReps, kg: bump }),
+    );
   }
   // A machine that carries its own stack logs 0, and 0 is a real load — but
   // it is a load that cannot go up.

@@ -53,6 +53,29 @@ function currentPattern(exercise) {
   return exercise.canonical_pattern || exercise.pattern || 'isolation';
 }
 
+function stepFor(context) {
+  const step = Number(context.equipment_step_kg ?? context.exercise?.equipment_step_kg ?? DEFAULT_EQUIPMENT_STEP_KG);
+  return Number.isFinite(step) && step > 0 ? step : DEFAULT_EQUIPMENT_STEP_KG;
+}
+
+/**
+ * A percentage ceiling, floored at ONE equipment step.
+ *
+ * The gym is quantised. On a 4 kg dumbbell the smallest jump the rack offers is
+ * 2.5 kg — 62%, far past any percentage band — so a pure «10%, rounded down to
+ * the step» ceiling resolves to 4 kg and the load can never move again. Ten
+ * percent OR one step, whichever is larger: a hallucinated 100 → 300 kg jump is
+ * still capped at 110 kg, and the one increment that physically exists is still
+ * available. Wired live 2026-09-23 (Round 5 finding #3); until then these
+ * clamps were imported by nothing the browser loads, so nothing depended on
+ * the percentage-only reading. Exported 2026-09-23 (Round 5, health) so the
+ * runner's fat-finger guard can ask the same question of a load he TYPES: a
+ * weight within one step of his own best is never a typo, whatever C7 thinks.
+ */
+export function ceilingAbove(reference, step) {
+  return Math.max(roundDownToEquipmentStep(reference * 1.1, step), reference + step);
+}
+
 /** C1 — the exercise must be present in the static catalogue. */
 export function clampUnknownExercise(context) {
   const exercise = lookup(context.catalogue, context.exercise_id);
@@ -69,39 +92,33 @@ export function clampInvalidWeight(context) {
 
 /** C3 — all equipment quantisation is conservative: round down. */
 export function clampEquipmentStep(context) {
-  const step = Number(context.equipment_step_kg ?? context.exercise?.equipment_step_kg ?? DEFAULT_EQUIPMENT_STEP_KG);
+  const step = stepFor(context);
   const rounded = roundDownToEquipmentStep(context.effective_kg, step);
   if (!rounded || rounded <= 0) return reject(context, CLAMP_IDS.EQUIPMENT_STEP, 'rounding down produced a non-positive load');
   if (rounded !== context.effective_kg) return fired({ ...context, effective_kg: rounded }, CLAMP_IDS.EQUIPMENT_STEP, `rounded down to ${rounded} kg by ${step} kg equipment step`);
   return note(context, CLAMP_IDS.EQUIPMENT_STEP, 'passed');
 }
 
-/** C4 — never rise more than ten percent above the latest valid working load. */
+/** C4 — never rise more than ten percent (or one equipment step) above the latest valid working load. */
 export function clampSessionRise(context) {
   const history = numericHistory(context.history);
   const last = history.at(-1);
   if (!last) return note(context, CLAMP_IDS.SESSION_RISE, 'not_applicable');
-  const ceiling = roundDownToEquipmentStep(
-    last * 1.1,
-    Number(context.equipment_step_kg ?? context.exercise?.equipment_step_kg ?? DEFAULT_EQUIPMENT_STEP_KG),
-  );
+  const ceiling = ceilingAbove(last, stepFor(context));
   if (context.effective_kg > ceiling) {
-    return fired({ ...context, effective_kg: ceiling }, CLAMP_IDS.SESSION_RISE, `capped at 10% above last completed ${last} kg`);
+    return fired({ ...context, effective_kg: ceiling }, CLAMP_IDS.SESSION_RISE, `capped at 10% (or one equipment step) above last completed ${last} kg`);
   }
   return note(context, CLAMP_IDS.SESSION_RISE, 'passed');
 }
 
-/** C5 — no prescription above 110% of best valid recorded working load. */
+/** C5 — no prescription above 110% (or one equipment step above) the best valid recorded working load. */
 export function clampAllTimeCeiling(context) {
   const history = numericHistory(context.history);
   if (!history.length) return note(context, CLAMP_IDS.ALL_TIME_CEILING, 'not_applicable');
   const best = Math.max(...history);
-  const ceiling = roundDownToEquipmentStep(
-    best * 1.1,
-    Number(context.equipment_step_kg ?? context.exercise?.equipment_step_kg ?? DEFAULT_EQUIPMENT_STEP_KG),
-  );
+  const ceiling = ceilingAbove(best, stepFor(context));
   if (context.effective_kg > ceiling) {
-    return fired({ ...context, effective_kg: ceiling }, CLAMP_IDS.ALL_TIME_CEILING, `capped at 110% of all-time best ${best} kg`);
+    return fired({ ...context, effective_kg: ceiling }, CLAMP_IDS.ALL_TIME_CEILING, `capped at 110% (or one equipment step above) all-time best ${best} kg`);
   }
   return note(context, CLAMP_IDS.ALL_TIME_CEILING, 'passed');
 }
@@ -115,12 +132,26 @@ export function clampFirstLoad(context) {
   return note(context, CLAMP_IDS.FIRST_LOAD, 'passed');
 }
 
+/**
+ * The C7 ceiling as a plain number, so the runner's own fat-finger guard and
+ * the prescription pipeline cannot disagree about what is physically absurd.
+ * Returns null when bodyweight is unknown — C7 is 'not_applicable' then, and a
+ * caller with no bodyweight has no business inventing a ceiling of its own.
+ * Exported 2026-09-23 (Round 5, health): `core/engine.js loadSanityCeilingKg`
+ * is the second caller.
+ */
+export function bodyweightSanityCeilingKg(pattern, bodyweightKg) {
+  const bodyweight = Number(bodyweightKg);
+  if (!Number.isFinite(bodyweight) || bodyweight <= 0) return null;
+  const multiplier = PATTERN_MULTIPLES[pattern] ?? PATTERN_MULTIPLES.isolation;
+  return bodyweight * multiplier;
+}
+
 /** C7 — an engineering absurdity filter, not a training target. */
 export function clampBodyweightSanity(context) {
-  const bodyweight = Number(context.bodyweight_kg);
-  if (!Number.isFinite(bodyweight) || bodyweight <= 0) return note(context, CLAMP_IDS.BODYWEIGHT_SANITY, 'not_applicable', 'bodyweight unavailable');
+  const ceiling = bodyweightSanityCeilingKg(currentPattern(context.exercise), context.bodyweight_kg);
+  if (ceiling === null) return note(context, CLAMP_IDS.BODYWEIGHT_SANITY, 'not_applicable', 'bodyweight unavailable');
   const multiplier = PATTERN_MULTIPLES[currentPattern(context.exercise)] ?? PATTERN_MULTIPLES.isolation;
-  const ceiling = bodyweight * multiplier;
   if (context.effective_kg > ceiling) {
     return reject(context, CLAMP_IDS.BODYWEIGHT_SANITY, `${context.effective_kg} kg exceeds ${multiplier}× bodyweight (${ceiling} kg) for ${currentPattern(context.exercise)}`);
   }

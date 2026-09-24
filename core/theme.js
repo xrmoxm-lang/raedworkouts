@@ -1,6 +1,6 @@
 /* Skins and the block-boundary suggestion. A boundary proposes; only a tap applies. */
 
-import { $, h, toast, toastSaved } from '../core/dom.js';
+import { $, h, syncToastClearance, toast, toastSaved } from '../core/dom.js';
 import { t, tf } from '../core/i18n.js';
 import { renderSettings } from '../core/shell.js';
 import { replaceSettings, saveLocal, settings } from '../core/store.js';
@@ -78,6 +78,7 @@ if (darkQuery && typeof darkQuery.addEventListener === 'function') {
 function closeSkinSuggestion() {
   const el = $('#toast');
   el.classList.remove('show', 'skin-suggestion');
+  syncToastClearance();
 }
 
 export function showSkinSuggestion(suggestion) {
@@ -109,5 +110,10 @@ export function showSkinSuggestion(suggestion) {
       toast(t('keep_this_one'));
     } }, t('keep_this_one')),
   ));
+  // This one is built by hand rather than through toast(), and it is the
+  // TALLEST toast the app has (two lines and two buttons) — so it needs the
+  // same measured clearance, or it lands on whatever control is at the bottom
+  // of the page he happens to be on. See core/dom.js.
+  syncToastClearance();
 }
 

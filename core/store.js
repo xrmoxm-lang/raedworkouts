@@ -8,6 +8,7 @@ import { scheduleSetEditPersist } from '../core/session.js';
 import { downloadJson, flushSync, schedulePush, setSyncStatus } from '../core/sync.js';
 import { migrateVideoHiddenKeys } from '../core/videos.js';
 import { runProgrammeReferenceMigrations } from '../domain/programme.js';
+import { mergeChangedOurs, mergeLocalStates } from '../domain/state-merge.js';
 
 // Self-hosted sync — always-on on Raed's HP server (Tailscale Funnel, public
 // HTTPS, secret-key gated). The server owns revisions, backups, and merges.
@@ -26,10 +27,18 @@ const PROFILE_INDEX_KEY = 'raedworkouts.profiles.v1';
 // Every write in this file used to call localStorage.setItem bare. There was
 // no try/catch on a single one of the fifteen, and no window.onerror either.
 export let storageFailed = false;
+// Which key is the ALARM about. Clearing on any successful write is what made a
+// partially full phone lie: measured 2026-09-23 on a size-selective quota stub,
+// the 65,379-char state write threw, the 698-char settings write that follows it
+// succeeded, `storageFailed` flipped back to false, and the toast he got was
+// «حُفظت محلياً» — the one sentence locale.js:905 exists to prevent. Only the
+// STATE key can clear the alarm, because only the state key holds the workout.
+const STATE_KEY_RE = /^raedworkouts\..+\.state\.v1$/;
+export function isStateStorageKey(key) { return STATE_KEY_RE.test(String(key || '')); }
 export function safeSetItem(key, value) {
   try {
     localStorage.setItem(key, value);
-    if (storageFailed) {
+    if (storageFailed && isStateStorageKey(key)) {
       storageFailed = false;
       setSyncStatus('ok', t('storage_recovered'));
     }
@@ -76,6 +85,54 @@ export function lastRevKey(userId) { return nsKey(userId, 'lastrev'); }
 export function preRestoreKey(userId) { return nsKey(userId, 'prerestore'); }
 export function dirtyKey(userId) { return nsKey(userId, 'dirty'); }
 function programmeMigrationExportKey(userId) { return nsKey(userId, 'programme-migration-export'); }
+// Where a state blob that will not parse is put. Never overwritten, never
+// synced — it is the last copy of whatever is left of his sessions.
+export function corruptKey(userId) { return nsKey(userId, 'corrupt'); }
+// Monotonic write counter for the state key, so a second tab cannot clobber
+// blind. See domain/state-merge.js for why.
+function stateSeqKey(userId) { return nsKey(userId, 'stateseq'); }
+
+// ---- Corrupt local state ------------------------------------------------
+// A blob that fails to parse used to be swallowed: loadLocal() kept the empty
+// defaultState(), wrote it straight back over the still-recoverable text, and
+// the boot push then wrote that empty state over the cloud head (base_rev
+// matched, so raedsync.py took the fast path). Measured 2026-09-23: 58,990
+// bytes and 12 sessions became 577 bytes and 0, on the phone AND in the cloud,
+// and the only thing he was told was «فشلت المزامنة السحابية — حُفظت محلياً».
+// A blob that will not parse is now a hard fault: quarantine, write NOTHING,
+// push NOTHING, and ask him which copy to restore.
+let stateCorrupt = false;
+export function isStateCorrupt() { return stateCorrupt; }
+export function clearStateCorrupt() { stateCorrupt = false; }
+export let corruptReport = null;   // { user_id, bytes, quarantined, at }
+function quarantineCorruptState(userId, rawText, err) {
+  stateCorrupt = true;
+  // Aside FIRST, before anything in the boot path can touch the state key. If
+  // this write itself fails (a full phone is one of the ways a blob gets
+  // truncated), the original is still where it was — nothing overwrites it.
+  const quarantined = safeSetItem(corruptKey(userId), rawText);
+  corruptReport = {
+    user_id: userId,
+    bytes: rawText.length,
+    quarantined,
+    at: new Date().toISOString(),
+  };
+  console.error('[raedworkouts] local state will not parse — quarantined', corruptReport, err);
+  // Enough identity to offer a restore, and nothing that would be written back.
+  settings.user_id = userId;
+  settings.sync_url = getSyncUrl();
+  settings.sync_key = SYNC_KEY;
+  try {
+    // Read-only: his language and theme decide how the recovery screen looks.
+    const storedSettings = JSON.parse(safeGetItem(settingsKey(userId)) || '{}');
+    const { lang, theme, skin } = retireLegacyCredentialFields(storedSettings);
+    if (lang) settings.lang = lang;
+    if (theme) settings.theme = theme;
+    if (skin) settings.skin = skin;
+  } catch (_) { /* the settings blob is not the one that failed; if it is too, defaults */ }
+  syncDirty = false;
+  setSyncStatus('err', t('state_corrupt_status'));
+}
 
 export const defaultState = () => ({
   schema_version: 2,
@@ -112,6 +169,10 @@ export const defaultSettings = () => ({
   theme: 'auto',               // auto | light | dark
   skin: 'hadid',               // hadid | waraq | rukham
   weight_unit: 'kg',           // kg | lb
+  // The treadmill's own unit. Raed 2026-09-23: it reads MPH — his 5.1 and 7.3
+  // are miles per hour, which makes his base a jog and not a brisk walk. The
+  // segment that changes it (and converts the numbers with it) is in Settings.
+  speed_unit: 'mph',           // mph | kmh
   rest_seconds: 120,
   rest_override: false,        // opt-in: use rest_seconds instead of the programme's per-exercise rest
   tap_log: false,              // opt-in: record which controls he presses, locally, for a review with Claude
@@ -329,9 +390,30 @@ export function loadLocal() {
   activeUser = getActiveUser();
   state = defaultState();
   settings = defaultSettings();
+  stateCorrupt = false;
+  corruptReport = null;
   if (activeUser) {
+    const rawState = safeGetItem(stateKey(activeUser));
     let storedState = {};
-    try { storedState = JSON.parse(safeGetItem(stateKey(activeUser)) || '{}'); } catch (e) {}
+    if (rawState) {
+      try {
+        const parsed = JSON.parse(rawState);
+        // A truncated blob can still parse — into a string, a number, an array.
+        // None of those are a profile, and `{...defaultState(), ...'abc'}` is a
+        // silent empty state exactly like the catch used to be.
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('state blob parsed to ' + (Array.isArray(parsed) ? 'an array' : typeof parsed));
+        }
+        storedState = parsed;
+      } catch (err) {
+        quarantineCorruptState(activeUser, rawState, err);
+        return;   // nothing is written, nothing is pushed, until he chooses
+      }
+    }
+    // This context is now exactly as current as the disk. Any write that
+    // arrives after this line is somebody else's.
+    stateSeq = readStateSeq(activeUser);
+    foreignWriteSeen = false;
     state = { ...defaultState(), ...storedState };
     // New profiles begin at version 1. A stored profile without this explicit
     // marker predates D6 and must take the export-first reference migration.
@@ -383,23 +465,89 @@ export function loadLocal() {
     syncDirty = readDirtyMarker(settings.user_id);
     registerLocalProfile({ user_id: settings.user_id, ...state.profile });
     safeSetItem(settingsKey(settings.user_id), JSON.stringify(settings));
-    safeSetItem(stateKey(settings.user_id), JSON.stringify(state));
+    writeStateBlob(settings.user_id, JSON.stringify(state));
   } else {
     syncDirty = false;
   }
 }
-export function persistLocal() {
-  if (!settings.user_id) return;
+
+// ---- One writer at a time ----------------------------------------------
+// Every state write carries a monotonic counter and the id of the context that
+// wrote it, in their own small key. persistLocal reads that counter back before
+// it writes: a counter higher than the one this context loaded means another
+// tab, window or the native shell wrote in the meantime, and a blind write
+// would erase it (measured 2026-09-23 — three logged sets destroyed by one
+// settings tap in a second tab).
+const WRITER_ID = Math.random().toString(36).slice(2, 10);
+let stateSeq = 0;
+let foreignWriteSeen = false;
+let staleToastShown = false;
+function readStateSeq(userId) {
+  const raw = safeGetItem(stateSeqKey(userId)) || '';
+  const seq = parseInt(String(raw).split('|')[0], 10);
+  return Number.isFinite(seq) ? seq : 0;
+}
+function writeStateBlob(userId, text) {
+  const ok = safeSetItem(stateKey(userId), text);
+  if (!ok) return false;
+  stateSeq = Math.max(readStateSeq(userId), stateSeq) + 1;
+  safeSetItem(stateSeqKey(userId), `${stateSeq}|${WRITER_ID}`);
+  foreignWriteSeen = false;
+  return true;
+}
+// The `storage` event fires in every OTHER context, never in the writer. It is
+// the second fence: if the counter key itself could not be written (a full
+// phone), this still tells us someone else is writing.
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', (event) => {
+    if (!event || !settings.user_id) return;
+    if (event.key !== stateKey(settings.user_id) && event.key !== stateSeqKey(settings.user_id)) return;
+    foreignWriteSeen = true;
+  });
+}
+function adoptForeignState(userId) {
+  let disk;
+  try {
+    const parsed = JSON.parse(safeGetItem(stateKey(userId)) || 'null');
+    disk = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (_) { disk = null; }
+  // A blob we cannot read is NOT a reason to overwrite it from here: loadLocal
+  // owns that decision (quarantine), and this path holds a good state anyway.
+  if (!disk) return;
+  const merged = mergeLocalStates(state, disk);
+  const changed = mergeChangedOurs(state, merged);
+  state = merged;
+  stateSeq = readStateSeq(userId);
+  if (changed && !staleToastShown) {
+    staleToastShown = true;
+    toast(t('state_merged_other_tab'), 6000);
+  }
+}
+export function persistLocal(opts = {}) {
+  if (!settings.user_id) return false;
+  // Quarantined: the only writes allowed now are the ones he asks for by
+  // choosing a restore, and those clear the flag first.
+  if (stateCorrupt) return false;
+  const { authoritative = false } = opts;
+  // A restore (revision / import / undo) is the user replacing everything on
+  // purpose; merging another tab's copy back in would undo exactly that.
+  if (!authoritative && (foreignWriteSeen || readStateSeq(settings.user_id) > stateSeq)) {
+    adoptForeignState(settings.user_id);
+  }
   const now = new Date().toISOString();
   state.last_sync = now;
   settings.sync_url = getSyncUrl();
   settings.sync_key = SYNC_KEY;
   ensureProfile();
   backfillSessionUids();
-  safeSetItem(stateKey(settings.user_id), JSON.stringify(state));
+  // The state write is the save. When it fails there is nothing to stamp a
+  // «saved at» on and no profile row to refresh — writing those anyway is how
+  // a phone that saved nothing still looked saved.
+  if (!writeStateBlob(settings.user_id, JSON.stringify(state))) return false;
   safeSetItem(settingsKey(settings.user_id), JSON.stringify(settings));
   safeSetItem(lastWriteKey(settings.user_id), now);
   registerLocalProfile({ user_id: settings.user_id, ...state.profile });
+  return true;
 }
 // Headroom, NOT pruning.
 const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
@@ -433,8 +581,12 @@ export function markDirty() {
   setSyncStatus(navigator.onLine === false ? 'err' : 'off', navigator.onLine === false ? t('sync_pending_offline') : t('sync_pending'));
 }
 export function saveLocal(opts = {}) {
-  const { sync = true, dirty = true } = opts;
-  persistLocal();
+  const { sync = true, dirty = true, authoritative = false } = opts;
+  // While the local blob is quarantined nothing is saved and nothing is
+  // marked dirty: a dirty marker is a promise to push, and pushing an empty
+  // state is precisely how the cloud copy was lost too.
+  if (isStateCorrupt()) return false;
+  persistLocal({ authoritative });
   if (dirty) markDirty();
   if (sync && dirty) schedulePush();
 }

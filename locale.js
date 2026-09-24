@@ -213,6 +213,10 @@ export const LOCALE = Object.freeze({
   why_accessory_reps: pair('Add a rep or a set rather than weight — this is an accessory.', 'أضف تكرارًا أو مجموعة بدل الوزن — هذا تمرين مساعد.'),
   why_easy_bump: pair('Easy on the final set after every set reached {reps} — the increase lands a session sooner: +{kg} kg.', 'سهل في الأخيرة بعد بلوغ {reps} في كل المجموعات — الزيادة تأتي أبكر بجلسة: +{kg} كغ.'),
   why_match_or_beat: pair('Last time: {kg} kg × {reps}. Match it or beat it.', 'المرة الماضية: {kg} كغ × {reps}. اعدلها أو تجاوزها.'),
+  // The safety clamps (domain/clamps.js C1-C8) refused or trimmed an earned
+  // increase. Saying «ارفع كذا» over a load that did not move is the lie this
+  // replaces.
+  why_safety_ceiling: pair('Safety ceiling reached — the increase was held back. Log this load again.', 'بلغت سقف الأمان — كُبحت الزيادة. سجّل هذا الوزن مرة أخرى.'),
   // The week strip states facts only: the programme has no weekday mapping, so
   // it never claims tomorrow is a rest day. Raed decides that.
   week_today_is: pair('Today: {name}', 'اليوم: {name}'),
@@ -478,6 +482,8 @@ export const LOCALE = Object.freeze({
   keep_this_one: pair('Keep this one', 'أبقِه'),
   open_gym: pair('Open IN2 Fitness', 'افتح النادي'),
   cancel_rest: pair('Cancel rest', 'ألغِ الراحة'),
+  // The label on the runner's in-flow countdown row (ROUND5-FABLE-BRIEF §A.1).
+  rest_label: pair('Rest', 'راحة'),
   start_session: pair('Start Session', 'ابدأ التمرين'),
   rest_day: pair('🛋️ Rest day', '🛋️ يوم راحة'),
   gym_day: pair('🏋️ Today is', '🏋️ اليوم'),
@@ -642,6 +648,10 @@ export const LOCALE = Object.freeze({
   very_hard: pair('Very hard', 'صعب جدًا'),
   final_set_effort: pair('Final-set effort', 'مجهود المجموعة الأخيرة'),
   final_set_prompt: pair('Final set: tap easy, medium, or very hard first.', 'للمجموعة الأخيرة: اختر سهل أو متوسط أو صعب جداً أولاً.'),
+  // The fat-finger check (core/engine.js loadSanityCeilingKg). It states the
+  // number back to him and asks for the same tap again — it never says the
+  // load is wrong, because on a machine stack it sometimes is not.
+  weight_check: pair('{kg} kg? Tap again to confirm.', '{kg} كغ؟ اضغط مرة أخرى للتأكيد.'),
   finish_ramp_prompt: pair('Finish this exercise’s ramp set first.', 'أكمل مجموعة التدرّج لهذا التمرين أولاً.'),
   exercise_library: pair('Exercise library', 'مكتبة التمارين'),
   search_exercises: pair('🔍 Search exercises…', '🔍 ابحث عن تمرين…'),
@@ -688,6 +698,73 @@ export const LOCALE = Object.freeze({
   cue: pair('Cue: ', 'التوجيه: '),
   current_set: pair('المجموعة الحالية', 'المجموعة الحالية'),
   minutes: pair('min', 'دقائق'),
+
+  // ---- Post-workout conditioning (Raed 2026-09-22) -----------------------
+  // «الجهد» is MET-minutes: intensity x time. It is the only total that prices
+  // the incline, which is why it and not distance is the number he beats.
+  cardio_title: pair('Cool-down cardio', 'التهدئة'),
+  cardio_sub: pair('Optional, and recorded — so the next one has something to beat.', 'اختيارية، وتُسجَّل — حتى يكون للمرة القادمة رقم تتجاوزه.'),
+  cardio_duration: pair('Duration', 'المدة'),
+  // Raed 2026-09-23: the belt reads mph, so his 5.1 base is 137 m/min — a jog,
+  // not a walk. The section is «الأساس» and the pace label says which it is; the
+  // old «المشي» title is gone rather than left to mislabel a jog.
+  cardio_base: pair('The base', 'الأساس'),
+  cardio_pace_walk: pair('walking', 'المشي'),
+  cardio_pace_jog: pair('jogging', 'الهرولة'),
+  cardio_speed: pair('Speed', 'السرعة'),
+  cardio_incline: pair('Incline', 'الميل'),
+  cardio_bursts: pair('Bursts', 'الانطلاقات'),
+  cardio_burst_count: pair('How many', 'العدد'),
+  cardio_burst_speed: pair('Burst speed', 'سرعة الانطلاقة'),
+  cardio_seconds: pair('sec', 'ثانية'),
+  cardio_effort: pair('effort', 'نقطة جهد'),
+  // Said ONCE, in the intro. «نقطة جهد» is a unit this app coined, and a coined
+  // unit nobody defines is a number he has to take on trust. Written MET-min and
+  // not MET·min on purpose: the bidi isolator's run class has no '·', so the
+  // middle dot splits the run and strands the '(' in the Arabic node, where the
+  // bidi algorithm mirrors it into a second ')' — Raed's doubled-paren bug.
+  cardio_effort_def: pair('Effort = intensity × minutes (MET-min).', 'الجهد = الشدة × الدقائق (MET-min).'),
+  cardio_km: pair('km', 'كم'),
+  cardio_mile: pair('mi', 'ميل'),
+  cardio_walk_min: pair('min walking', 'دقيقة مشي'),
+  cardio_jog_min: pair('min jogging', 'دقيقة هرولة'),
+  cardio_burst_min: pair('min bursting', 'دقيقة انطلاق'),
+  cardio_log: pair('Log the cool-down', 'سجّل التهدئة'),
+  cardio_skip: pair('Skip the cool-down', 'تخطَّ التهدئة'),
+  cardio_skipped: pair('Skipped today.', 'تُخطّيت اليوم.'),
+  cardio_edit: pair('Edit', 'تعديل'),
+  cardio_best: pair('Best', 'أفضلك'),
+  cardio_beat_by: pair('{n} above your best', '{n} فوق أفضلك'),
+  cardio_below_best: pair('{n} short of your best', 'يفصلك {n} عن أفضلك'),
+  cardio_first: pair('First one — this becomes the mark.', 'أول مرة — هذه ستصير العلامة.'),
+  cardio_today: pair('Today:', 'اليوم:'),
+  cardio_apply: pair('Use it', 'طبّقه'),
+  cardio_why_incline: pair('take the incline from {from}% to {to}% — same minutes, more work.', 'ارفع الميل من {from}% إلى {to}% — نفس الدقائق وجهد أكبر.'),
+  cardio_why_duration: pair('go from {from} to {to} minutes.', 'من {from} إلى {to} دقيقة.'),
+  cardio_why_bursts: pair('add one burst, {from} to {to}.', 'زد انطلاقة واحدة، من {from} إلى {to}.'),
+  cardio_why_burst_speed: pair('take the bursts from {from} to {to}.', 'ارفع سرعة الانطلاق من {from} إلى {to}.'),
+  cardio_ideal_grade: pair('At {speed}, a {grade}% incline puts the walk in the useful zone.', 'عند السرعة {speed}، الميل {grade}% يضع المشي في النطاق المفيد.'),
+  cardio_in_band: pair('The walk is in the zone ({mets} METs).', 'المشي داخل النطاق ({mets} MET).'),
+  cardio_below_band: pair('The walk is under the zone ({mets} METs).', 'المشي تحت النطاق ({mets} MET).'),
+  // The third state. «تحت النطاق» used to be printed for a walk that was OVER
+  // it, which is the one direction where the advice it implies is backwards.
+  cardio_above_band: pair('The walk is over the zone ({mets} METs).', 'المشي فوق النطاق ({mets} MET).'),
+  // A jogged base gets no band verdict — the band is a walking-equation idea —
+  // so it gets the fact instead: what the jog actually costs.
+  cardio_base_jog_fact: pair('Jogging base · {mets} MET', 'الأساس هرولة · {mets} MET'),
+  cardio_overfilled: pair('The bursts fill the whole bout. Add minutes, or drop one.', 'الانطلاقات تملأ المدة كلها. زد الدقائق أو انقص واحدة.'),
+  // A cleared box is not a zero, and a total computed from one is a bout that
+  // never happened. The block says this and disables the log button instead.
+  cardio_incomplete: pair('Fill in the numbers.', 'أكمل الأرقام.'),
+  unit_kmh: pair('km/h', 'كم/س'),
+  unit_mph: pair('mph', 'ميل/س'),
+  // The treadmill's unit, in Settings. Switching it converts what he already
+  // typed — the same belt, read off a machine set the other way.
+  speed_unit: pair('Treadmill unit', 'وحدة المشاية'),
+  speed_unit_desc: pair('Speeds in the cool-down are converted, not relabelled.', 'سرعات التهدئة تُحوَّل، لا تُعاد تسميتها فقط.'),
+  speed_unit_converted: pair('Speeds converted to the new unit.', 'حُوِّلت السرعات إلى الوحدة الجديدة.'),
+  // The finished-session duration, now a clock reading rather than a minute count.
+  session_duration: pair('Duration', 'مدة الجلسة'),
   reps_short: pair('reps', 'تكرارات'),
   kg: pair('kg', 'kg'),
   warmup_phase: pair('⚠ PHASE 1 · WARM-UP', '⚠ المرحلة الأولى · الإحماء'),
@@ -866,6 +943,32 @@ export const LOCALE = Object.freeze({
     'Not saved — not on the phone, not on the server. Write down this set.',
     'ما انحفظ — لا على الجوال ولا على الخادم. سجّل هذي المجموعة عندك.'),
   storage_recovered: pair('Saving again', 'رجع الحفظ يشتغل'),
+
+  // A state blob that will not parse. Measured 2026-09-23: swallowing the parse
+  // error kept an empty default state, wrote it back over the still-readable
+  // text, and the boot push then took the cloud copy too — 12 sessions to 0 in
+  // both places. The copy is now set aside and he is asked, so the words have
+  // to say three things: it is not lost, nothing was sent, and here is the
+  // choice.
+  state_corrupt_status: pair('Saved copy unreadable', 'النسخة المحفوظة ما تنقرأ'),
+  state_corrupt_title: pair(
+    "This phone's saved copy will not open",
+    'نسخة الجوال المحفوظة ما تنفتح'),
+  state_corrupt_body: pair(
+    'Nothing was deleted and nothing was sent to the server. The damaged copy is set aside. Choose where to restore from.',
+    'ما انحذف شيء وما انرسل شيء للخادم. النسخة التالفة محفوظة جانبًا. اختر من وين نستعيد.'),
+  state_corrupt_kept: pair('Set aside, in characters:', 'المحفوظ جانبًا بالحروف:'),
+  state_corrupt_cloud: pair('Restore from the server', 'استعادة من الخادم'),
+  state_corrupt_revisions: pair('Choose an older backup', 'اختر نسخة أقدم'),
+  state_corrupt_restored: pair('Restored from the server.', 'استُعيدت النسخة من الخادم.'),
+  state_corrupt_no_cloud: pair(
+    'The server has no newer copy right now — try an older backup.',
+    'ما عند الخادم نسخة أحدث الحين — جرّب نسخة أقدم.'),
+  // Two windows of the app open at once: the older one merged instead of
+  // overwriting (domain/state-merge.js).
+  state_merged_other_tab: pair(
+    'Another window had newer data — the two were merged.',
+    'نافذة ثانية كانت أحدث — دُمجت النسختان.'),
   // An early warning, years before the ceiling. Deliberately says nothing about
   // deleting anything: his history is not the app's to trade away for room.
   storage_getting_full: pair(

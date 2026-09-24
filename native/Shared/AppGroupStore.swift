@@ -28,13 +28,10 @@ enum RW {
     // The gym app's real URL scheme, learned from iOS rather than guessed.
     static let gymSchemeKey = "rw.gym.scheme"
     // IN2 Fitness declares no URL scheme (19 candidates probed on the device,
-    // none installed; no universal link on in2fitness.sa either). Shortcuts
-    // is the only way to open such an app, and x-callback reports a missing
-    // shortcut back to us so it can fall through to the store.
-    static let gymShortcutName = "IN2"
-    static var gymShortcutURL: String {
-        "shortcuts://x-callback-url/run-shortcut?name=\(gymShortcutName)&x-error=\(urlScheme)://gymfail"
-    }
+    // none installed; no universal link on in2fitness.sa either). A Shortcuts
+    // hop lived here in round 3 and was removed on Raed's ruling of 2026-09-23:
+    // the store page is the honest destination, and for an installed app it
+    // shows «Open».
 
     static func deepLink(_ path: String = "open") -> URL {
         URL(string: "\(urlScheme)://\(path)") ?? URL(string: "\(urlScheme)://open")!

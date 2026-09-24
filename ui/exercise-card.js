@@ -11,11 +11,13 @@ import {
   getActiveProgramme,
   getLastPerformance,
   ledgerMessage,
+  loadSanityCeilingKg,
   originalExerciseName,
   prescribedEffortSequence,
   prescribedRestSeconds,
   recordSubstitution,
   rememberDevice,
+  revertPR,
   runRampRules,
   suggestNextWeight,
   supersetPartner,
@@ -34,7 +36,7 @@ import {
   t,
   tf,
 } from '../core/i18n.js';
-import { startRest } from '../core/rest.js';
+import { cancelRest, startRest } from '../core/rest.js';
 import {
   addExerciseToSession,
   appendExerciseToSession,
@@ -78,6 +80,22 @@ function revealEffortStrip(strip) {
     if (box.top >= 0 && box.bottom <= floor) return;
     strip.scrollIntoView({ block: 'end', behavior: 'auto' });
   });
+}
+
+// Repaint ONE set row after an edit demoted it, without a render(). Removing the
+// ✓ and the `.done` tint is half of it: the accent has to move too, because the
+// demoted row may now be the first unfinished one, and «the live row» is the
+// single thing on this screen that carries the accent.
+function demoteSetRow(body, row, check) {
+  row.classList.remove('done');
+  check.classList.remove('checked');
+  check.setAttribute('aria-pressed', 'false');
+  check.textContent = '';
+  const rows = [...body.querySelectorAll('.set-grid')];
+  rows.forEach((node) => node.classList.remove('current'));
+  const live = rows.find((node) => !node.classList.contains('done') && !node.classList.contains('skipped')
+    && !node.querySelector('.set-check.checked'));
+  if (live) live.classList.add('current');
 }
 
 function showSubstitutionScopeModal(exercise_id, exState, alt) {
@@ -221,7 +239,12 @@ export function renderExerciseCard(ex_id, exState) {
   } else {
     // Half the catalogue he can reach by swapping has no clip of its own — 39
     // of 78, measured.
-    const related = relatedClips(ex);
+    //
+    // But this branch is also reached when the gear's clip switch is OFF, since
+    // that is the other way `allVideos` comes back empty — so turning clips off
+    // replaced his clips with somebody else's instead of removing them. The
+    // switch means no clips, and a borrowed clip is still a clip.
+    const related = settings.runner_video_open ? relatedClips(ex) : [];
     if (related.length) {
       body.appendChild(h('div', { class: 'related-clips', 'data-related-clips': 'true' },
         h('div', { class: 'related-clips-note tiny' }, t('related_clip_note')),
@@ -328,6 +351,113 @@ export function renderExerciseCard(ex_id, exState) {
     const setNum = isWarm ? `W${idx+1}` : `${idx - exState.sets.filter(s => s.is_warmup).length + 1}`;
     const workingSets = exState.sets.filter((item) => !item.is_warmup);
     const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
+    // One edit to a ticked row, done in place. A full render() would take the
+    // caret out of the box he is typing in, which is why this repaints the two
+    // marks («.done» and the ✓) and moves the accent itself.
+    const onValueEdited = (property, value) => {
+      const wasCompleted = !isWarm && set.completed === true;
+      const demoted = applySetEdit(set, property, value);
+      if (wasCompleted) {
+        // The numbers behind a ticked set changed, so whatever PR that tick
+        // wrote no longer describes it. Put back what it displaced, then let
+        // the new numbers earn a record on their own merits.
+        revertPR(actualId, set);
+        if (!demoted && hasValidWorkingValues(set)) {
+          detectPR(actualId, parseFloat(set.weight), parseInt(set.reps, 10), set);
+        }
+      }
+      if (demoted) demoteSetRow(body, row, check);
+    };
+    const check = h('button', {
+      class: 'set-check' + (set.completed ? ' checked' : '') + (set.skipped ? ' skipped' : ''),
+      // This is THE control of the app — the one he taps after every set —
+      // and it had no accessible name at all.
+      'aria-label': tf(isWarm ? 'a11y_complete_ramp_set' : 'a11y_complete_set', { n: idx + 1 }),
+      'aria-pressed': set.completed ? 'true' : 'false',
+      disabled: Boolean(set.skipped),
+      onClick: () => {
+        if (!set.completed) {
+          // hasValidWorkingValues, NOT hasWorkingWeight: the card's own copy of
+          // the rule required weight > 0, so a «وزن الجهاز فقط» set — legitimately
+          // 0 kg — could be created and never ticked complete.
+          if (!isWarm && !hasValidWorkingValues(set)) {
+            toast(t('required'));
+            return;
+          }
+          if (isFinalWorkingSet && !set.effort) {
+            // Refusing has to REVEAL the thing it is asking for: the picker used
+            // to open only when the second-to-last set was ticked, so «اختر الجهد»
+            // appeared with no picker anywhere on screen.
+            set.effort_prompted = true;
+            saveLocal();
+            render();
+            toast(t('final_set_prompt'));
+            return;
+          }
+          if (!isWarm && exState.sets.some((prior, priorIndex) => priorIndex < idx && prior.is_warmup && !prior.completed)) {
+            toast(t('finish_ramp_first'));
+            return;
+          }
+          // One stray zero is permanent: a ticked set writes the PR, the
+          // archived stats, the weekly volume and the tonnage, and only the PR
+          // can be undone. `loadSanityCeilingKg` (core/engine.js) asks C7 and
+          // his own best load; it answers non-null only when BOTH call the
+          // number absurd — 800 kg on a chest press, never a 70 kg stack he
+          // really pulls. Asking, not refusing: the second tap logs it and the
+          // exercise stops asking for that load, because a guard that swallows
+          // what he entered is worse than the typo (his standing ruling).
+          if (!isWarm && !set.weight_checked
+              && Number(set.weight) > (Number(exState.load_ack_kg) || 0)
+              && loadSanityCeilingKg(actualId, set.weight) !== null) {
+            set.weight_checked = true;
+            saveLocal();
+            toast(tf('weight_check', { kg: fmtLoadKg(Number(set.weight)) }));
+            return;
+          }
+          // He confirmed this load once, so the rest of the exercise stops
+          // asking about it — three questions in one session is a guard he
+          // learns to tap through. Highest confirmed load only: it never falls
+          // back down to a lighter set's number.
+          if (!isWarm && set.weight_checked) {
+            exState.load_ack_kg = Math.max(Number(exState.load_ack_kg) || 0, Number(set.weight));
+          }
+          // PR detection (silent). The set is handed in so the tick can record
+          // what it displaced — see detectPR/revertPR in core/engine.js.
+          if (!isWarm && set.weight && set.reps) detectPR(actualId, parseFloat(set.weight), parseInt(set.reps, 10), set);
+        }
+        set.completed = !set.completed;
+        // Unticking must undo the tick WHOLE. It used to leave the PR behind.
+        if (!set.completed && !isWarm) revertPR(actualId, set);
+        // A ramp set that came back easy is the load probe of research/06
+        // §6.3. Run it before the re-render so the working rows below already
+        // carry the derived weight when he looks down at them.
+        if (set.completed && isWarm) runRampRules(exState, actualId);
+        saveLocal();
+        render();
+        if (set.completed && !isWarm) {
+          // A rest is FOR the set that follows it. When this tick resolves the
+          // last exercise there is no such set: what follows is the done panel,
+          // the cool-down and «أنهِ الجلسة». Starting one anyway parked the dock
+          // over the cool-down's totals and its log button — measured on the
+          // done panel, 390×844, in Fable's round-5 review (2026-09-23). So the
+          // lifting's last tick starts no rest, and cancels one still running
+          // from the set before it.
+          const liftingOver = Object.values(state.active_session?.exercises || {}).every(isRunnerExerciseResolved);
+          if (liftingOver) cancelRest();
+          const restSeconds = liftingOver ? 0 : prescribedRestSeconds(planned);
+          if (restSeconds > 0) startRest(restSeconds);
+          if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
+          // Move to the other half of the pair. After A1 that is «move
+          // right into»
+          const moved = advanceSuperset(actualId);
+          if (moved) {
+            const name = getAllExercises().find((item) => item.id === (moved.state?.swapped_to || moved.id))?.name;
+            toast(tf('superset_next', { name: name || moved.id }));
+            render();
+          }
+        }
+      }
+    }, set.skipped ? '↷' : set.completed ? '✓' : '');
     const row = h('div', {
       class: 'set-grid' + (isWarm ? ' warm' : '') + (set.completed && !isWarm ? ' done' : '') + (set.skipped ? ' skipped' : '') + (set.is_extra ? ' extra' : '') + (idx === currentIdx ? ' current' : ''),
       'data-session-set-row': String(idx),
@@ -336,7 +466,12 @@ export function renderExerciseCard(ex_id, exState) {
       // Raed: "نشيل الأرقام، ويكون بس اللي موجود اللي بالخلفية".
       h('div', { class: 'set-num' + (isWarm ? ' warm-mark' : '') }, isWarm ? t('ramp_short') : ''),
       h('input', {
-        type: 'number', step: '0.5', inputmode: 'decimal',
+        // `min` mirrors the model's own rule (hasValidWorkingValues: weight ≥ 0,
+        // reps ≥ 1), so the native stepper cannot walk into a value the app
+        // would then refuse. There is deliberately NO `max`: an upper bound here
+        // would silently rewrite what he typed, and the fat-finger ceiling is a
+        // question he answers (the tick guard above), never a clamp.
+        type: 'number', step: '0.5', min: '0', inputmode: 'decimal',
         // lang/dir force Latin digits and a number pad. Without them an Arabic
         // keyboard opens and Raed has to switch language for every set.
         lang: 'en', dir: 'ltr',
@@ -351,73 +486,19 @@ export function renderExerciseCard(ex_id, exState) {
         disabled: Boolean(set.skipped),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onBlur: flushSetEdit,
-        onInput: (e) => applySetEdit(set, 'weight', e.target.value === '' ? '' : parseFloat(e.target.value))
+        onInput: (e) => onValueEdited('weight', e.target.value === '' ? '' : parseFloat(e.target.value))
       }),
       h('input', {
-        type: 'number', step: '1', inputmode: 'numeric',
+        type: 'number', step: '1', min: '1', inputmode: 'numeric',
         lang: 'en', dir: 'ltr',
         placeholder: String(planned.reps),
         value: set.reps ?? '',
         'aria-label': tf('a11y_reps_for_set', { n: idx + 1 }),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
         onBlur: flushSetEdit,
-        onInput: (e) => applySetEdit(set, 'reps', e.target.value === '' ? '' : parseInt(e.target.value, 10))
+        onInput: (e) => onValueEdited('reps', e.target.value === '' ? '' : parseInt(e.target.value, 10))
       }),
-      h('button', {
-        class: 'set-check' + (set.completed ? ' checked' : '') + (set.skipped ? ' skipped' : ''),
-        // This is THE control of the app — the one he taps after every set —
-        // and it had no accessible name at all.
-        'aria-label': tf(isWarm ? 'a11y_complete_ramp_set' : 'a11y_complete_set', { n: idx + 1 }),
-        'aria-pressed': set.completed ? 'true' : 'false',
-        disabled: Boolean(set.skipped),
-        onClick: () => {
-          if (!set.completed) {
-            // hasValidWorkingValues, NOT hasWorkingWeight: the card's own copy of
-            // the rule required weight > 0, so a «وزن الجهاز فقط» set — legitimately
-            // 0 kg — could be created and never ticked complete.
-            if (!isWarm && !hasValidWorkingValues(set)) {
-              toast(t('required'));
-              return;
-            }
-            if (isFinalWorkingSet && !set.effort) {
-              // Refusing has to REVEAL the thing it is asking for: the picker used
-              // to open only when the second-to-last set was ticked, so «اختر الجهد»
-              // appeared with no picker anywhere on screen.
-              set.effort_prompted = true;
-              saveLocal();
-              render();
-              toast(t('final_set_prompt'));
-              return;
-            }
-            if (!isWarm && exState.sets.some((prior, priorIndex) => priorIndex < idx && prior.is_warmup && !prior.completed)) {
-              toast(t('finish_ramp_first'));
-              return;
-            }
-            // PR detection (silent)
-            if (!isWarm && set.weight && set.reps) detectPR(actualId, parseFloat(set.weight), parseInt(set.reps, 10));
-          }
-          set.completed = !set.completed;
-          // A ramp set that came back easy is the load probe of research/06
-          // §6.3. Run it before the re-render so the working rows below already
-          // carry the derived weight when he looks down at them.
-          if (set.completed && isWarm) runRampRules(exState, actualId);
-          saveLocal();
-          render();
-          if (set.completed && !isWarm) {
-            const restSeconds = prescribedRestSeconds(planned);
-            if (restSeconds > 0) startRest(restSeconds);
-            if (settings.vibrate && navigator.vibrate) navigator.vibrate(50);
-            // Move to the other half of the pair. After A1 that is «move
-            // right into»
-            const moved = advanceSuperset(actualId);
-            if (moved) {
-              const name = getAllExercises().find((item) => item.id === (moved.state?.swapped_to || moved.id))?.name;
-              toast(tf('superset_next', { name: name || moved.id }));
-              render();
-            }
-          }
-        }
-      }, set.skipped ? '↷' : set.completed ? '✓' : ''),
+      check,
     );
     // On a first exposure the ramp sets ARE the measurement — §6.3 step 2 says
     // «Run it as warm-up set 1, 10 reps, full ROM. Log the RPE.» Only the final
