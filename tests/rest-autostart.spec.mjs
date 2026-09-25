@@ -18,11 +18,11 @@ test('the rest timer starts on its own when a working set is ticked', async ({ p
   await page.waitForTimeout(900);
 
   // Round 6 (2026-09-25): the one surface is the floating session clock
-  // (`#session-clock`, ui/clock.js). Before any set it shows the elapsed face.
+  // (`#session-clock`, ui/clock.js). Raed 2026-09-25: it exists ONLY while a
+  // rest runs («أبغاه يختفي إذا ما فيه عداد») — so before any set it is hidden.
   // What this spec pins is unchanged: nothing is pressed and a countdown
   // appears by itself.
-  await expect(page.locator('#session-clock')).toBeVisible();
-  await expect(page.locator('#session-clock')).toHaveAttribute('data-face', 'elapsed');
+  await expect(page.locator('#session-clock')).toBeHidden();
 
   // The app requires the exercise's ramp sets before a working set can be ticked.
   const ramps = page.locator('[data-set-kind="warmup"]');
@@ -37,7 +37,7 @@ test('the rest timer starts on its own when a working set is ticked', async ({ p
   await row.locator('.set-check').click();
 
   // Nothing else is pressed: the timer must appear by itself.
-  await expect(page.locator('#session-clock')).toHaveAttribute('data-face', 'rest', { timeout: 5000 });
+  await expect(page.locator('#session-clock')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#session-clock .rt-time')).toHaveText(/^\d{1,2}:\d{2}$/);
   // And nothing else carries a countdown: the row and the dock are retired.
   expect(await page.locator('[data-rest-inline], #rest-timer').count()).toBe(0);

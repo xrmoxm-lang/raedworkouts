@@ -92,7 +92,7 @@ function render() {
   if (route === 'help') router('settings');
   if (route === 'end') renderSessionEnd();
   // One timer, one surface: `body.resting` for the bridge and the tests, and
-  // the floating clock shows/hides with the session (ui/clock.js).
+  // the floating clock shows only while a rest runs in a session (ui/clock.js).
   syncRestSurfaces();
   syncSessionClock();
   // The native widget mirrors whatever the screen just drew.

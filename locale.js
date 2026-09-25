@@ -498,11 +498,9 @@ export const LOCALE = Object.freeze({
   rest_label: pair('Rest', 'راحة'),
   // The floating session clock (ui/clock.js) — Raed 2026-09-25: a small circle
   // he can drag; tap opens a pill with the two things a rest ever needs.
-  clock_session: pair('Session', 'الجلسة'),
-  clock_started_at: pair('started', 'بدأت'),
   clock_add_30: pair('+30 s', '+30 ث'),
   clock_skip_rest: pair('Skip', 'تخطّ'),
-  clock_aria: pair('Session clock — drag to move, tap for options', 'ساعة الجلسة — اسحبها لتحريكها، واضغطها للخيارات'),
+  clock_aria: pair('Rest timer — drag to move, tap for options', 'مؤقّت الراحة — اسحبه لتحريكه، واضغطه للخيارات'),
   start_session: pair('Start Session', 'ابدأ التمرين'),
   rest_day: pair('🛋️ Rest day', '🛋️ يوم راحة'),
   gym_day: pair('🏋️ Today is', '🏋️ اليوم'),

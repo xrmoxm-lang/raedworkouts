@@ -76,6 +76,10 @@ hours on every screen** (#6).
    to themselves; `#rest-timer` and `[data-rest-inline]` no longer exist in the DOM.
    Retire the round-5 tests that pinned the row/dock (`round5-runner`, `round5-done-rest`,
    `rest-autostart` assertions on `dockShown`/`inlineRow`) — rewrite, do not delete files.
+7. **Ruling — Raed 2026-09-25 after the preview: rest-only, never elapsed.** «ما أبغاه يطلع،
+   أبغاه يختفي إذا ما فيه عداد، مو يطلع وقت الزمن». The circle shows only while a rest counts
+   down and hides on end/cancel/skip/finish; items 1–3 and 6 above are superseded where they
+   describe the elapsed face.
 
 ## D. Progressive overload knows the machine (Opus)
 Today `DEFAULT_EQUIPMENT_STEP_KG = 2.5` (`domain/catalogue.js:9`) is the step for EVERY

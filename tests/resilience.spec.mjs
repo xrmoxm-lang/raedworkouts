@@ -211,7 +211,8 @@ test('a running rest survives a reload', async ({ page }) => {
   await row.locator('input').nth(1).fill('10');
   await page.waitForTimeout(200);
   await row.locator('.set-check').click();
-  await expect(page.locator('#session-clock')).toHaveAttribute('data-face', 'rest', { timeout: 5000 });
+  await expect(page.locator('#session-clock')).toBeVisible({ timeout: 5000 });
+  expect(await page.evaluate(() => document.body.classList.contains('resting'))).toBe(true);
 
   const started = await page.evaluate(() => {
     const keys = Object.keys(localStorage).filter((k) => /restend/.test(k));
@@ -220,11 +221,11 @@ test('a running rest survives a reload', async ({ page }) => {
   expect(started, 'the rest deadline must be persisted, not only held in memory').toBeGreaterThan(Date.now());
 
   await page.reload({ waitUntil: 'networkidle' });
-  // Round 6: the one surface is the floating session clock; resting = its
-  // countdown face. The invariant is that it is showing the rest, not how.
-  await expect(page.locator('#session-clock'), 'the clock must be back after a reload').toBeVisible({ timeout: 5000 });
-  await expect(page.locator('#session-clock'), 'the countdown must resume after a reload')
-    .toHaveAttribute('data-face', 'rest', { timeout: 5000 });
+  // Round 6: the one surface is the floating session clock, and it exists
+  // only while a rest runs (Raed 2026-09-25) — so its being back IS the
+  // countdown resuming. The invariant is that it is showing the rest, not how.
+  await expect(page.locator('#session-clock'), 'the countdown must resume after a reload').toBeVisible({ timeout: 5000 });
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('resting'))).toBe(true);
   await expect(page.locator('#session-clock .rt-time')).toHaveText(/^\d{1,2}:\d{2}$/);
 });
 

@@ -1,25 +1,32 @@
-/* The floating session clock — one draggable circle that is the whole session's
- * time on every screen, and the rest countdown while a rest runs.
+/* The floating rest clock — one draggable circle that is the rest countdown,
+ * and exists ONLY while a rest is running.
  *
  * Raed 2026-09-25: «ديزاين الوقت مو عاجبني، أنا أحب الديزاين floating وأقدر أحركه
- * يمين، يسار … أفكر إنه يكون زي الدائرة صغيرة، أو إنه شيء أنظف وأرتب». And, the
- * same note: «وقت التمرين يكون بالساعات».
+ * يمين، يسار … أفكر إنه يكون زي الدائرة صغيرة، أو إنه شيء أنظف وأرتب».
+ *
+ * Raed 2026-09-25, after the preview: «ما أبغاه يطلع، أبغاه يختفي إذا ما فيه
+ * عداد، مو يطلع وقت الزمن — هذا شيء مرة مهم». The first cut also carried the
+ * session's elapsed h:mm on every page whenever no rest ran; he rejected it.
+ * WHY: a clock that is always on screen is noise — it sits over whatever he is
+ * reading and asks to be looked at when nothing is happening. The countdown is
+ * the one live thing in a session; when it is not running there is nothing to
+ * show. So: visible iff a session is active AND `restTimer.end > Date.now()`;
+ * shown on the transition into rest, gone on end/cancel/skip and on finish.
+ * There is no elapsed face, no elapsed tick, no session time in the pill.
  *
  * Round 5 put the countdown in flow inside the card because a fixed dock sat on
  * the Next button at every scroll position (ROUND5-FABLE-BRIEF §A). A circle he
  * parks where he wants is the other honest answer to «a fixed bar is always on
  * top of something»: it is 56px, it snaps to an edge, and its position is his.
- * It also carries what neither surface did — the elapsed time of the session,
- * on every page, in hours once it passes one.
  *
  * Ownership: core/rest.js still owns the ONE timer and paints every
  * `[data-rest-surface]` on its 200ms tick (this element is now the only one);
- * it dispatches `rw:rest` on each transition. This module owns the face, the
- * drag, the pill, and the elapsed tick. See ROUND6-FABLE-BRIEF §C.
+ * it dispatches `rw:rest` on each transition. This module owns visibility, the
+ * drag and the pill. See ROUND6-FABLE-BRIEF §C.
  */
 
 import { $, h } from '../core/dom.js';
-import { fmtTime, t } from '../core/i18n.js';
+import { t } from '../core/i18n.js';
 import { cancelRest, extendRest, restTimer } from '../core/rest.js';
 import { nsKey, safeGetItem, safeSetItem, settings, state } from '../core/store.js';
 
@@ -37,17 +44,7 @@ const TAP_MS = 300;
 const PILL_MS = 4000;
 
 let el = null;
-let elapsedInterval = null;
 let pillTimer = null;
-
-// h:mm — «بالساعات». Under an hour it still reads 0:42, so the shape never
-// changes mid-session and 1:12 is not mistaken for a rest countdown of m:ss.
-export function elapsedClockText(startedAt, now = Date.now()) {
-  const start = new Date(startedAt).getTime();
-  if (!Number.isFinite(start)) return '0:00';
-  const mins = Math.max(0, Math.floor((now - start) / 60000));
-  return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`;
-}
 
 const posKey = () => (settings.user_id ? nsKey(settings.user_id, 'clockpos') : null);
 function readPos() {
@@ -96,23 +93,24 @@ function applyPos(pos) {
   el.dataset.side = pos.side;
 }
 
-function paintElapsed() {
+/**
+ * The one visibility rule: a session is active AND a rest is counting down.
+ * Called from render() (session start/end, page changes) and on every `rw:rest`
+ * transition (rest start, run-out, cancel, skip) — core/rest.js fires that on
+ * the transition only, never per tick.
+ */
+function syncVisibility() {
   if (!el) return;
-  const a = state.active_session;
-  if (!a) return;
-  if (restTimer.end > Date.now()) return; // the rest tick owns the digits now
-  const time = el.querySelector('.rt-time');
-  const text = elapsedClockText(a.started_at);
-  if (time.textContent !== text) time.textContent = text;
-}
-
-function setFace() {
-  if (!el) return;
-  const resting = restTimer.end > Date.now();
-  el.dataset.face = resting ? 'rest' : 'elapsed';
-  if (!resting) {
+  const show = Boolean(settings.user_id && state.active_session) && restTimer.end > Date.now();
+  if (!show) {
+    el.hidden = true;
     el.style.removeProperty('--p');
-    paintElapsed();
+    hidePill();
+    return;
+  }
+  if (el.hidden) {
+    el.hidden = false;
+    applyPos(readPos() || defaultPos());
   }
   const pill = el.querySelector('.sc-pill');
   if (!pill.hidden) fillPill();
@@ -129,22 +127,13 @@ function hidePill() {
 function fillPill() {
   const pill = el.querySelector('.sc-pill');
   pill.innerHTML = '';
-  const a = state.active_session;
-  if (!a) return;
-  const resting = restTimer.end > Date.now();
-  if (resting) {
-    pill.append(
-      h('span', { class: 'sc-pill-label' }, t('rest_label')),
-      h('button', { type: 'button', class: 'btn tiny', 'data-clock-extend': 'true', onClick: () => { extendRest(30); fillPill(); armPill(); } }, t('clock_add_30')),
-      h('button', { type: 'button', class: 'btn tiny ghost', 'data-clock-skip': 'true', onClick: () => { cancelRest(); hidePill(); } }, t('clock_skip_rest')),
-    );
-  } else {
-    pill.append(
-      h('span', { class: 'sc-pill-label' }, t('clock_session')),
-      h('span', { class: 'num sc-pill-time' }, elapsedClockText(a.started_at)),
-      h('span', { class: 'sc-pill-since muted' }, t('clock_started_at'), ' ', h('span', { class: 'num' }, fmtTime(a.started_at))),
-    );
-  }
+  // The clock only exists while resting, so the pill is only ever the rest's.
+  if (!state.active_session || !(restTimer.end > Date.now())) return;
+  pill.append(
+    h('span', { class: 'sc-pill-label' }, t('rest_label')),
+    h('button', { type: 'button', class: 'btn tiny', 'data-clock-extend': 'true', onClick: () => { extendRest(30); fillPill(); armPill(); } }, t('clock_add_30')),
+    h('button', { type: 'button', class: 'btn tiny ghost', 'data-clock-skip': 'true', onClick: () => { cancelRest(); hidePill(); } }, t('clock_skip_rest')),
+  );
 }
 
 function armPill() {
@@ -204,7 +193,7 @@ function wireDrag(disc) {
   disc.addEventListener('click', (e) => e.preventDefault());
 }
 
-/** Build the element once, at boot. It is hidden until a session exists. */
+/** Build the element once, at boot. It is hidden until a rest starts. */
 export function mountSessionClock() {
   if (el) return el;
   el = $('#session-clock');
@@ -213,9 +202,8 @@ export function mountSessionClock() {
     document.body.appendChild(el);
   }
   el.innerHTML = '';
-  el.setAttribute('data-face', 'elapsed');
   const disc = h('button', { type: 'button', class: 'sc-disc', 'aria-label': t('clock_aria'), 'data-clock-disc': 'true' });
-  // The ring: the track is a hairline; the fill drains with --p while resting.
+  // The ring: always the rest countdown — the accent fill drains with --p.
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 56 56');
   svg.setAttribute('aria-hidden', 'true');
@@ -231,25 +219,13 @@ export function mountSessionClock() {
   wireDrag(disc);
   // Outside tap collapses the pill; the circle's own taps are handled above.
   document.addEventListener('pointerdown', (e) => { if (!el.hidden && !el.contains(e.target)) hidePill(); }, true);
-  document.addEventListener('rw:rest', setFace);
+  document.addEventListener('rw:rest', syncVisibility);
   window.addEventListener('resize', () => { if (!el.hidden) applyPos(readPos() || defaultPos()); });
   return el;
 }
 
-/** Called from render(): show/hide with the session, and keep the face right. */
+/** Called from render(): hidden unless a session is active AND a rest runs. */
 export function syncSessionClock() {
   if (!el) mountSessionClock();
-  const active = Boolean(settings.user_id && state.active_session);
-  if (!active) {
-    el.hidden = true;
-    hidePill();
-    if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
-    return;
-  }
-  if (el.hidden) {
-    el.hidden = false;
-    applyPos(readPos() || defaultPos());
-  }
-  setFace();
-  if (!elapsedInterval) elapsedInterval = setInterval(paintElapsed, 1000);
+  syncVisibility();
 }

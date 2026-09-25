@@ -520,11 +520,11 @@ label > input, label > select { margin-top: 6px; }
 
 /* ===== The floating session clock =====
    Raed 2026-09-25: «أحب الديزاين floating وأقدر أحركه يمين، يسار … زي الدائرة
-   صغيرة … أنظف وأرتب». One 56px circle on every screen while a session runs:
-   elapsed h:mm on paper with a hairline ring; while resting the ring is the
-   draining bar (accent, from --p) and the digits are the countdown. It snaps
-   to an edge and remembers where he left it (ui/clock.js). Round 5's dock and
-   in-flow row are retired with it. */
+   صغيرة … أنظف وأرتب». One 56px circle, on every screen, ONLY while a rest runs
+   — after the preview: «أبغاه يختفي إذا ما فيه عداد، مو يطلع وقت الزمن». So
+   there is one face: the ring is the draining bar (accent, from --p) and the
+   digits are the countdown. It snaps to an edge and remembers where he left it
+   (ui/clock.js). Round 5's dock and in-flow row are retired with it. */
 .session-clock {
   position: fixed; z-index: var(--z-rest); width: 56px; height: 56px;
   touch-action: none; user-select: none; -webkit-user-select: none;
@@ -539,13 +539,10 @@ label > input, label > select { margin-top: 6px; }
 .session-clock.dragging .sc-disc { cursor: grabbing; transform: scale(1.06); box-shadow: var(--shadow-lg); transition: none; }
 .session-clock .sc-ring { position: absolute; inset: 0; width: 56px; height: 56px; transform: rotate(-90deg); pointer-events: none; }
 .session-clock .sc-ring circle { fill: none; stroke-width: 2; }
-.session-clock .sc-track { stroke: var(--hair); }
+.session-clock .sc-track { stroke: color-mix(in srgb, var(--accent) 22%, transparent); }
 /* r=26 → circumference 163.4; the fill drains as --p goes 1 → 0. */
-.session-clock .sc-fill { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 163.4; stroke-dashoffset: calc(163.4 * (1 - var(--p, 0))); transition: stroke-dashoffset 200ms linear; opacity: 0; }
-.session-clock[data-face="rest"] .sc-fill { opacity: 1; }
-.session-clock[data-face="rest"] .sc-track { stroke: color-mix(in srgb, var(--accent) 22%, transparent); }
-.session-clock .rt-time { font-family: var(--font-mono); font-weight: 600; font-size: 15px; line-height: 1; direction: ltr; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.session-clock[data-face="rest"] .rt-time { font-size: 16px; color: var(--accent-label); }
+.session-clock .sc-fill { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 163.4; stroke-dashoffset: calc(163.4 * (1 - var(--p, 0))); transition: stroke-dashoffset 200ms linear; }
+.session-clock .rt-time { font-family: var(--font-mono); font-weight: 600; font-size: 16px; line-height: 1; direction: ltr; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; color: var(--accent-label); }
 /* The pill: beside the circle, on the side that has room. */
 .session-clock .sc-pill {
   position: absolute; top: 50%; transform: translateY(-50%);
@@ -557,8 +554,6 @@ label > input, label > select { margin-top: 6px; }
 .session-clock[data-side="left"] .sc-pill { left: 64px; }
 .session-clock[data-side="right"] .sc-pill { right: 64px; }
 .session-clock .sc-pill-label { font-weight: 600; }
-.session-clock .sc-pill-time { font-family: var(--font-mono); font-weight: 600; }
-.session-clock .sc-pill-since { color: var(--text-muted); font-size: 12.5px; }
 .session-clock .sc-pill .btn.tiny { min-height: 32px; padding: 0 10px; }
 @media (prefers-reduced-motion: reduce) { .session-clock .sc-fill { transition: none; } }
 

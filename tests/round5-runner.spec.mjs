@@ -221,7 +221,6 @@ test('resting never covers the nav, and the countdown follows him off the runner
       resting: document.body.classList.contains('resting'),
       scrollY: Math.round(window.scrollY),
       clockShown: Boolean(clock) && !clock.hidden,
-      clockFace: clock?.dataset.face || null,
       clockTime: clock?.querySelector('.rt-time')?.textContent || null,
       legacy: document.querySelectorAll('#rest-timer, [data-rest-inline]').length,
       tabTop: Math.round(tab.top),
@@ -244,7 +243,7 @@ test('resting never covers the nav, and the countdown follows him off the runner
   const at0 = await measure();
   expect(at0.resting, 'ticking the last working set must start the rest').toBe(true);
   expect(at0.clockShown, 'the floating clock must be showing').toBe(true);
-  expect(at0.clockFace, 'and on its countdown face').toBe('rest');
+  expect(at0.clockTime, 'and counting the rest down').toMatch(/^\d{1,2}:\d{2}$/);
   expect(at0.legacy, 'the round-5 row and dock must be gone').toBe(0);
   const finish = at0.buttons.find((b) => /أنهِ الجلسة/.test(b.label));
   expect(finish, 'the last exercise must offer the finish button').toBeTruthy();
@@ -270,15 +269,15 @@ test('resting never covers the nav, and the countdown follows him off the runner
   expect(atMax.clockTime).toMatch(/^\d{1,2}:\d{2}$/);
 
   // Off the runner the same clock is there — it is how he knows he is still
-  // resting, and now it also carries the session's elapsed time.
+  // resting. (It never carries the session's elapsed time: Raed 2026-09-25.)
   await page.evaluate(() => { window.location.hash = 'coach'; });
   await page.waitForTimeout(500);
   const onCoach = await page.evaluate(() => {
     const clock = document.getElementById('session-clock');
-    return { shown: Boolean(clock) && !clock.hidden, face: clock?.dataset.face };
+    return { shown: Boolean(clock) && !clock.hidden, resting: document.body.classList.contains('resting') };
   });
-  expect(onCoach.shown, 'the clock must show on every page while a session runs').toBe(true);
-  expect(onCoach.face).toBe('rest');
+  expect(onCoach.shown, 'the clock must show on every page while a rest runs').toBe(true);
+  expect(onCoach.resting).toBe(true);
 
   // Back to the runner.
   await page.evaluate(() => { window.location.hash = 'home'; });
@@ -292,16 +291,16 @@ test('resting never covers the nav, and the countdown follows him off the runner
     const clock = document.getElementById('session-clock');
     return {
       resting: document.body.classList.contains('resting'),
-      face: clock?.dataset.face,
+      shown: Boolean(clock) && !clock.hidden,
       time: clock?.querySelector('.rt-time')?.textContent || null,
     };
   });
   expect(resumed.resting, 'a reload mid-rest must resume the rest').toBe(true);
-  expect(resumed.face).toBe('rest');
+  expect(resumed.shown, 'and the clock with it').toBe(true);
   expect(resumed.time).toMatch(/^\d{1,2}:\d{2}$/);
 
-  // Skipping from the clock's pill cancels the one timer: the class, the face
-  // and the persisted deadline all go.
+  // Skipping from the clock's pill cancels the one timer: the class, the clock
+  // itself and the persisted deadline all go.
   await page.evaluate(() => document.querySelector('#session-clock .sc-disc').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 })));
   await page.evaluate(() => document.querySelector('#session-clock .sc-disc').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 })));
   await page.waitForTimeout(200);
@@ -309,11 +308,11 @@ test('resting never covers the nav, and the countdown follows him off the runner
   await page.waitForTimeout(400);
   const cancelled = await page.evaluate(() => ({
     resting: document.body.classList.contains('resting'),
-    face: document.getElementById('session-clock').dataset.face,
+    shown: !document.getElementById('session-clock').hidden,
     restend: Object.keys(localStorage).filter((k) => /restend/.test(k)).length,
   }));
   expect(cancelled.resting).toBe(false);
-  expect(cancelled.face).toBe('elapsed');
+  expect(cancelled.shown, 'no rest → no clock (Raed 2026-09-25)').toBe(false);
   expect(cancelled.restend, 'the persisted deadline must be cleared').toBe(0);
   expect(errs).toEqual([]);
 });

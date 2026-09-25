@@ -2137,14 +2137,19 @@ file was almost always written after the bug it prevents was proven on a phone.
 > in flow inside the card because a fixed dock sat on the Next button at every
 > scroll position. A circle he parks where he wants is the other honest answer
 > to «a fixed bar is always on top of something»: 56px, snaps to an edge, its
-> position is his. It also carries what neither surface did — the elapsed time
-> of the session, on every page, in hours once it passes one («وقت التمرين
-> يكون بالساعات»). One timer (core/rest.js), one surface.
+> position is his. One timer (core/rest.js), one surface.
 
-### elapsedClockText
+### syncVisibility
 
-> h:mm always — under an hour it reads 0:42, so the shape never changes
-> mid-session and 1:12 is never mistaken for a rest countdown of m:ss.
+> Raed 2026-09-25, after the preview: «ما أبغاه يطلع، أبغاه يختفي إذا ما فيه
+> عداد، مو يطلع وقت الزمن — هذا شيء مرة مهم». The first cut showed the
+> session's elapsed h:mm whenever no rest ran; he rejected it. The clock is
+> visible only while a session is active AND `restTimer.end > Date.now()` —
+> shown on the transition into rest, gone on run-out, cancel, skip and finish.
+> A clock that is always on screen is noise over whatever he is reading; the
+> countdown is the one live thing in a session. The elapsed face, its 1s tick,
+> `elapsedClockText`, `data-face`, and the pill's session/started-at branch are
+> all gone (tests/round6-clock.spec.mjs pins the hidden-mid-session case).
 
 ### defaultPos
 
