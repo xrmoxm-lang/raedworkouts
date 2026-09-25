@@ -1,4 +1,12 @@
-/* The end-of-session screen and its wellbeing check. */
+/* The end-of-session screen and its wellbeing check.
+ *
+ * Round 6 (Raed 2026-09-25): «ديزاين الانتهاء مو عجبني … خلينا نركز على الوقت»
+ * and «ما حطينا الـpost cardio». The generic check-circle hero is gone; the
+ * hero is the session's clock, the ledger sits under it, and the cool-down is
+ * ALWAYS a line here — logged, skipped, or still open to log. Time is the hero
+ * because it is the number he feels; it is never the goal, so it sits with the
+ * sets and the load and nothing on this screen says «longer is better»
+ * (ROUND6-FABLE-BRIEF §B). */
 
 import { $, h, isolate } from '../core/dom.js';
 import {
@@ -13,33 +21,12 @@ import {
   wellbeingCheckDue,
 } from '../core/engine.js';
 import { fmtDate, fmtElapsed, fmtKgTotal, localizeText, t, tf } from '../core/i18n.js';
+import { render } from '../core/shell.js';
 import { bestBout } from '../domain/cardio.js';
-import { cardioSummaryLine } from '../ui/cardio.js';
+import { cardioSummaryLine, renderCardioBlock } from '../ui/cardio.js';
 import { _endScreenSession } from '../core/session.js';
-import { settings, state } from '../core/store.js';
+import { saveLocal, settings, state } from '../core/store.js';
 import { getAllExercises } from '../core/videos.js';
-
-// The 💪 that used to sit here was the app's own emoji, on the one screen that
-// is supposed to feel like a ledger closing. A stroke drawn once says the same
-// thing in the app's hand. Built in the SVG namespace — h() uses
-// document.createElement, which in an HTML document produces a non-rendering
-// HTML element named "svg".
-const SVG_NS = 'http://www.w3.org/2000/svg';
-function drawnCheck() {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2.2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.classList.add('check-draw');
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', 'M5 12.5l4.5 4.5L19 7');
-  svg.appendChild(path);
-  return svg;
-}
 
 // A five-digit volume in 28px mono overruns a third of a 390px screen, so the
 // number steps down rather than pushing its neighbour off the row.
@@ -93,16 +80,60 @@ function buildWellbeingCheck() {
   return wrap;
 }
 
+// The cool-down, always. `s` is already IN history by the time this renders
+// (endSession pushes, then shows the screen), so it is excluded by identity
+// before the bar is computed, or it would always be its own best.
+//
+// Three states: logged → the summary line, with the accent when it beat every
+// bout before it; skipped → one muted line; untouched (he hit finish without
+// deciding) → the same form the done panel had, mounted here and writing into
+// the archived session — that is the «ما حطينا الـpost cardio». The form's own
+// Log/Skip call render(), which re-enters renderSessionEnd through the shell.
+// A render-only flag: non-enumerable, so JSON.stringify (saveLocal) never
+// writes it into the archived session (asserted in tests/round6-end.spec.mjs).
+const openCardio = (s) => Object.defineProperty(s, '_cardio_open', { value: true, enumerable: false, configurable: true });
+function buildCardioLine(s) {
+  const c = s.cardio;
+  const logged = c && c.completed_at && !c.skipped;
+  if (logged) {
+    const mine = bestBout([s]);
+    const previousBest = bestBout((state.history || []).filter((one) => one !== s));
+    const line = cardioSummaryLine(c, { beaten: !!mine && (!previousBest || mine.met_minutes > previousBest.met_minutes) });
+    if (line) return h('div', { class: 'end-cardio', 'data-end-cardio': 'logged' }, line);
+  }
+  if (c && c.skipped) {
+    return h('div', { class: 'end-cardio', 'data-end-cardio': 'skipped' },
+      h('span', { class: 'tiny muted' }, t('cardio_title'), ' · ', t('cardio_skipped')),
+      h('button', {
+        class: 'btn tiny ghost', 'data-end-cardio-log': 'true',
+        onClick: () => { c.skipped = false; c.completed_at = null; openCardio(s); saveLocal(); render(); },
+      }, t('cardio_log')));
+  }
+  if (s._cardio_open) {
+    return h('div', { class: 'end-cardio-form', 'data-end-cardio': 'form' }, renderCardioBlock(s));
+  }
+  return h('div', { class: 'end-cardio', 'data-end-cardio': 'open' },
+    h('span', { class: 'tiny muted' }, t('cardio_title'), ' · ', t('cardio_not_logged')),
+    h('button', {
+      class: 'btn tiny', 'data-end-cardio-log': 'true',
+      // A render-only flag: it never reaches storage because it is not part of
+      // what saveLocal serialises from the session (verified in the test).
+      onClick: () => { openCardio(s); render(); },
+    }, t('cardio_log')));
+}
+
+// showSessionEnd() sets the hash and renders; nothing scrolled, so he landed
+// on this screen wherever the done panel had left him — under the hero. Once
+// per session shown, not on every re-render: the cool-down form on this screen
+// re-renders through the shell and must not jump him back to the top.
+let lastShown = null;
 export function renderSessionEnd() {
   const root = $('#page-end');
   root.innerHTML = '';
   const s = _endScreenSession;
+  if (s && s !== lastShown) { lastShown = s; window.scrollTo(0, 0); }
   if (!s) {
-    // Was a hand-written innerHTML string, and the only one in the file:
-    // English («Session saved.» / «Home») on an Arabic-only screen, and
-    // markup where every other screen builds nodes.
     root.appendChild(h('div', { class: 'session-end' },
-      h('div', { class: 'hero' }, drawnCheck()),
       h('p', { class: 'subtitle' }, t('session_saved')),
       h('a', { class: 'btn primary full', href: '#home' }, t('home')),
     ));
@@ -114,41 +145,22 @@ export function renderSessionEnd() {
   const msg = (RW.MOTIVATIONAL_MESSAGES || ['Eat. Sleep. Repeat.'])[msgIdx];
 
   const wrap = h('div', { class: 'session-end' },
-    h('div', { class: 'hero' }, drawnCheck()),
-    // session_done_title, not a literal: 'Session done.' — with the full stop —
-    // matched no locale entry, so this one heading rendered English on the
-    // screen shown after every workout.
+    // The hero: the clock. `ended_at − started_at` includes the cool-down, and
+    // that is correct: the cool-down is part of the session. h:mm:ss — the
+    // format he ruled for on 2026-09-22 («not 80 min, 1:20»).
+    h('div', { class: 'end-eyebrow' }, t('session_duration')),
+    h('div', { class: 'end-clock', 'data-end-clock': 'true' }, fmtElapsed(s.started_at, s.ended_at) || '—'),
     h('h2', {}, t('session_done_title')),
     h('div', { class: 'subtitle' }, fmtDate(s.started_at), ' · ', localizeText(s.session_name)),
 
-    // Four cells, not three. The session's own duration was on the done panel
-    // and then gone the moment he saved — «متى بديت … كم جلست بالنادي إلى الآن»
-    // is a thing he asks about the session AFTER it, too. A clock reading
-    // (m:ss / h:mm:ss), which is the format he ruled for on 2026-09-22.
-    // `ended_at − started_at` includes the cool-down, and that is correct: the
-    // cool-down is part of the session.
-    h('div', { class: 'stats-grid four' },
+    // The ledger — three cells, centred, hairlines.
+    h('div', { class: 'stats-grid', 'data-end-ledger': 'true' },
       statCell(String(stats.sets), 'sets'),
       statCell(String(stats.reps), 'reps'),
       statCell(fmtKgTotal(stats.volume_kg), 'volume_kg'),
-      statCell(fmtElapsed(s.started_at, s.ended_at) || '—', 'session_duration'),
     ),
 
-    // And the cool-down he logged, under the grid where the totals are. The
-    // accent only when it beat every bout before it — the bar he asked this
-    // block to give him. `s` is already IN history by the time this renders
-    // (endSession pushes, then shows the screen), so it is excluded by identity
-    // before the bar is computed, or it would always be its own best.
-    (() => {
-      // bestBout of this session alone is null unless it really carries a
-      // completed bout, which makes it the one guard both branches need.
-      const mine = bestBout([s]);
-      if (!mine) return null;
-      const previousBest = bestBout((state.history || []).filter((one) => one !== s));
-      return cardioSummaryLine(s.cardio, {
-        beaten: !previousBest || mine.met_minutes > previousBest.met_minutes,
-      });
-    })(),
+    buildCardioLine(s),
 
     // Honour the setting. It was written and toggled in Settings and read by
     // NOTHING, so turning "show PR summary" off changed nothing on screen — a
@@ -164,18 +176,16 @@ export function renderSessionEnd() {
       })
     ) : null,
 
-    h('div', { class: 'reminder' }, msg),
+    h('p', { class: 'end-note' }, msg),
 
     // The once-a-week check that research/06 §7.3 turns on.
     wellbeingCheckDue() ? buildWellbeingCheck() : null,
 
     h('div', { class: 'next-up' },
       h('div', { class: 'eyebrow' },
-        // Was "of 12" with a foundation/strength/peak split — neither of which
-        // this programme has. It is 8 weeks in two blocks, and the block carries
-        // its own name in the data. localizeText, because tf() interpolates the
-        // block name AFTER the locale lookup — so the English block name from
-        // data.js used to survive onto an Arabic screen.
+        // localizeText, because tf() interpolates the block name AFTER the
+        // locale lookup — so the English block name from data.js used to
+        // survive onto an Arabic screen.
         tf('block_week_of', {
           block: localizeText(getActiveProgramme()?.block_name || String(derivedBlock())),
           week: derivedWeek(),

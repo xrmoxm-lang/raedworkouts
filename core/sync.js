@@ -42,6 +42,7 @@ import {
 } from '../core/store.js';
 import { applyTheme } from '../core/theme.js';
 import { localProfileIdFromV16SyncId, v16SyncUserId } from '../domain/sync-identity.js';
+import { reviveRestoredState } from '../domain/state-merge.js';
 
 // Local profile IDs deliberately stay human-facing.  Only this resolver may
 // construct a server identity, and it always suffixes `-v16`; no v16 request
@@ -464,7 +465,10 @@ async function undoPreRestore() {
   if (!snapshot) { toast('No restore snapshot found.'); return; }
   await quiesceSyncPipeline();
   const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
-  replaceState({ ...defaultState(), ...(snapshot.state || {}) });
+  // He chose this copy: sessions in it that a tombstone names are revived
+  // (domain/state-merge.js reviveRestoredState), or a stale device would delete
+  // them again on its next push.
+  replaceState(reviveRestoredState({ ...defaultState(), ...(snapshot.state || {}) }, state.history_tombstones));
   replaceSettings({ ...defaultSettings(), ...retireLegacyCredentialFields(snapshot.settings || {}), ...keep });
   ensureProfile();
   // He chose this copy: local writing is allowed again, and it is authoritative
@@ -516,7 +520,7 @@ export async function restoreRevision(rev) {
   stashPreRestore('revision ' + rev);
   const snap = await syncFetch('/revision?user=' + syncUserQuery(settings.user_id) + '&rev=' + encodeURIComponent(rev));
   const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
-  replaceState({ ...defaultState(), ...(snap.state_json || {}) });
+  replaceState(reviveRestoredState({ ...defaultState(), ...(snap.state_json || {}) }, state.history_tombstones));
   replaceSettings({ ...defaultSettings(), ...retireLegacyCredentialFields(snap.settings_json || {}), ...keep });
   ensureProfile();
   // Same as undoPreRestore: an explicit restore ends a quarantine and wins over
@@ -535,7 +539,7 @@ export async function importJsonFile(file) {
   await quiesceSyncPipeline();
   stashPreRestore('import');
   const keep = { user_id: settings.user_id, sync_url: getSyncUrl(), sync_key: SYNC_KEY };
-  if (parsed.state) replaceState({ ...defaultState(), ...parsed.state });
+  if (parsed.state) replaceState(reviveRestoredState({ ...defaultState(), ...parsed.state }, state.history_tombstones));
   if (parsed.settings) replaceSettings({ ...defaultSettings(), ...retireLegacyCredentialFields(parsed.settings), ...keep });
   else replaceSettings({ ...settings, ...keep });
   ensureProfile();

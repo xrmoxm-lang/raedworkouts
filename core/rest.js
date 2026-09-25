@@ -1,7 +1,7 @@
 /* Rest countdown and its notification. The deadline is persisted, so a reload
  * resumes the same rest instead of losing it. */
 
-import { $, icon, toast } from '../core/dom.js';
+import { toast } from '../core/dom.js';
 import { t } from '../core/i18n.js';
 import { nativeRestStart, nativeRestStop } from '../core/native.js';
 import { nsKey, safeGetItem, safeRemoveItem, safeSetItem, settings, state } from '../core/store.js';
@@ -40,24 +40,44 @@ function paintRestSurfaces() {
   document.querySelectorAll('[data-rest-surface]').forEach((surface) => {
     const time = surface.querySelector('.rt-time');
     if (time) time.textContent = text;
-    const bar = surface.querySelector('.rt-bar');
-    if (bar) bar.style.setProperty('--p', String(Math.min(1, remMs / total)));
+    // The surface itself carries --p: the clock's ring drains from it, and a
+    // legacy `.rt-bar` inside a surface would still read it by inheritance.
+    surface.style.setProperty('--p', String(Math.min(1, remMs / total)));
   });
+}
+/**
+ * There is one timer and, since round 6, one surface: the floating session
+ * clock (`ui/clock.js`, `#session-clock[data-rest-surface]`). Round 5's
+ * in-flow row and fixed dock are gone with the layout problem they traded
+ * between — a fixed bar is always on top of something, a 56px circle he parks
+ * himself is not (ROUND6-FABLE-BRIEF §C). This keeps `body.resting`, which the
+ * native bridge and the tests read, and tells the clock about each transition
+ * through a DOM event, because core/ never imports ui/.
+ */
+let wasResting = false;
+export function syncRestSurfaces() {
+  const resting = restTimer.end > Date.now();
+  document.body.classList.toggle('resting', resting);
+  if (resting !== wasResting) {
+    wasResting = resting;
+    // Only on the transition INTO rest — never on every 200ms tick, which
+    // would fight him the moment he scrolled up to read the card.
+    if (resting) revealRunnerNav();
+    document.dispatchEvent(new CustomEvent('rw:rest', { detail: { resting } }));
+  }
 }
 /**
  * Bring `.runner-nav` clear of the tab bar when a rest begins.
  *
- * Hiding the dock was only HALF of «ما أقدر أروح للـnext». Measured on his
- * 390×844 with the dock already gone, at the instant the last working set was
- * ticked: he is still at scrollY 0, the rest row has just made the page 56px
- * taller, and both nav buttons sit at 799–843 — under the tab bar, whose top is
- * 776. `elementFromPoint` at each centre returned BUTTON.tab, so «أنهِ الجلسة»
- * still changed tabs. Bottom padding cannot fix this: it only guarantees the
- * nav clears the bar at the BOTTOM of the document (maxScroll 85 here), and he
- * is not there. So the app does the scrolling — once, on the transition into
- * rest, and only while the nav is actually covered. Exactly the contract
- * `revealEffortStrip()` (ui/exercise-card.js) has had since v15; the nav simply
- * never got the same care.
+ * Measured on his 390×844 (round 5, and again in round 6 with no row at all):
+ * at the instant the last working set is ticked he is at scrollY 0 and both
+ * nav buttons sit at 743–787 — under the tab bar, whose top is 776 — so
+ * `elementFromPoint` at their centres returned BUTTON.tab and «أنهِ الجلسة»
+ * changed tabs. Bottom padding cannot fix this: it only guarantees the nav
+ * clears the bar at the BOTTOM of the document, and he is not there. So the
+ * app does the scrolling, once, on the transition into rest, and only while
+ * the nav is actually covered — the contract `revealEffortStrip()`
+ * (ui/exercise-card.js) has had since v15.
  */
 function revealRunnerNav() {
   requestAnimationFrame(() => {
@@ -73,50 +93,16 @@ function revealRunnerNav() {
     if (over > 0) window.scrollBy({ top: over + 8, behavior: 'auto' });
   });
 }
-/**
- * Decide WHERE the countdown shows, and reserve space for it wherever it floats.
- *
- * Raed 2026-09-23: «بالنسبة للوقت العداد، يصير تحت، ما أقدر أروح للـnext ...
- * خصوصًا في آخر عدة». Measured on his 390×844 before the change: the fixed dock
- * occupied 712–772 and both `.runner-nav` buttons 743–787, so `elementFromPoint`
- * at each button's centre returned DIV.rest-timer at scrollY 0 AND at the page's
- * maximum scroll of 29px — there was NO scroll position at which the finish
- * button could be tapped. A fixed bar over a scrolling page is always on top of
- * something, so on the runner the countdown stops floating: it renders in flow
- * inside the card (`[data-rest-inline]`) and the dock is hidden. Everywhere else
- * the dock stays — nothing is under it there, and it is how he knows he is
- * still resting (ROUND5-FABLE-BRIEF §A.2).
- */
-export function syncRestSurfaces() {
-  const resting = restTimer.end > Date.now();
-  const inline = document.querySelector('[data-rest-inline]');
-  // The runner IS home while a session runs; on any other page the row is gone.
-  const onRunner = Boolean(document.querySelector('#page-home.active')) && Boolean(state.active_session);
-  const inlineShown = Boolean(resting && inline && onRunner);
-  const wasInline = document.body.classList.contains('rest-inline');
-  if (inline) inline.hidden = !inlineShown;
-  // Only on the transition into the in-flow rest — never on every 200ms tick,
-  // which would fight him the moment he scrolled up to read the card.
-  if (inlineShown && !wasInline) revealRunnerNav();
-  document.body.classList.toggle('rest-inline', inlineShown);
-  const dock = $('#rest-timer');
-  const docked = resting && !inlineShown;
-  const wasDocked = document.body.classList.contains('rest-docked');
-  if (dock) {
-    dock.style.display = docked ? 'grid' : 'none';
-    // Guard rail (§A.3): reserve the dock's MEASURED height — never a hard-coded
-    // 60 — wherever it does float. Measured once per transition, not per tick.
-    if (docked && !wasDocked) {
-      const h = Math.round(dock.getBoundingClientRect().height);
-      if (h > 0) document.documentElement.style.setProperty('--rest-dock-h', `${h}px`);
-    }
-  }
-  document.body.classList.toggle('resting', resting);
-  document.body.classList.toggle('rest-docked', docked);
+/** «+30 ث» from the clock's pill: the deadline moves, the native Island follows. */
+export function extendRest(seconds) {
+  if (!(restTimer.end > Date.now())) return;
+  restTimer.end += seconds * 1000;
+  restTimer.total += seconds * 1000;
+  persistRestDeadline(restTimer.end);
+  nativeRestStart(restTimer.end, restTimer.total);
+  paintRestSurfaces();
 }
 function runRestCountdown() {
-  const el = $('#rest-timer');
-  if (!el) return;
   // A resumed rest has no recorded total; the bar then drains from wherever it is.
   if (!restTimer.total || restTimer.total < restTimer.end - Date.now()) restTimer.total = Math.max(1, restTimer.end - Date.now());
   const tick = () => {

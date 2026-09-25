@@ -2,6 +2,7 @@
 
 import { $, confirmAction, h, toast, toastSaved } from '../core/dom.js';
 import { isCountableWorkingSet } from '../domain/runner-session.js';
+import { historyTombstoneFor, mergeHistoryTombstones } from '../domain/state-merge.js';
 import { recordBodyweight } from '../core/engine.js';
 import { activeLanguage, fmtDate, fmtDateShort, fmtKgTotal, fmtKgValue, t, tf } from '../core/i18n.js';
 import { reopenSession } from '../core/session.js';
@@ -225,7 +226,15 @@ function buildDetail(detail, sess, byId) {
         confirmLabel: t('delete_session'),
       });
       if (!yes) return;
-      state.history.splice(position, 1);
+      // Re-find it: the dialog was async and a merge may have replaced the array.
+      const at = state.history.indexOf(sess);
+      if (at < 0) return;
+      // A delete is recorded, not just performed: without the tombstone the
+      // union merges (domain/state-merge.js, server/raedsync.py) handed the
+      // session straight back from any stale tab, device or server row.
+      const tomb = historyTombstoneFor(sess);
+      if (tomb) state.history_tombstones = mergeHistoryTombstones(state.history_tombstones, [tomb]);
+      state.history.splice(at, 1);
       saveLocal();
       renderHistory();
       toast(t('session_deleted'));

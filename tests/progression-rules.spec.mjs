@@ -46,8 +46,10 @@ test('two sessions short of the bottom of the range walk the load back one step'
   await bootWith(page, state);
   await expect(page.locator('#page-home .ex.expanded h4 bdi')).toHaveText('Chest Press Machine');
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  // No learned step (one weight in history) and no equipment set → the 2.5 kg default.
-  await expect(first, 'the load must come down one step, not hold at 40').toHaveAttribute('placeholder', '37.5');
+  // No learned step (one weight in history) and no equipment set → data.js's
+  // Matrix stack ladder (Round 6 §D): 40 reads as the «41» label (9 × 4.5359),
+  // so one step down is the label below it, 36.
+  await expect(first, 'the load must come down one step, not hold at 40').toHaveAttribute('placeholder', '36');
   await expect(page.locator('[data-why-weight]')).toContainText(/نزّل|درجة|خفّض/);
 });
 
@@ -127,7 +129,9 @@ test('three completed sets at the top of the range, twice, still promote it', as
   }
   await bootWith(page, state);
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  await expect(first).toHaveAttribute('placeholder', '22.5');
+  // Round 6 §D: the chest press is a Matrix stack; 20 is off its ladder, so
+  // the step lands on the next label, 23 (never 22.5, which no plate says).
+  await expect(first).toHaveAttribute('placeholder', '23');
   await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('ارفع');
 });
 
@@ -191,6 +195,6 @@ test('«سهل» after one complete top exposure lands the increase a session so
   );
   await bootWith(page, state);
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  await expect(first).toHaveAttribute('placeholder', '22.5');
+  await expect(first, 'the next Matrix label above 20').toHaveAttribute('placeholder', '23');
   await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('أبكر بجلسة');
 });

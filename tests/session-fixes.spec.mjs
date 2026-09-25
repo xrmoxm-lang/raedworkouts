@@ -45,7 +45,8 @@ test('the card states the rep target that actually earns an increase', async ({ 
   const top = meta.match(/(\d+)\s*[-–]\s*(\d+)/)?.[2];
   expect(top).toBeTruthy();
   await expect(goal).toContainText(top);
-  await expect(goal).toContainText('ليرتفع الوزن');
+  // Round 6 §D.3: and the load that completing it earns, with the step.
+  await expect(goal).toContainText(/ليرتفع الوزن|← [\d.]+ كغ/);
 });
 
 test('the superset pair is announced on the first movement, and the rest timer obeys it', async ({ page }) => {

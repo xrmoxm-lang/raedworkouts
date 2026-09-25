@@ -197,20 +197,35 @@ test('a running rest survives a reload', async ({ page }) => {
   await boot(page);
   await intoSession(page);
 
-  await page.evaluate(() => { if (window.startRest) window.startRest(120); });
+  // Drive a REAL rest through the UI, the way he does: the exercise's ramps,
+  // then a working set (same path as tests/rest-autostart.spec.mjs). This used
+  // to call a `window.startRest` that no build exposes and then skip itself —
+  // a test that could never fail (CODEX-AUDIT-2026-09-25.md, PARTIAL).
+  const ramps = page.locator('[data-set-kind="warmup"]');
+  for (let i = 0; i < await ramps.count(); i += 1) {
+    await ramps.nth(i).locator('.set-check').click();
+    await page.waitForTimeout(200);
+  }
+  const row = page.locator('[data-set-kind="working"]').first();
+  await row.locator('input').nth(0).fill('40');
+  await row.locator('input').nth(1).fill('10');
+  await page.waitForTimeout(200);
+  await row.locator('.set-check').click();
+  await expect(page.locator('#session-clock')).toHaveAttribute('data-face', 'rest', { timeout: 5000 });
+
   const started = await page.evaluate(() => {
     const keys = Object.keys(localStorage).filter((k) => /restend/.test(k));
     return keys.length ? Number(localStorage.getItem(keys[0])) : 0;
   });
-  test.skip(!started, 'startRest is not reachable from the page scope in this build');
-
   expect(started, 'the rest deadline must be persisted, not only held in memory').toBeGreaterThan(Date.now());
 
   await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
-  const visible = await page.evaluate(() => document.querySelector('#rest-timer')?.style.display);
-  // v17: the dock lays out as a grid; the invariant is that it is showing, not how.
-  expect(visible, 'the countdown must resume after a reload').not.toBe('none');
+  // Round 6: the one surface is the floating session clock; resting = its
+  // countdown face. The invariant is that it is showing the rest, not how.
+  await expect(page.locator('#session-clock'), 'the clock must be back after a reload').toBeVisible({ timeout: 5000 });
+  await expect(page.locator('#session-clock'), 'the countdown must resume after a reload')
+    .toHaveAttribute('data-face', 'rest', { timeout: 5000 });
+  await expect(page.locator('#session-clock .rt-time')).toHaveText(/^\d{1,2}:\d{2}$/);
 });
 
 // ---------------------------------------------------------------------------
@@ -333,8 +348,14 @@ test('every movement eventually earns more weight, accessories included', async 
   // identical across sessions, so there are no gaps to learn from and no
   // equipment kind set: the sourced fallback applies, and it is the SAME for the
   // curl and the chest press. That sameness is the point.
-  expect(Number(suggested.biceps_curl)).toBe(10.5);
-  expect(Number(suggested.chest_press_machine)).toBe(42.5);
+  //
+  // Round 6 §D (Raed: «the whole gym is Matrix, all in kg»): the step is now
+  // the equipment's own, from data.js — the curl is a 2.5 kg dumbbell rack, so
+  // 8 steps to the 10 kg dumbbell that exists (never 10.5); the chest press is
+  // a Matrix stack labelled 5 · 9 · 14 … 41 · 45 (n × 4.5359 rounded; his log
+  // holds 14/23/32), and 40 reads as the «41» rung, so it steps to 45.
+  expect(Number(suggested.biceps_curl)).toBe(10);
+  expect(Number(suggested.chest_press_machine)).toBe(45);
 });
 
 // ---------------------------------------------------------------------------
@@ -634,7 +655,9 @@ test('the card states the effort the programme asks for, and says it differently
 
   const normal = await read();
   expect(normal.effort, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل|شبه الفشل/);
-  expect(normal.goal, 'and it still explains what earns a load increase').toContain('ليرتفع الوزن');
+  // Round 6 §D.3: with a load to step from, the goal names the load it earns
+  // («← 30 كغ (+2.5)») instead of the bare «ليرتفع الوزن».
+  expect(normal.goal, 'and it still explains what earns a load increase').toMatch(/ليرتفع الوزن|← [\d.]+ كغ/);
 
   // 44 completed sessions = week 12 = the deload block.
   await page.evaluate(() => {

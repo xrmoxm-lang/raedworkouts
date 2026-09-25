@@ -302,7 +302,9 @@ label > input, label > select { margin-top: 6px; }
 .figure.s56 { height: 56px; width: 28px; }
 .figure.s72 { height: 72px; width: 36px; }
 .figure.s120 { height: 120px; width: 60px; }
-.fig-body { fill: color-mix(in srgb, var(--text) 13%, transparent); }
+/* Raed 2026-09-08: «the figure could be a touch bolder» — the one half of that
+   note never done (Codex audit 2026-09-25). 13% read as a watermark on ورق. */
+.fig-body { fill: color-mix(in srgb, var(--text) 18%, transparent); }
 .fig-muscle { fill: var(--accent); }
 .fig-muscle.is-secondary { fill: color-mix(in srgb, var(--accent) 45%, transparent); }
 /* Legacy PNG thumb, kept working for any renderer not yet moved to the figure. */
@@ -337,8 +339,11 @@ label > input, label > select { margin-top: 6px; }
 
 
 .stats-inline, .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 14px; }
-.stat, .stat-tile { padding: 10px 0; padding-inline-start: 14px; border-inline-start: 1px solid var(--hair); min-width: 0; }
-.stat:first-child, .stat-tile:first-child { border-inline-start: 0; padding-inline-start: 0; }
+.stat, .stat-tile { padding: 10px 4px; border-inline-start: 1px solid var(--hair); min-width: 0; }
+.stat:first-child, .stat-tile:first-child { border-inline-start: 0; }
+/* Raed 2026-09-25: «الأرقام ما هي سنترال في المواظبة وهذا الأسبوع». A number
+   over a caption is a column, and a column is centred (ROUND6-FABLE-BRIEF §A). */
+.stats-inline .stat, .stat-row .stat { text-align: center; }
 .stat-num { font-family: var(--font-mono); font-size: 30px; font-weight: 600; line-height: 1; color: var(--accent-label); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
 .stat-num.s5 { font-size: 26px; } .stat-num.s6 { font-size: 23px; } .stat-num.s7 { font-size: 20px; }
 .stat-num.zero { color: var(--text-muted); }
@@ -513,44 +518,49 @@ label > input, label > select { margin-top: 6px; }
 .warmup-drill:disabled { opacity: .5; cursor: default; }
 .warmup-phase > .btn.primary { margin-top: 16px; }
 
-/* ===== Rest dock ===== */
-.rest-timer {
-  position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-bottom) + 10px);
-  width: calc(100% - 24px); max-width: calc(var(--maxw) - 24px);
-  transform: translateX(-50%);
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px;
-  padding: 10px 10px 10px 16px; border-radius: var(--radius-lg);
-  background: var(--text); color: var(--bg); box-shadow: var(--shadow-lg);
-  z-index: var(--z-rest); animation: dock-in var(--dur-slow) var(--ease);
+/* ===== The floating session clock =====
+   Raed 2026-09-25: «أحب الديزاين floating وأقدر أحركه يمين، يسار … زي الدائرة
+   صغيرة … أنظف وأرتب». One 56px circle on every screen while a session runs:
+   elapsed h:mm on paper with a hairline ring; while resting the ring is the
+   draining bar (accent, from --p) and the digits are the countdown. It snaps
+   to an edge and remembers where he left it (ui/clock.js). Round 5's dock and
+   in-flow row are retired with it. */
+.session-clock {
+  position: fixed; z-index: var(--z-rest); width: 56px; height: 56px;
+  touch-action: none; user-select: none; -webkit-user-select: none;
 }
-[dir="rtl"] .rest-timer { padding: 10px 16px 10px 10px; }
-.rt-ico { display: none; }
-.rt-time { font-family: var(--font-mono); font-size: 30px; font-weight: 600; line-height: 1; direction: ltr; font-variant-numeric: tabular-nums; }
-.rt-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--bg) 22%, transparent); overflow: hidden; position: relative; }
-.rt-bar::after { content: ''; position: absolute; inset: 0; background: var(--accent); transform-origin: right center; transform: scaleX(var(--p, 1)); transition: transform 200ms linear; }
-[dir="ltr"] .rt-bar::after { transform-origin: left center; }
-.rt-cancel { width: 40px; height: 40px; border-radius: 50%; border: 0; background: color-mix(in srgb, var(--bg) 16%, transparent); color: var(--bg); font-size: 18px; display: grid; place-items: center; padding: 0; position: relative; }
-/* Hit-area floor: the circle stays 40px, the target is 48. */
-.rt-cancel::before { content: ''; position: absolute; inset: 50% auto auto 50%; width: 48px; height: 48px; transform: translate(-50%, -50%); }
-@keyframes dock-in { from { transform: translate(-50%, 16px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-
-/* ===== Rest, in flow (the runner) =====
-   Raed 2026-09-23: «الوقت العداد يصير تحت، ما أقدر أروح للـnext». The fixed dock
-   above sat on top of «التمرين التالي» / «أنهِ الجلسة» at every scroll position
-   (measured: dock 712-772, nav 743-787 on a 390x844 screen), so inside the
-   runner the countdown stops floating. It is a LINE IN THE LEDGER, not a
-   billboard: hairline above and below, 20px mono instead of the dock's 30, ink
-   on paper, no slab and no shadow, and the accent spent only on the draining
-   bar — the one live thing on the row. See ROUND5-FABLE-BRIEF §A.1. */
-.rest-row {
-  display: grid; grid-template-columns: auto auto 1fr auto; align-items: center;
-  gap: 12px; min-height: 48px; padding: 4px 0; margin-top: 6px;
-  border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair);
-  background: var(--bg); color: var(--text);
+.session-clock[hidden] { display: none; }
+.session-clock .sc-disc {
+  position: relative; width: 56px; height: 56px; border-radius: 50%; padding: 0; border: 0;
+  background: var(--bg-card); color: var(--text);
+  box-shadow: var(--shadow-md); cursor: grab; display: grid; place-items: center;
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
-.rest-row .rt-time { font-size: 20px; }
-.rest-row .rt-bar { background: color-mix(in srgb, var(--text) 14%, transparent); }
-.rest-row .rt-cancel { background: transparent; color: var(--text-muted); }
+.session-clock.dragging .sc-disc { cursor: grabbing; transform: scale(1.06); box-shadow: var(--shadow-lg); transition: none; }
+.session-clock .sc-ring { position: absolute; inset: 0; width: 56px; height: 56px; transform: rotate(-90deg); pointer-events: none; }
+.session-clock .sc-ring circle { fill: none; stroke-width: 2; }
+.session-clock .sc-track { stroke: var(--hair); }
+/* r=26 → circumference 163.4; the fill drains as --p goes 1 → 0. */
+.session-clock .sc-fill { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 163.4; stroke-dashoffset: calc(163.4 * (1 - var(--p, 0))); transition: stroke-dashoffset 200ms linear; opacity: 0; }
+.session-clock[data-face="rest"] .sc-fill { opacity: 1; }
+.session-clock[data-face="rest"] .sc-track { stroke: color-mix(in srgb, var(--accent) 22%, transparent); }
+.session-clock .rt-time { font-family: var(--font-mono); font-weight: 600; font-size: 15px; line-height: 1; direction: ltr; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.session-clock[data-face="rest"] .rt-time { font-size: 16px; color: var(--accent-label); }
+/* The pill: beside the circle, on the side that has room. */
+.session-clock .sc-pill {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  padding: 6px 10px; border-radius: 999px; background: var(--bg-card); color: var(--text);
+  box-shadow: var(--shadow-md); font-size: 13.5px;
+}
+.session-clock .sc-pill[hidden] { display: none; }
+.session-clock[data-side="left"] .sc-pill { left: 64px; }
+.session-clock[data-side="right"] .sc-pill { right: 64px; }
+.session-clock .sc-pill-label { font-weight: 600; }
+.session-clock .sc-pill-time { font-family: var(--font-mono); font-weight: 600; }
+.session-clock .sc-pill-since { color: var(--text-muted); font-size: 12.5px; }
+.session-clock .sc-pill .btn.tiny { min-height: 32px; padding: 0 10px; }
+@media (prefers-reduced-motion: reduce) { .session-clock .sc-fill { transition: none; } }
 
 /* ===== Coach ===== */
 .coach-ask { margin-top: 8px; }
@@ -683,10 +693,17 @@ label > input, label > select { margin-top: 6px; }
 
 /* ===== End of session ===== */
 .session-end { text-align: center; padding: 24px 0 8px; }
-.session-end .hero { width: 76px; height: 76px; margin: 0 auto 16px; border-radius: 50%; background: var(--good-soft); color: var(--good); display: grid; place-items: center; font-size: 34px; }
-.session-end .hero svg { width: 40px; height: 40px; }
+/* Round 6: the hero is the clock — «خلينا نركز على الوقت». One number, 44px
+   mono in the accent, the eyebrow above it, the session below it. */
+.session-end .end-eyebrow { font-size: 12.5px; color: var(--text-muted); letter-spacing: .02em; }
+.session-end .end-clock { font-family: var(--font-mono); font-size: 44px; font-weight: 600; line-height: 1.1; color: var(--accent-label); direction: ltr; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+.session-end h2 { font-size: 20px; margin-top: 8px; }
+.session-end .end-cardio { text-align: start; padding: 12px 0; border-bottom: 1px solid var(--hair); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.session-end .end-cardio .cardio-summary-line { margin: 0; }
+.session-end .end-cardio-form { text-align: start; padding-top: 8px; border-bottom: 1px solid var(--hair); }
+.session-end .end-note { margin: 12px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 .session-end .subtitle { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin: 22px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin: 22px 0 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
 .stats-grid .stat { padding: 16px 0; border-inline-start: 1px solid var(--hair); }
 .stats-grid .stat:first-child { border-inline-start: 0; }
 .stats-grid .num { font-family: var(--font-mono); font-size: 28px; font-weight: 600; line-height: 1; }
@@ -704,8 +721,6 @@ label > input, label > select { margin-top: 6px; }
 .next-up { margin: 16px 0; font-size: 14px; color: var(--ink-2); }
 .next-up strong { color: var(--text); }
 .end-cta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
-@keyframes check-draw { from { stroke-dashoffset: 48; } to { stroke-dashoffset: 0; } }
-.check-draw path { stroke-dasharray: 48; animation: check-draw 500ms var(--ease) 120ms both; }
 
 /* ===== Sheet (modal) ===== */
 .modal-overlay {
@@ -743,6 +758,7 @@ label > input, label > select { margin-top: 6px; }
 .xs-clips, .device-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .xs-add-device { display: flex; gap: 8px; margin-top: 8px; }
 .xs-add-device .btn { flex: 0 0 auto; }
+.xs-step { margin-top: 14px; }
 .xs-log { width: 100%; border-collapse: collapse; font-size: 13px; }
 .xs-log th { font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-align: start; padding: 4px 0; }
 .xs-log td { padding: 7px 0; border-top: 1px solid var(--hair); vertical-align: middle; }
@@ -792,18 +808,6 @@ label > input, label > select { margin-top: 6px; }
 .skin-suggestion-copy { line-height: 1.4; }
 .skin-suggestion-actions { display: flex; gap: 8px; margin-top: 6px; }
 .skin-suggestion-actions .btn { flex: 1; min-height: 40px; }
-/* The toast clears the dock only while the dock is the surface being shown. On
-   the runner the countdown is in flow, so the toast keeps its normal seat. */
-body.rest-docked .toast { bottom: calc(var(--nav-h) + var(--safe-bottom) + 88px + var(--toast-lift, 0px)); }
-/* Guard rail (ROUND5-FABLE-BRIEF §A.3). Nothing reserved space for the dock, so
-   it covered the last ~60px of every page it floated over. The height is
-   MEASURED by core/rest.js into --rest-dock-h (the 60px fallback is only for
-   the frame before the first measurement); 10px is the gap the dock is parked
-   at above the tab bar, and the 24px is the page's usual breathing room. */
-body.rest-docked {
-  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--rest-dock-h, 60px) + 10px + 24px);
-}
-
 /* ===== Responsive / motion ===== */
 @media (min-width: 600px) {
   :root { --page-x: 28px; }
@@ -1133,7 +1137,7 @@ details.advanced-settings[open] > summary::after { transform: rotate(-135deg); }
 .cardio-summary-line { margin: 6px 0 0; line-height: 1.5; }
 .cardio-summary-line .num { font-family: var(--font-mono); }
 .cardio-summary-line.beaten { color: var(--accent-label); font-weight: 600; }
-#page-end .cardio-summary-line { text-align: start; margin: -12px 0 18px; }
+#page-end .cardio-summary-line { text-align: start; margin: 0; }
 /* The end screen's stats grid, with the session clock as a fourth cell. Three
    cells had 116px each at 390px; four have 87px, so the mono step-down that
    already exists for a long volume starts one notch lower here — a 1:20:45 at

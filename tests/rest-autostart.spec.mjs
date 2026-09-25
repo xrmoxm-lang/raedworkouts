@@ -17,13 +17,12 @@ test('the rest timer starts on its own when a working set is ticked', async ({ p
   await page.evaluate(() => document.querySelector('[data-warmup-skip]')?.click());
   await page.waitForTimeout(900);
 
-  // Round 5 (2026-09-23): on the RUNNER the countdown is in flow inside the card
-  // («الوقت العداد يصير تحت، ما أقدر أروح للـnext») — the fixed dock covered
-  // «التمرين التالي»/«أنهِ الجلسة» at every scroll position, so it is hidden
-  // here and `[data-rest-inline]` is the surface. What this spec pins is
-  // unchanged: nothing is pressed and a countdown appears by itself.
-  await expect(page.locator('[data-rest-inline]')).toBeHidden();
-  await expect(page.locator('#rest-timer')).toBeHidden();
+  // Round 6 (2026-09-25): the one surface is the floating session clock
+  // (`#session-clock`, ui/clock.js). Before any set it shows the elapsed face.
+  // What this spec pins is unchanged: nothing is pressed and a countdown
+  // appears by itself.
+  await expect(page.locator('#session-clock')).toBeVisible();
+  await expect(page.locator('#session-clock')).toHaveAttribute('data-face', 'elapsed');
 
   // The app requires the exercise's ramp sets before a working set can be ticked.
   const ramps = page.locator('[data-set-kind="warmup"]');
@@ -38,9 +37,9 @@ test('the rest timer starts on its own when a working set is ticked', async ({ p
   await row.locator('.set-check').click();
 
   // Nothing else is pressed: the timer must appear by itself.
-  await expect(page.locator('[data-rest-inline]')).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('[data-rest-inline] .rt-time')).toHaveText(/^\d{1,2}:\d{2}$/);
-  // And it must not ALSO float over the nav while it does.
-  await expect(page.locator('#rest-timer')).toBeHidden();
+  await expect(page.locator('#session-clock')).toHaveAttribute('data-face', 'rest', { timeout: 5000 });
+  await expect(page.locator('#session-clock .rt-time')).toHaveText(/^\d{1,2}:\d{2}$/);
+  // And nothing else carries a countdown: the row and the dock are retired.
+  expect(await page.locator('[data-rest-inline], #rest-timer').count()).toBe(0);
   expect(await page.evaluate(() => document.body.classList.contains('resting'))).toBe(true);
 });

@@ -289,7 +289,9 @@ test('progression ignores legacy numeric telemetry and applies clamps after two 
   state = first.next_state;
   const second = progressExercise({ catalogue, exercise: legPress, state, completedSets: exposure(7), history: [{ kind: 'working', valid: true, weight_kg: 50 }], bodyweightKg: 82 });
   assert.equal(second.action, 'increase');
-  assert.equal(second.next_state.load_kg, 52.5);
+  // Round 6 §D: a leg-press sled moves by 2 × 2.5 kg plates (data.js), so the
+  // earned step is 55, never the 52.5 the flat 2.5 default used to allow.
+  assert.equal(second.next_state.load_kg, 55);
   assert.equal(second.next_state.reps_target, 8);
   assert.throws(() => initialiseProgressionState({ loadKg: 10, exercise: legPress, repLow: 6, repHigh: 13 }), /rep_high <= 12/);
 });

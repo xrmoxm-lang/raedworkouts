@@ -28,6 +28,10 @@ export const LOCALE = Object.freeze({
   // Shown in the weight box when there is no logged history to suggest from.
   calibrate: pair('calibrate', 'معايرة'),
   reps_goal: pair('Complete {n} on every set to earn a load increase', 'أكمل {n} في كل المجموعات ليرتفع الوزن'),
+  // Round 6 §D.3 (Raed: progressive overload must know the machine and its
+  // number). The same goal, stating the load it earns; the «(+2.5)» delta is
+  // appended by the card in its own LTR-isolated span.
+  reps_goal_to: pair('Complete {n} on every set → {kg} kg', 'أكمل {n} في كل المجموعات ← {kg} كغ'),
   // The effort the PROGRAMME asks for, as a word. D16 replaced numeric RPE with
   // coarse language, so these are bands, not numbers: 6 leaves about four reps
   // in reserve, 7 three, 8 two, 9+ one or none.
@@ -95,6 +99,10 @@ export const LOCALE = Object.freeze({
   coach_over_budget_hint: pair(
     'The monthly ceiling was reached ({month} of {cap}). Your books still answered — the passages are below. It resets at the start of next month.',
     'وصلنا سقف الشهر ({month} من {cap}). كتبك جاوبت — المقاطع تحت. يرجع أول الشهر الجاي.'),
+  coach_spend_unverified: pair('Written answers are paused — spending could not be checked.', 'الأجوبة المكتوبة موقوفة — ما قدرنا نتأكد من المصروف.'),
+  coach_spend_unverified_hint: pair(
+    'The server could not read this month\'s spend, so it did not risk a paid answer. Your books still answered — the passages are below.',
+    'الخادم ما قدر يقرأ مصروف هالشهر، فما خاطر بجواب مدفوع. كتبك جاوبت — المقاطع تحت.'),
   rest_override: pair('Use my rest time everywhere', 'استعمل وقت راحتي في كل التمارين'),
   rest_override_desc: pair(
     'Off, each exercise uses the rest the programme prescribes. On, they all use the number above — for a day you are short of time. Supersets stay at zero either way.',
@@ -209,9 +217,13 @@ export const LOCALE = Object.freeze({
   why_reentry_seed: pair('⚡ Re-entry seed: {kg} kg. Let completed reps find the level; do not grind.', '⚡ وزن بداية العودة: {kg} كغ. دع التكرارات تجد المستوى، ولا تعاند.'),
   why_last_logged: pair('Use the last logged load and complete the prescribed reps.', 'استعمل آخر وزن مسجّل وأكمل التكرارات المطلوبة.'),
   why_hold_very_hard: pair('Final set was very hard — hold this load one more session.', 'المجموعة الأخيرة كانت صعبة جدًا — ابقَ على هذا الوزن جلسة أخرى.'),
-  why_bump_twice: pair('You completed {reps} on every set, twice. Up {kg} kg.', 'أكملت {reps} في كل المجموعات مرتين. ارفع {kg} كغ.'),
+  // Round 6 §D.3: the note names the load the step lands on, not only its size.
+  // Arabic reads right-to-left, so its arrow is ← (house convention: start_arrow,
+  // next_exercise_arrow); no «+» or «(» beside a number, which the bidi
+  // algorithm would strand on the wrong side of it.
+  why_bump_twice: pair('You completed {reps} on every set, twice. Up {kg} kg → {target} kg.', 'أكملت {reps} في كل المجموعات مرتين. ارفع {kg} كغ ← {target} كغ.'),
   why_accessory_reps: pair('Add a rep or a set rather than weight — this is an accessory.', 'أضف تكرارًا أو مجموعة بدل الوزن — هذا تمرين مساعد.'),
-  why_easy_bump: pair('Easy on the final set after every set reached {reps} — the increase lands a session sooner: +{kg} kg.', 'سهل في الأخيرة بعد بلوغ {reps} في كل المجموعات — الزيادة تأتي أبكر بجلسة: +{kg} كغ.'),
+  why_easy_bump: pair('Easy on the final set after every set reached {reps} — the increase lands a session sooner: up {kg} kg → {target} kg.', 'سهل في الأخيرة بعد بلوغ {reps} في كل المجموعات — الزيادة تأتي أبكر بجلسة: ارفع {kg} كغ ← {target} كغ.'),
   why_match_or_beat: pair('Last time: {kg} kg × {reps}. Match it or beat it.', 'المرة الماضية: {kg} كغ × {reps}. اعدلها أو تجاوزها.'),
   // The safety clamps (domain/clamps.js C1-C8) refused or trimmed an earned
   // increase. Saying «ارفع كذا» over a load that did not move is the lie this
@@ -484,6 +496,13 @@ export const LOCALE = Object.freeze({
   cancel_rest: pair('Cancel rest', 'ألغِ الراحة'),
   // The label on the runner's in-flow countdown row (ROUND5-FABLE-BRIEF §A.1).
   rest_label: pair('Rest', 'راحة'),
+  // The floating session clock (ui/clock.js) — Raed 2026-09-25: a small circle
+  // he can drag; tap opens a pill with the two things a rest ever needs.
+  clock_session: pair('Session', 'الجلسة'),
+  clock_started_at: pair('started', 'بدأت'),
+  clock_add_30: pair('+30 s', '+30 ث'),
+  clock_skip_rest: pair('Skip', 'تخطّ'),
+  clock_aria: pair('Session clock — drag to move, tap for options', 'ساعة الجلسة — اسحبها لتحريكها، واضغطها للخيارات'),
   start_session: pair('Start Session', 'ابدأ التمرين'),
   rest_day: pair('🛋️ Rest day', '🛋️ يوم راحة'),
   gym_day: pair('🏋️ Today is', '🏋️ اليوم'),
@@ -570,6 +589,14 @@ export const LOCALE = Object.freeze({
   equipment_unset: pair('Not set', 'غير محدّد'),
   actions_section: pair('Actions', 'إجراءات'),
   no_device_yet: pair('No machine chosen', 'ما اخترت جهازاً'),
+  // Round 6 §D.2 — the smallest load change the machine allows, per machine.
+  equipment_step_label: pair('Machine step (kg)', 'درجة الجهاز (كغ)'),
+  equipment_step_now: pair('Each increase: {kg} kg', 'كل زيادة: {kg} كغ'),
+  equipment_step_for_device: pair('Saved for {device}', 'محفوظة لـ {device}'),
+  equipment_step_custom: pair('Other', 'غير ذلك'),
+  // His Matrix stacks print n × 4.5359 kg rounded (5 · 9 · 14 · 18 · 23 …).
+  equipment_step_matrix: pair('Matrix ladder', 'سلّم ماتريكس'),
+  equipment_step_now_matrix: pair('Each increase: the next label on the Matrix stack', 'كل زيادة: الرقم التالي على سلّم ماتريكس'),
   machine_weight_only_short: pair('Machine weight only — no number to enter', 'وزن الجهاز فقط — ما فيه رقم أدخله'),
   add_set: pair('Add a set', 'أضف مجموعة'),
   log_col_date: pair('Date', 'التاريخ'),
@@ -592,7 +619,6 @@ export const LOCALE = Object.freeze({
   what_is_this: pair('What is this?', 'وش يعني هذا؟'),
   superset_explain: pair('Superset: do both movements back to back with no rest between them, then rest once after the pair.', 'سوبرست: تسوي الحركتين ورا بعض بدون راحة بينهما، وترتاح مرة وحدة بعد ما تخلّصهما.'),
   undo: pair('Undo', 'تراجع'),
-  session_finished: pair('Session finished and saved.', 'انتهت الجلسة وحُفظت.'),
   session_reopened: pair('Session reopened. Nothing was lost.', 'أُعيدت الجلسة. ما ضاع شيء.'),
   reopen_session: pair('Reopen this session', 'أعِد فتح هذه الجلسة'),
   reopen_session_body: pair('It goes back to being the session in progress, exactly as you left it on {date}.', 'ترجع جلسةً جارية، بالضبط كما تركتها في {date}.'),
@@ -732,6 +758,8 @@ export const LOCALE = Object.freeze({
   cardio_log: pair('Log the cool-down', 'سجّل التهدئة'),
   cardio_skip: pair('Skip the cool-down', 'تخطَّ التهدئة'),
   cardio_skipped: pair('Skipped today.', 'تُخطّيت اليوم.'),
+  // The end screen, when he finished without deciding on the cool-down.
+  cardio_not_logged: pair('Not logged yet.', 'ما سُجّلت بعد.'),
   cardio_edit: pair('Edit', 'تعديل'),
   cardio_best: pair('Best', 'أفضلك'),
   cardio_beat_by: pair('{n} above your best', '{n} فوق أفضلك'),
@@ -1000,7 +1028,8 @@ export const LOCALE = Object.freeze({
     'Deletes every stored personal record. This cannot be undone.',
     'يحذف كل الأرقام الشخصية المحفوظة. ما فيه رجعة.'),
   import_failed: pair('Import failed: {reason}', 'فشل الاستيراد: {reason}'),
-  // Discarding now offers the same undo that finishing already did.
+  // Discarding offers an undo (finishing no longer does — Raed 2026-09-25: the
+  // end screen is the confirmation, and he asked for that «تراجع» to go).
   session_discarded: pair('Session discarded.', 'تجاهلت الجلسة.'),
   session_restored: pair('Session restored. Nothing was lost.', 'رجعت الجلسة. ما ضاع شيء.'),
   undo_unavailable: pair('A new session is already open.', 'فيه جلسة جديدة مفتوحة الحين.'),

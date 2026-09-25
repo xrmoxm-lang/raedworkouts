@@ -11,7 +11,9 @@ if (!requirements.includes('fastembed==0.8.0') || /\b(?:openai|anthropic)\b/i.te
 if (!graph.includes('domain/clamps.js') || !graph.includes('cannot emit a weight or load')) {
   throw new Error('The graph must preserve the deterministic clamp boundary.');
 }
-if (!progression.includes("import { clampWorkingWeight } from './clamps.js'")) {
+// The import may carry more names (round 6 added `stepFor`); what the gate
+// guards is that progression is still wired to the clamp module at all.
+if (!/import\s*\{[^}]*\bclampWorkingWeight\b[^}]*\}\s*from\s*'\.\/clamps\.js'/.test(progression)) {
   throw new Error('Progression is no longer wired to domain/clamps.js.');
 }
 if (!qa.includes('QueryRewriteError') || !qa.includes('not_in_sources')) {

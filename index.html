@@ -72,15 +72,10 @@
     <button class="tab" data-route="settings" data-i18n-aria-label="settings" aria-label="الإعدادات"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6H3"/><path d="M21 6h-7"/><circle cx="12" cy="6" r="2"/><path d="M7 12H3"/><path d="M21 12h-9"/><circle cx="9" cy="12" r="2"/><path d="M13 18H3"/><path d="M21 18h-3"/><circle cx="15" cy="18" r="2"/></svg></span><span class="label" data-i18n="settings">الإعدادات</span></button>
   </nav>
 
-  <!-- Rest dock. aria-live stays off: it reprints every 200ms.
-       data-rest-surface: core/rest.js paints EVERY surface from the one timer,
-       so this and the runner's in-flow row can never show different times. -->
-  <div id="rest-timer" class="rest-timer" data-rest-surface="dock" style="display:none;">
-    <span class="rt-ico" aria-hidden="true">⏱</span>
-    <span id="rest-timer-text" class="rt-time" aria-live="off">2:00</span>
-    <span id="rest-timer-bar" class="rt-bar" aria-hidden="true"></span>
-    <button id="rest-cancel" class="rt-cancel" data-i18n-aria-label="cancel_rest" aria-label="ألغِ الراحة">✕</button>
-  </div>
+  <!-- The floating session clock (ui/clock.js): elapsed time on every screen,
+       the rest countdown while a rest runs, draggable. It is the ONE
+       [data-rest-surface] core/rest.js paints (ROUND6-FABLE-BRIEF §C). -->
+  <div id="session-clock" class="session-clock" data-rest-surface="clock" hidden></div>
 
   <div id="modal-overlay" class="modal-overlay">
     <div id="modal" class="modal"></div>

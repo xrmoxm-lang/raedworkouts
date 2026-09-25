@@ -20,6 +20,7 @@ import sqlite3
 import sys
 import threading
 import time
+import traceback
 import urllib.request
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -296,21 +297,71 @@ def is_legacy_allowed(user_row) -> bool:
     return datetime.now(timezone.utc) < pin_set_at + LEGACY_GRACE
 
 
+# Failed-auth bookkeeping, bounded (2026-09-25).
+#
+# `_failed_auth` is keyed by the user_id the CALLER names, on a service that is
+# public through the Funnel. rate_limited() wrote an entry — even an empty one —
+# for every name it was asked about and pruned only that key, so a script
+# cycling through names grew the dict for as long as the process lived
+# (Round 5 finding, V17-CHECKLIST.md:202). Now: empty entries are never stored,
+# each key keeps only the attempts that can still matter, every key is swept at
+# most once a minute, and the table has a hard ceiling that evicts the key whose
+# last failure is oldest. Eviction can only ever FORGET failures (relax a
+# throttle on a name nobody has touched recently), never lock anyone out.
+FAILED_AUTH_WINDOW_S = 15 * 60
+FAILED_AUTH_THRESHOLD = 8
+FAILED_AUTH_MAX_KEYS = 1024
+FAILED_AUTH_SWEEP_S = 60
+_failed_auth_lock = threading.Lock()
+_failed_auth_swept_at = [0.0]
+
+
+def _sweep_failed_auth(now: float, force: bool = False) -> None:
+    if not force and now - _failed_auth_swept_at[0] < FAILED_AUTH_SWEEP_S and len(_failed_auth) <= FAILED_AUTH_MAX_KEYS:
+        return
+    _failed_auth_swept_at[0] = now
+    cutoff = now - FAILED_AUTH_WINDOW_S
+    for key in list(_failed_auth):
+        kept = [t for t in _failed_auth.get(key, []) if t >= cutoff]
+        if kept:
+            _failed_auth[key] = kept
+        else:
+            _failed_auth.pop(key, None)
+    overflow = len(_failed_auth) - FAILED_AUTH_MAX_KEYS
+    if overflow > 0:
+        stalest = sorted(_failed_auth, key=lambda k: _failed_auth[k][-1])[:overflow]
+        for key in stalest:
+            _failed_auth.pop(key, None)
+
+
 def rate_limited(user_id: str) -> bool:
     key = user_id.lower()
-    cutoff = time.time() - 15 * 60
-    attempts = [t for t in _failed_auth.get(key, []) if t >= cutoff]
-    _failed_auth[key] = attempts
-    return len(attempts) >= 8
+    now = time.time()
+    cutoff = now - FAILED_AUTH_WINDOW_S
+    with _failed_auth_lock:
+        _sweep_failed_auth(now)
+        attempts = [t for t in _failed_auth.get(key, []) if t >= cutoff]
+        if attempts:
+            _failed_auth[key] = attempts
+        else:
+            _failed_auth.pop(key, None)
+        return len(attempts) >= FAILED_AUTH_THRESHOLD
 
 
 def record_failed(user_id: str) -> None:
     key = user_id.lower()
-    _failed_auth.setdefault(key, []).append(time.time())
+    now = time.time()
+    with _failed_auth_lock:
+        attempts = _failed_auth.setdefault(key, [])
+        attempts.append(now)
+        # Only the newest THRESHOLD×2 can ever decide a throttle.
+        del attempts[:-FAILED_AUTH_THRESHOLD * 2]
+        _sweep_failed_auth(now)
 
 
 def clear_failed(user_id: str) -> None:
-    _failed_auth.pop(user_id.lower(), None)
+    with _failed_auth_lock:
+        _failed_auth.pop(user_id.lower(), None)
 
 
 def auth_ok(con: sqlite3.Connection, user_id: str, headers, body: dict | None = None, require_legacy=False) -> tuple[bool, str]:
@@ -447,10 +498,70 @@ def session_differs(a: dict, b: dict) -> bool:
     return json_dumps(left) != json_dumps(right)
 
 
-def merge_history(head_state: dict, incoming_state: dict) -> list:
+# ---- History deletion tombstones (2026-09-25) --------------------------------
+# A history delete on the client used to be a bare splice, and the union below
+# put the session straight back from any stale device or a stale head row
+# (CODEX-AUDIT-2026-09-25.md «NOT DONE» #1). The client now stamps
+# `history_tombstones: [{target_type, target_id (uid), key, deleted_at}]`; this
+# is the mirror of domain/state-merge.js and the matching rules MUST stay the
+# same there and here:
+#   - uid match, always;
+#   - session-key match unless the candidate is a `recovered_duplicate` (a
+#     different session that shares the key — merge_session_into_history);
+#   - a copy with `revived_at` later than the tombstone survives (a restore).
+# A client that never sends the key (old build) merges exactly as before; the
+# head keeps its tombstones because merge_states unions them explicitly.
+HISTORY_TOMBSTONE_CAP = 500
+
+
+def _valid_tombstone(tomb) -> bool:
+    return isinstance(tomb, dict) and bool(tomb.get("target_id") or (tomb.get("key") and tomb.get("key") != "|"))
+
+
+def merge_history_tombstones(*lists) -> list:
+    by_id: dict[str, dict] = {}
+    for items in lists:
+        for tomb in items if isinstance(items, list) else []:
+            if not _valid_tombstone(tomb):
+                continue
+            ident = f"uid:{tomb['target_id']}" if tomb.get("target_id") else f"key:{tomb.get('key')}"
+            seen = by_id.get(ident)
+            if seen is None or str(tomb.get("deleted_at") or "") > str(seen.get("deleted_at") or ""):
+                by_id[ident] = copy.deepcopy(tomb)
+    out = sorted(by_id.values(), key=lambda t: str(t.get("deleted_at") or ""))
+    return out[-HISTORY_TOMBSTONE_CAP:]
+
+
+def _tombstone_kills(sess: dict, tombstones: list) -> bool:
+    if not isinstance(sess, dict) or not tombstones:
+        return False
+    uid = str(sess.get("uid") or "")
+    key = session_key(sess)
+    revived = str(sess.get("revived_at") or "")
+    for tomb in tombstones:
+        if not _valid_tombstone(tomb):
+            continue
+        hit = (uid and tomb.get("target_id") and uid == str(tomb.get("target_id"))) or (
+            not sess.get("recovered_duplicate") and tomb.get("key") and tomb.get("key") == key)
+        if hit and not (revived and revived > str(tomb.get("deleted_at") or "")):
+            return True
+    return False
+
+
+def drop_tombstoned(history, tombstones: list):
+    if not isinstance(history, list) or not tombstones:
+        return history
+    return [sess for sess in history if not _tombstone_kills(sess, tombstones)]
+
+
+def merge_history(head_state: dict, incoming_state: dict, tombstones: list | None = None) -> list:
     merged: dict[str, dict] = {}
     out: list[dict] = []
-    for source in ((head_state.get("history") or []), (incoming_state.get("history") or [])):
+    tombstones = tombstones or []
+    # Filter each side BEFORE the union: a dead copy must never be the one that
+    # wins a key collision, nor spawn a `recovered_duplicate` of itself.
+    for source in (drop_tombstoned(head_state.get("history") or [], tombstones),
+                   drop_tombstoned(incoming_state.get("history") or [], tombstones)):
         for raw in source:
             if not isinstance(raw, dict):
                 continue
@@ -594,7 +705,10 @@ def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, i
     newer_is_incoming = parse_iso(incoming_updated_at) >= parse_iso(head_updated_at)
     out = copy.deepcopy(incoming_state if newer_is_incoming else head_state)
 
-    out["history"] = merge_history(head_state, incoming_state)
+    tombstones = merge_history_tombstones(head_state.get("history_tombstones"), incoming_state.get("history_tombstones"))
+    out["history"] = merge_history(head_state, incoming_state, tombstones)
+    if tombstones:
+        out["history_tombstones"] = tombstones
     out["bodyweight_log"] = merge_bodyweight(head_state, incoming_state)
     out["prs"] = merge_prs(head_state, incoming_state)
     for key in ("custom_videos", "custom_jn_urls", "video_hidden"):
@@ -647,6 +761,12 @@ def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, i
         out["active_session"] = None
     else:
         out["active_session"] = copy.deepcopy(head_active) if head_active else None
+
+    # A stale device can still hold a deleted session as its LIVE one (it never
+    # saw the finish). Its uid/key is tombstoned, so it is a copy of a session
+    # he finished and then deleted — not new training.
+    if out.get("active_session") and _tombstone_kills(out["active_session"], tombstones):
+        out["active_session"] = None
 
     scalar_source = incoming_state if newer_is_incoming else head_state
     for key in ("current_week", "current_block", "msg_index", "forced_next_session"):
@@ -767,7 +887,27 @@ def notify_p180_sessions(con: sqlite3.Connection, user_id: str, state_obj: dict)
 
 # 32 MB. His state is ~4.5 MB after three years of training, so this is roughly
 # seven times the largest legitimate push and still far too small to hurt the box.
+# It applies only to a request whose Authorization header already carries the
+# valid bearer — i.e. one that is authenticated BEFORE its body is read.
 MAX_BODY_BYTES = 32 * 1024 * 1024
+# Everything else — no header, a wrong header — gets 64 KiB (2026-09-25).
+#
+# Auth used to be decided only after the body was read, so anyone on the open
+# internet could make the box pull 32 MB per request (Round 5 finding,
+# V17-CHECKLIST.md:203). The honest number is the browser's own: the only
+# legitimate header-less push is the pagehide/visibilitychange sendBeacon
+# (app.js → core/sync.js syncToCloud {beacon, beaconAuth}), which carries its
+# token in the body because a beacon cannot set headers, and a beacon is capped
+# by the Fetch spec's 64 KiB in-flight keepalive quota — the browser refuses a
+# larger one before it leaves the phone. /register bodies are ~100 bytes. Every
+# full-state push goes through syncFetch, which always sends the bearer header.
+PRE_AUTH_MAX_BODY_BYTES = 64 * 1024
+
+
+def header_bearer_ok(headers) -> bool:
+    token = read_token()
+    auth = (headers.get("authorization") or headers.get("Authorization") or "") if headers else ""
+    return bool(token and auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(), token))
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "RaedSync/2"
@@ -804,6 +944,16 @@ class Handler(BaseHTTPRequestHandler):
     def send_error_json(self, status: int, error: str):
         self.send_json(status, {"error": error})
 
+    def send_server_error(self):
+        # Generic body, details to the log only (2026-09-25). The response used
+        # to be f"server_error: {exc}" — exception text (SQL, file paths, the
+        # shape of his state) handed to anyone on the open internet (Round 5
+        # finding, V17-CHECKLIST.md:204). journald keeps the traceback; the
+        # client only ever keyed on the status (core/sync.js syncFailureReason).
+        ref = uuid.uuid4().hex[:8]
+        sys.stderr.write(f"server_error ref={ref} path={urlparse(self.path).path}\n{traceback.format_exc()}")
+        self.send_json(500, {"error": "server_error", "ref": ref})
+
     def read_json_body(self) -> dict:
         # Bounded, and tolerant of a header that is not a number.
         #
@@ -816,13 +966,17 @@ class Handler(BaseHTTPRequestHandler):
         #
         # The cap is generous on purpose: a real push is his whole state, which
         # is ~1.5 MB after a year of training and ~4.5 MB after three.
+        self._body_too_large = False
         try:
             declared = int(self.headers.get("content-length") or "0")
         except (TypeError, ValueError):
             return {}
         if declared <= 0:
             return {}
-        if declared > MAX_BODY_BYTES:
+        limit = MAX_BODY_BYTES if header_bearer_ok(self.headers) else PRE_AUTH_MAX_BODY_BYTES
+        if declared > limit:
+            # Never read: not a byte of an oversized unauthenticated body.
+            self._body_too_large = True
             return {}
         raw = self.rfile.read(declared)
         if not raw:
@@ -855,12 +1009,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error_json(404, "not_found")
         except PermissionError as exc:
             self.send_error_json(401, str(exc) or "unauthorized")
-        except Exception as exc:
-            self.send_error_json(500, f"server_error: {exc}")
+        except Exception:
+            self.send_server_error()
 
     def do_POST(self):
         parsed = urlparse(self.path)
         body = self.read_json_body()
+        if getattr(self, "_body_too_large", False):
+            # The unread body stays on the socket, so this connection must not
+            # be reused for another request.
+            self.close_connection = True
+            return self.send_error_json(413, "payload_too_large")
         try:
             if parsed.path == "/state":
                 return self.handle_post_state(body)
@@ -872,8 +1031,8 @@ class Handler(BaseHTTPRequestHandler):
         except PermissionError as exc:
             msg = str(exc)
             self.send_error_json(403 if msg == "not_allowlisted" else 401, msg or "unauthorized")
-        except Exception as exc:
-            self.send_error_json(500, f"server_error: {exc}")
+        except Exception:
+            self.send_server_error()
 
     def handle_users(self):
         with connect() as con:

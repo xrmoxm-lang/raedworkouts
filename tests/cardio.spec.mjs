@@ -249,15 +249,17 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
   // He logged it and then never saw it again: the end screen counted sets, reps
   // and volume and said nothing about the twenty minutes on the treadmill or
   // how long the session took. Both are on it now.
+  // Round 6: the clock left the ledger and became the hero above it
+  // (`[data-end-clock]`, ROUND6-FABLE-BRIEF §B); the ledger is the three counts.
   const end = await page.evaluate(() => {
     const cells = [...document.querySelectorAll('#page-end .stats-grid .stat')];
     return {
       count: cells.length,
-      duration: cells[3]?.querySelector('.num')?.textContent?.trim() || '',
+      duration: document.querySelector('#page-end [data-end-clock]')?.textContent?.trim() || '',
       cardio: document.querySelector('#page-end [data-cardio-summary]')?.textContent || null,
     };
   });
-  expect(end.count, 'the end screen carries four stats, the fourth being the clock').toBe(4);
+  expect(end.count, 'the end screen ledger carries the three counts').toBe(3);
   // The same clock format the done panel uses: m:ss under an hour.
   expect(end.duration, `duration read «${end.duration}»`).toMatch(/^\d{1,2}:\d{2}(?::\d{2})?$/);
   expect(end.cardio, 'the cool-down must be summarised where the session is summarised').not.toBeNull();

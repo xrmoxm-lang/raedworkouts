@@ -900,9 +900,21 @@ SPEND_ALERT_USD = float(os.environ.get("RAEDWORKOUTS_MONTHLY_ALERT_USD", "5"))
 SPEND_CAP_USD = float(os.environ.get("RAEDWORKOUTS_MONTHLY_CAP_USD", "25"))
 
 
+class SpendLedgerUnreadable(RuntimeError):
+    """The month's spend could not be read, so it is unknown — not zero."""
+
+
 def month_spend_usd() -> float:
-    """This calendar month's spend. Fails OPEN — a cap that cannot read its own
-    ledger must not lock him out of a coach he is paying for."""
+    """This calendar month's spend. Raises SpendLedgerUnreadable when the ledger
+    cannot be read.
+
+    It used to fail OPEN (return 0.0 — «a cap that cannot read its own ledger
+    must not lock him out»). That made the $25 «hard ceiling» a ceiling only
+    while the ledger was healthy: a locked, corrupt or unwritable spend.sqlite3
+    meant unlimited metered calls on a key that ships in public JavaScript
+    (CODEX-AUDIT-2026-09-25.md «NOT DONE» #2). Unknown spend is now treated as
+    over the cap; his books still answer, only the paid prose pauses.
+    """
     try:
         with _spend_conn() as conn:
             row = conn.execute(
@@ -911,11 +923,29 @@ def month_spend_usd() -> float:
         return float(row[0] or 0.0)
     except Exception as error:
         print(f"spend_read_failed {type(error).__name__}", flush=True)
-        return 0.0
+        raise SpendLedgerUnreadable(type(error).__name__) from error
+
+
+def spend_gate() -> dict | None:
+    """None when a paid call may go ahead, else the `answer` object to send.
+
+    Fails CLOSED: an unreadable ledger refuses the call with its own status so
+    the client can say «spend could not be checked» rather than claim a number.
+    """
+    if SPEND_CAP_USD <= 0:
+        return None
+    try:
+        month = month_spend_usd()
+    except SpendLedgerUnreadable:
+        return {"status": "spend_unverified", "answered": False, "cap_usd": SPEND_CAP_USD}
+    if month >= SPEND_CAP_USD:
+        return {"status": "over_budget", "answered": False,
+                "month_usd": round(month, 4), "cap_usd": SPEND_CAP_USD}
+    return None
 
 
 def over_spend_cap() -> bool:
-    return SPEND_CAP_USD > 0 and month_spend_usd() >= SPEND_CAP_USD
+    return spend_gate() is not None
 
 
 def _spend_conn():
@@ -1118,13 +1148,9 @@ class Handler(BaseHTTPRequestHandler):
                 # Over the ceiling, retrieval still runs — it is local, free, and
                 # it is the half of this feature that is actually HIS books. He
                 # loses the written prose, not the library, and he is told which.
-                if over_spend_cap():
-                    self._send(200, {
-                        "status": "ok", "results": results,
-                        "answer": {"status": "over_budget", "answered": False,
-                                   "month_usd": round(month_spend_usd(), 4),
-                                   "cap_usd": SPEND_CAP_USD},
-                    })
+                refused = spend_gate()
+                if refused is not None:
+                    self._send(200, {"status": "ok", "results": results, "answer": refused})
                     return
                 written = write_answer(question.strip(), results, context=context)
                 written["pass"] = 1

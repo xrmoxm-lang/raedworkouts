@@ -34,7 +34,6 @@ import {
   setSessionDoneDismissed,
   showSessionPreview,
 } from '../core/session.js';
-import { cancelRest, restClockText } from '../core/rest.js';
 import { render, router } from '../core/shell.js';
 import { profileProteinRange, saveLocal, settings, state } from '../core/store.js';
 import { PLATFORM_INFO, getAllExercises, getCurrentPlaylists } from '../core/videos.js';
@@ -344,28 +343,8 @@ export function renderHome() {
         render();
       });
 
-      // The rest countdown, IN FLOW, one hairline row between the set grid's
-      // quiet lines and the nav (ROUND5-FABLE-BRIEF §A.1). It is always in the
-      // DOM while he is lifting and simply `hidden` when no rest is running, so
-      // starting a rest never has to re-render the card he is typing into —
-      // core/rest.js unhides it and paints it from `restTimer`.
-      //
-      // A line in the ledger, not a billboard: 20px mono, not the dock's 30;
-      // ink on paper with the accent only on the draining bar, which is the one
-      // live thing.
-      root.appendChild(h('div', {
-        class: 'rest-row', 'data-rest-inline': 'true', 'data-rest-surface': 'inline', hidden: true,
-      },
-        h('span', { class: 'eyebrow' }, t('rest_label')),
-        // aria-live off for the same reason as the dock: it reprints every 200ms.
-        h('span', { class: 'rt-time num', 'aria-live': 'off' }, restClockText()),
-        h('span', { class: 'rt-bar', 'aria-hidden': 'true' }),
-        h('button', {
-          class: 'rt-cancel', 'data-rest-cancel': 'true',
-          'aria-label': t('cancel_rest'),
-          onClick: cancelRest,
-        }, '✕'),
-      ));
+      // The rest countdown is no longer in the card: since round 6 it is the
+      // floating session clock (ui/clock.js), on every screen, where he parks it.
 
       // Prev / Next nav. Classed rather than inline-styled so the touch-target
       // floor in styles.css can reach it — as an anonymous <div> these two were

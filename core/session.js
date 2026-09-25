@@ -5,7 +5,7 @@ import { defaultCardio } from '../domain/cardio.js';
 import {
   derivedBlock,
   exercisePrefs,
-  equipmentStepKg,
+  equipmentStep,
   rampLoadsFor,
   reEntryPlan,
   scopedReplacementFor,
@@ -33,8 +33,6 @@ import {
 // survived, so the session view threw ReferenceError on render.
 export let focusExerciseIdx = null;
 export function setFocusExerciseIdx(value) { focusExerciseIdx = value; }
-// Holds the session just finished so the undo toast can put it back.
-let lastFinishedSession = null;
 // Lets Raed go back into the cards after the done panel appears, without
 // undoing the completion. Reset whenever a session starts, so a new workout
 // never opens straight into the review state.
@@ -119,7 +117,7 @@ function startSession(session) {
       // rather than the first half of a two-set pair.
       const ramps = canSuggest
         // The learned equipment step, so a 5 kg machine ramps in 5 kg pins rather than 2.5.
-        ? rampLoadsFor(sug.weight, rampSets, equipmentStepKg(replacementId))
+        ? rampLoadsFor(sug.weight, rampSets, equipmentStep(replacementId))
         : (rampSets >= 2 ? [{ weight: '', reps: 10 }, { weight: '', reps: 6 }] : [{ weight: '', reps: 8 }]);
       ramps.forEach((warm) =>
         sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
@@ -326,9 +324,6 @@ export function endSession() {
   cancelRest();
   const finishedSession = { ...a, ended_at: new Date().toISOString(), prs: sessionPRs, stats };
   state.history.push(finishedSession);
-  // An undo window. The toast already supports one action, and this is the
-  // action it exists for: an hour of work is one mis-tap from gone otherwise.
-  lastFinishedSession = finishedSession;
   noteActiveCleared(finishedSession);
   state.active_session = null;
   state.forced_next_session = null;  // clear override after session ends
@@ -342,15 +337,10 @@ export function endSession() {
   showSessionEnd(finishedSession);
   // The only moment history actually grows.
   checkStorageHeadroom();
-  // The undo. Offered for long enough to notice the mistake, and it puts the
-  // session back exactly as it was rather than starting a new one.
-  toast(t('session_finished'), 9000, t('undo'), () => {
-    if (reopenSession(lastFinishedSession)) {
-      lastFinishedSession = null;
-      render();
-      toast(t('session_reopened'));
-    }
-  });
+  // No toast and no undo here. Raed (2026-09-25, ROUND6 §E): «التراجع بعد ما
+  // أنهي الجلسة، شيله بالكامل». The end screen is the confirmation; a session
+  // finished by mistake is reopened from the log (ui/history.js → reopenSession).
+  // The discard undo in discardSession() stays — his order was this one only.
 }
 
 function computeSessionPRs(session) {

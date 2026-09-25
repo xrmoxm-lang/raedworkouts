@@ -2124,3 +2124,45 @@ file was almost always written after the bug it prevents was proven on a phone.
 > button — tapping to watch would also have marked the drill done. The answer
 > is not to move the clip away from its drill; it is to give the row two
 > targets: the tick, and the thumbnail beside it.
+
+
+---
+
+## `ui/clock.js`
+
+### mountSessionClock
+
+> Raed 2026-09-25: «ديزاين الوقت مو عاجبني، أنا أحب الديزاين floating وأقدر
+> أحركه يمين، يسار … زي الدائرة صغيرة … أنظف وأرتب». Round 5 put the countdown
+> in flow inside the card because a fixed dock sat on the Next button at every
+> scroll position. A circle he parks where he wants is the other honest answer
+> to «a fixed bar is always on top of something»: 56px, snaps to an edge, its
+> position is his. It also carries what neither surface did — the elapsed time
+> of the session, on every page, in hours once it passes one («وقت التمرين
+> يكون بالساعات»). One timer (core/rest.js), one surface.
+
+### elapsedClockText
+
+> h:mm always — under an hour it reads 0:42, so the shape never changes
+> mid-session and 1:12 is never mistaken for a rest countdown of m:ss.
+
+### defaultPos
+
+> Default anchor bottom-start, 68px above the tab bar. Measured on 390×844:
+> after the rest-start scroll the runner's nav sits at 724–768; at 12px the
+> circle would cover the end of the secondary button. At 68px it clears the nav
+> at both the revealed and the max-scroll positions and is still in the thumb's
+> reach.
+
+## `ui/end.js`
+
+### renderSessionEnd
+
+> Raed 2026-09-25: «ديزاين الانتهاء مو عجبني … خلينا نركز على الوقت … ما حطينا
+> الـpost cardio». The generic check-circle hero is gone; the hero is the
+> session's clock, the ledger sits under it, and the cool-down is ALWAYS a line:
+> logged, skipped, or still open to log — the untouched case mounts the same
+> form here and writes into the archived session. Time is the hero because it is
+> the number he feels; it is never the goal, so it sits with the sets and the
+> load and nothing on this screen says «longer is better». No toast and no undo
+> on finish — the screen is the confirmation.

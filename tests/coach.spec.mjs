@@ -625,3 +625,28 @@ test('a failed answer is not the thing that comes back tomorrow', async ({ page 
   await expect(page.locator('[data-coach-restored]')).toHaveCount(0);
   await expect(page.locator('[data-coach-scope]')).toBeVisible();
 });
+
+test('spend that could not be checked pauses the written answer and says why, with no invented figure', async ({ page }) => {
+  // server/coach-service.py spend_gate fails CLOSED since 2026-09-25: an
+  // unreadable ledger refuses the paid call with `spend_unverified`. Before
+  // this branch existed the client fell through to the generic answer path.
+  await page.route(COACH, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      status: 'ok',
+      answer: { status: 'spend_unverified', answered: false, cap_usd: 25 },
+      results: [
+        { text: 'RPE of 5-7 is recommended', work: 'Fundamentals Hypertrophy Program', page: 85, score: 0.76 },
+      ],
+    }),
+  }));
+  await openCoach(page);
+  await ask(page);
+
+  const notice = page.locator('[data-coach-spend-unverified]');
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText('ما قدرنا نتأكد من المصروف');
+  await expect(notice).not.toContainText('$');
+  await expect(page.locator('[data-coach-passage]')).toHaveCount(1);
+});

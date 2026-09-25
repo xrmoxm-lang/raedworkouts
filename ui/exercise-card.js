@@ -6,12 +6,14 @@ import {
   advanceSuperset,
   assessSessionSubstitution,
   detectPR,
+  equipmentStep,
   exerciseHistoryRows,
   exercisePrefs,
   getActiveProgramme,
   getLastPerformance,
   ledgerMessage,
   loadSanityCeilingKg,
+  nextEarnedLoad,
   originalExerciseName,
   prescribedEffortSequence,
   prescribedRestSeconds,
@@ -37,6 +39,7 @@ import {
   tf,
 } from '../core/i18n.js';
 import { cancelRest, startRest } from '../core/rest.js';
+import { MATRIX_LADDER, isLadderStep } from '../domain/clamps.js';
 import {
   addExerciseToSession,
   appendExerciseToSession,
@@ -66,17 +69,16 @@ import { buildVideoTile, effortPicker, explainMark } from '../ui/kit.js';
 const restClock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 // The effort question must be reachable the moment it appears: below the fold
-// it sits under the fixed tab bar (and the rest dock while a rest runs), and the
-// session cannot advance without the answer. Bring it clear once, only when it
-// is actually covered.
+// it sits under the fixed tab bar, and the session cannot advance without the
+// answer. Bring it clear once, only when it is actually covered. (The rest dock
+// that used to be a second occluder here is gone — round 6's floating clock is
+// 56px and lives where he parks it.)
 function revealEffortStrip(strip) {
   requestAnimationFrame(() => {
     if (!strip.isConnected || strip.hasAttribute('hidden')) return;
     const box = strip.getBoundingClientRect();
     const tab = document.querySelector('.tab-bar');
-    const dock = document.getElementById('rest-timer');
-    let floor = tab && !tab.classList.contains('hidden') ? tab.getBoundingClientRect().top : window.innerHeight;
-    if (dock && dock.style.display !== 'none') floor = Math.min(floor, dock.getBoundingClientRect().top);
+    const floor = tab && !tab.classList.contains('hidden') ? tab.getBoundingClientRect().top : window.innerHeight;
     if (box.top >= 0 && box.bottom <= floor) return;
     strip.scrollIntoView({ block: 'end', behavior: 'auto' });
   });
@@ -278,9 +280,22 @@ export function renderExerciseCard(ex_id, exState) {
   // During a deload the goal is NOT to earn a load increase, so promising one
   // next to «خفيف — بقصد» would contradict itself on the same line. The row
   // carries the flag through from the deload overlay.
+  // Round 6 §D.3: the goal names the load it earns and the step it moves by —
+  // «أكمل 10 في كل المجموعات ← 30 كغ (+2.5)» — resolved from the machine's own
+  // step, so a 4.5 kg Matrix pin reads +4.5, a plate-loaded sled +5. No load to
+  // step from (calibration, a machine logged at 0) keeps the plain sentence.
+  const earned = !planned.deload && !exState.machine_weight ? nextEarnedLoad(actualId, sug.weight) : null;
   const goalText = planned.deload
     ? tf('reps_goal_deload', { n: repTop })
-    : tf('reps_goal', { n: repTop });
+    : earned
+      ? [
+          tf('reps_goal_to', { n: repTop, kg: fmtLoadKg(earned.weight) }),
+          ' ',
+          // Its own LTR isolate: «+» and «(» beside a number in an RTL line are
+          // exactly what the bidi algorithm strands on the wrong side.
+          h('bdi', { class: 'num', dir: 'ltr', 'data-step-delta': 'true' }, `(+${fmtLoadKg(earned.delta)})`),
+        ]
+      : tf('reps_goal', { n: repTop });
   // The effort target gets its OWN line rather than trailing the goal
   // sentence.
   const EFFORT_SHORT = {
@@ -613,6 +628,79 @@ function showAddExerciseModal() {
   $('#modal-overlay').classList.add('show');
 }
 
+// ---- «درجة الجهاز» — the machine's own step (Round 6 §D.2) ----------------
+// Raed: «progressive overload must know the machine and its number». The step
+// the suggestion moves by was a guess (2.5 for everything); he now states it,
+// per MACHINE when one is chosen — two leg presses are two sleds — and for the
+// movement otherwise. `stepFor` (domain/clamps.js) reads them in that order.
+// «سلّم ماتريكس» stores 'matrix', not a number: his Matrix stacks are labelled
+// 5 · 9 · 14 · 18 · 23 … (n × 4.5359 rounded; his log holds 14/23/32), which
+// no single step can express. The others are the plate, rack and micro-plate
+// steps of a kg gym; the decimal box still stores a number.
+const STEP_CHOICES_KG = [1, 1.25, 2.5, MATRIX_LADDER, 5, 10];
+const STEP_MIN_KG = 0.25;
+const STEP_MAX_KG = 25;
+function manualStepKg(prefs) {
+  const raw = prefs.device ? prefs.steps?.[prefs.device] : prefs.step_kg;
+  if (raw === MATRIX_LADDER) return MATRIX_LADDER;
+  const kg = Number(raw);
+  return Number.isFinite(kg) && kg > 0 ? kg : null;
+}
+function saveManualStep(prefs, value) {
+  const kg = Number(value);
+  const stored = value === MATRIX_LADDER
+    ? MATRIX_LADDER
+    : (value !== null && value !== '' && Number.isFinite(kg) && kg >= STEP_MIN_KG && kg <= STEP_MAX_KG ? kg : null);
+  if (prefs.device) {
+    if (!prefs.steps || typeof prefs.steps !== 'object') prefs.steps = {};
+    if (stored !== null) prefs.steps[prefs.device] = stored;
+    else delete prefs.steps[prefs.device];
+  } else if (stored !== null) {
+    prefs.step_kg = stored;
+  } else {
+    delete prefs.step_kg;
+  }
+  saveLocal();
+}
+function buildEquipmentStepControl(actualId, prefs, reopen) {
+  const current = manualStepKg(prefs);
+  const custom = h('input', {
+    type: 'number', inputmode: 'decimal', step: '0.05',
+    min: String(STEP_MIN_KG), max: String(STEP_MAX_KG),
+    class: 'search-input num', 'data-equipment-step-input': 'true',
+    'aria-label': t('equipment_step_label'),
+    placeholder: t('equipment_step_custom'),
+    value: typeof current === 'number' && !STEP_CHOICES_KG.includes(current) ? String(current) : '',
+  });
+  return h('div', { class: 'xs-step', 'data-equipment-step': 'true' },
+    h('div', { class: 'xs-label' }, t('equipment_step_label')),
+    h('div', { class: 'device-chips' }, STEP_CHOICES_KG.map((kg) => h('button', {
+      type: 'button',
+      class: 'chip' + (kg === MATRIX_LADDER ? '' : ' num') + (current === kg ? ' active' : ''),
+      'data-equipment-step-chip': String(kg),
+      'aria-pressed': current === kg ? 'true' : 'false',
+      // Tapping the active chip clears his override — the same toggle the
+      // device chips above use — and the step falls back to data.js.
+      onClick: () => { saveManualStep(prefs, current === kg ? null : kg); reopen(); },
+    }, kg === MATRIX_LADDER ? t('equipment_step_matrix') : fmtLoadKg(kg)))),
+    h('div', { class: 'xs-add-device' },
+      custom,
+      h('button', {
+        class: 'btn primary', 'data-equipment-step-save': 'true',
+        onClick: () => { saveManualStep(prefs, custom.value); reopen(); },
+      }, t('save')),
+    ),
+    h('div', { class: 'xs-sub', 'data-equipment-step-now': 'true' },
+      isLadderStep(equipmentStep(actualId))
+        ? t('equipment_step_now_matrix')
+        : tf('equipment_step_now', { kg: fmtLoadKg(equipmentStep(actualId)) }),
+      current !== null && prefs.device
+        ? [' · ', tf('equipment_step_for_device', { device: prefs.device })]
+        : null,
+    ),
+  );
+}
+
 // The per-exercise settings sheet.
 function showExerciseSettings(ex_id, exState) {
   const actualId = exState.swapped_to || ex_id;
@@ -672,6 +760,7 @@ function showExerciseSettings(ex_id, exState) {
         onClick: () => { rememberDevice(actualId, deviceInput.value); reopen(); },
       }, t('save')),
     ),
+    buildEquipmentStepControl(actualId, prefs, reopen),
     // Small and quiet: a once-per-exercise fact about the equipment, not an
     // action. It sits with the machine it describes.
     h('label', { class: 'xs-toggle' },
