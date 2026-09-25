@@ -144,6 +144,12 @@ export function migrateLegacyExercise(legacyExercise) {
   const original = cloneLegacy(legacyExercise);
   const nameEn = String(legacyExercise.name || '').trim();
   if (!nameEn) fail(`exercise "${legacyExercise.id || '(missing id)'}" needs an English name`);
+  // data.js states a per-exercise step since Round 6 (Matrix stacks 4.5, plate-
+  // loaded 5, dumbbells and cables 2.5). This used to overwrite whatever the
+  // record carried with the flat default, so the static catalogue could never
+  // know a leg press from a lateral raise.
+  const declaredStep = positiveStep(legacyExercise.equipment_step_kg);
+  const stepKg = declaredStep || DEFAULT_EQUIPMENT_STEP_KG;
 
   const canonical = {
     ...legacyExercise,
@@ -156,10 +162,10 @@ export function migrateLegacyExercise(legacyExercise) {
     primary_muscle: primary,
     secondary_muscles: uniqueStrings(legacyExercise.secondary || legacyExercise.secondary_muscles || []),
     canonical_pattern: canonicalPattern(legacyExercise.pattern),
-    equipment_step_kg: DEFAULT_EQUIPMENT_STEP_KG,
+    equipment_step_kg: stepKg,
     equipment_step: Object.freeze({
-      kg: DEFAULT_EQUIPMENT_STEP_KG,
-      source: 'default',
+      kg: stepKg,
+      source: declaredStep ? 'catalogue' : 'default',
       provisional: true,
     }),
     equipment_step_provisional: true,

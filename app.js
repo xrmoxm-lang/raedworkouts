@@ -2,7 +2,7 @@ import { $, $$, toast } from './core/dom.js';
 import { derivedCycle } from './core/engine.js';
 import { launchGymApp } from './core/gym.js';
 import { applyLang, t, tf } from './core/i18n.js';
-import { cancelRest, initNotifications, restTimer, restoreRestTimer, syncRestSurfaces } from './core/rest.js';
+import { initNotifications, restTimer, restoreRestTimer, syncRestSurfaces } from './core/rest.js';
 import { flushSetEdit } from './core/session.js';
 import { registerShell } from './core/shell.js';
 import {
@@ -33,6 +33,7 @@ import {
 import { scheduleNativeSummary } from './core/native.js';
 import { applyTheme } from './core/theme.js';
 import { renderCoach } from './ui/coach.js';
+import { syncSessionClock } from './ui/clock.js';
 import { renderSessionEnd } from './ui/end.js';
 import { renderHistory } from './ui/history.js';
 import { renderHome } from './ui/home.js';
@@ -90,9 +91,10 @@ function render() {
   if (route === 'settings') renderSettings();
   if (route === 'help') router('settings');
   if (route === 'end') renderSessionEnd();
-  // Where the rest countdown belongs depends on the page that was just drawn:
-  // in flow inside the runner, docked everywhere else. See core/rest.js.
+  // One timer, one surface: `body.resting` for the bridge and the tests, and
+  // the floating clock shows only while a rest runs in a session (ui/clock.js).
   syncRestSurfaces();
+  syncSessionClock();
   // The native widget mirrors whatever the screen just drew.
   scheduleNativeSummary();
 }
@@ -130,8 +132,6 @@ function init() {
     if (e.target.id === 'modal-overlay' && !e.target.dataset.required)
       $('#modal-overlay').classList.remove('show');
   });
-  $('#rest-cancel').addEventListener('click', cancelRest);
-
   window.addEventListener('hashchange', render);
 
   if (!window.location.hash) window.location.hash = 'home';

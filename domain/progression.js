@@ -1,5 +1,5 @@
 import { programmedRepRange } from './catalogue.js';
-import { clampWorkingWeight } from './clamps.js';
+import { clampWorkingWeight, stepFor } from './clamps.js';
 
 const COUNTED_KINDS = new Set(['working', 'calibration']);
 const EFFORT_LEVELS = new Set(['easy', 'medium', 'very_hard']);
@@ -180,7 +180,13 @@ export function progressExercise({
         effort: finalEffort,
       });
     }
-    const safety = clamp({ ...context, proposedWeightKg: load * (1 + percentage) });
+    // Ten percent-ish OR one equipment step, whichever is larger — the same
+    // floor `ceilingAbove` gives the clamps. Before Round 6 every step was the
+    // flat 2.5 default, so 5% of a 50 kg leg press (52.5) happened to land on
+    // it. With the sled's real 5 kg step (data.js), C3 floors 52.5 back to 50
+    // and the engine reported «increase» over a load that did not move.
+    const step = stepFor({ equipment_step_kg: equipmentStepKg, exercise });
+    const safety = clamp({ ...context, proposedWeightKg: Math.max(load * (1 + percentage), load + step) });
     const next = {
       ...base,
       load_kg: safety.accepted ? safety.clamped_kg : load,

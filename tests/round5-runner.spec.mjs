@@ -209,18 +209,20 @@ test('resting never covers the nav, and the countdown follows him off the runner
     await page.waitForTimeout(350);
   }
 
+  // Round 6 (2026-09-25): the row and the dock are retired for ONE floating
+  // 56px clock he parks himself (`#session-clock`, ui/clock.js). What this test
+  // pins is unchanged from round 5: at the moment he ticks his last set, nothing
+  // sits on either nav button — not a rest surface, not the tab bar.
   const measure = () => page.evaluate(() => {
     const nav = document.querySelector('.runner-nav');
-    const dock = document.getElementById('rest-timer');
-    const inline = document.querySelector('[data-rest-inline]');
+    const clock = document.getElementById('session-clock');
     const tab = document.querySelector('.tab-bar').getBoundingClientRect();
     return {
       resting: document.body.classList.contains('resting'),
       scrollY: Math.round(window.scrollY),
-      dockShown: Boolean(dock) && dock.style.display !== 'none',
-      inlineShown: Boolean(inline) && !inline.hidden,
-      inlineTime: inline?.querySelector('.rt-time')?.textContent || null,
-      dockTime: dock?.querySelector('.rt-time')?.textContent || null,
+      clockShown: Boolean(clock) && !clock.hidden,
+      clockTime: clock?.querySelector('.rt-time')?.textContent || null,
+      legacy: document.querySelectorAll('#rest-timer, [data-rest-inline]').length,
       tabTop: Math.round(tab.top),
       maxScroll: Math.round(document.documentElement.scrollHeight - window.innerHeight),
       buttons: [...(nav?.querySelectorAll('button') || [])].map((b) => {
@@ -231,8 +233,6 @@ test('resting never covers the nav, and the countdown follows him off the runner
           top: Math.round(r.top),
           bottom: Math.round(r.bottom),
           hit: hit ? `${hit.tagName}.${hit.className}` : 'none',
-          // The bug: a REST surface over the nav. `.rest-timer` is the dock,
-          // `.rt-*` are its parts.
           hitIsRest: Boolean(hit && hit.closest('[data-rest-surface]')),
           hitIsSelf: Boolean(hit && (hit === b || b.contains(hit))),
         };
@@ -242,17 +242,14 @@ test('resting never covers the nav, and the countdown follows him off the runner
 
   const at0 = await measure();
   expect(at0.resting, 'ticking the last working set must start the rest').toBe(true);
-  // §A.1/§A.2: on the runner the countdown is in flow and the dock is gone.
-  expect(at0.inlineShown, 'the in-flow rest row must be visible on the runner').toBe(true);
-  expect(at0.dockShown, 'the fixed dock must NOT float over the runner').toBe(false);
+  expect(at0.clockShown, 'the floating clock must be showing').toBe(true);
+  expect(at0.clockTime, 'and counting the rest down').toMatch(/^\d{1,2}:\d{2}$/);
+  expect(at0.legacy, 'the round-5 row and dock must be gone').toBe(0);
   const finish = at0.buttons.find((b) => /أنهِ الجلسة/.test(b.label));
   expect(finish, 'the last exercise must offer the finish button').toBeTruthy();
 
   // The defect, at the scroll position he is actually at — he has not scrolled,
-  // he has just ticked his last set. Nothing may be on top of either button:
-  // not the rest surface, and not the tab bar either (measured before the fix:
-  // with the dock hidden the nav still sat at 799–843 under a tab bar whose top
-  // is 776, and elementFromPoint returned BUTTON.tab for BOTH buttons).
+  // he has just ticked his last set. Nothing may be on top of either button.
   expect(at0.buttons.every((b) => !b.hitIsRest),
     `at scrollY ${at0.scrollY} the nav hit-tested to ${JSON.stringify(at0.buttons.map((b) => b.hit))}`).toBe(true);
   expect(at0.buttons.every((b) => b.hitIsSelf),
@@ -269,114 +266,53 @@ test('resting never covers the nav, and the countdown follows him off the runner
   const finishAtMax = atMax.buttons.find((b) => /أنهِ الجلسة/.test(b.label));
   expect(finishAtMax.hitIsSelf, `«أنهِ الجلسة» hit-tested to ${finishAtMax.hit}`).toBe(true);
   expect(finishAtMax.bottom, 'and it must sit clear of the tab bar').toBeLessThanOrEqual(atMax.tabTop);
+  expect(atMax.clockTime).toMatch(/^\d{1,2}:\d{2}$/);
 
-  // The row and the dock read the same clock, because there is one timer.
-  expect(atMax.inlineTime).toMatch(/^\d{1,2}:\d{2}$/);
-  expect(atMax.dockTime).toBe(atMax.inlineTime);
-
-  // Off the runner the dock comes back — there is nothing under it there, and it
-  // is how he knows he is still resting.
+  // Off the runner the same clock is there — it is how he knows he is still
+  // resting. (It never carries the session's elapsed time: Raed 2026-09-25.)
   await page.evaluate(() => { window.location.hash = 'coach'; });
   await page.waitForTimeout(500);
   const onCoach = await page.evaluate(() => {
-    const dock = document.getElementById('rest-timer');
-    const inline = document.querySelector('[data-rest-inline]');
-    return {
-      dockShown: Boolean(dock) && dock.style.display !== 'none',
-      inlineShown: Boolean(inline) && !inline.hidden,
-      docked: document.body.classList.contains('rest-docked'),
-      pad: getComputedStyle(document.body).paddingBottom,
-      dockTop: dock ? Math.round(dock.getBoundingClientRect().top) : null,
-    };
+    const clock = document.getElementById('session-clock');
+    return { shown: Boolean(clock) && !clock.hidden, resting: document.body.classList.contains('resting') };
   });
-  expect(onCoach.dockShown, 'the dock must show on every page that is not the runner').toBe(true);
-  expect(onCoach.inlineShown).toBe(false);
-  // §A.3's guard rail: the page reserves the dock's measured height, so nothing
-  // can end up under it there either.
-  expect(onCoach.docked).toBe(true);
-  expect(parseFloat(onCoach.pad), `body padding was ${onCoach.pad}, dock top ${onCoach.dockTop}`)
-    .toBeGreaterThanOrEqual(844 - onCoach.dockTop);
+  expect(onCoach.shown, 'the clock must show on every page while a rest runs').toBe(true);
+  expect(onCoach.resting).toBe(true);
 
-  // And the guard rail measured where it bites: the LAST control of a long
-  // page, scrolled to the bottom. Before it, «تمرين مخصص» on the library sat at
-  // 709.9–757.9 with the dock at 712–772 on top of it, and Settings' «امسح
-  // المحلي» lost the bottom 22px of a 48px target.
-  for (const page_ of ['library', 'settings']) {
-    const buried = await page.evaluate(async (route) => {
-      window.location.hash = route;
-      await new Promise((r) => setTimeout(r, 450));
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await new Promise((r) => requestAnimationFrame(r));
-      await new Promise((r) => setTimeout(r, 150));
-      const dock = document.getElementById('rest-timer');
-      const covered = [...document.querySelectorAll(`#page-${route} button, #page-${route} .btn`)]
-        .filter((b) => {
-          const r = b.getBoundingClientRect();
-          return r.height > 0 && r.top < window.innerHeight && r.bottom > 0;
-        })
-        .map((b) => {
-          const r = b.getBoundingClientRect();
-          // The PAINTED stack, not elementFromPoint alone: Settings keeps whole
-          // sections inside collapsed <details>, whose controls still report a
-          // rect but are never drawn. Those are not covered by anything — they
-          // are not there. A control is covered only when it IS in the stack
-          // and the dock sits above it.
-          const stack = document.elementsFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          const mine = stack.findIndex((n) => n === b || b.contains(n));
-          const dockAt = stack.findIndex((n) => n === dock || dock.contains(n));
-          return {
-            label: b.textContent.trim().slice(0, 14),
-            bottom: Math.round(r.bottom),
-            onDock: mine >= 0 && dockAt >= 0 && dockAt < mine,
-          };
-        })
-        .filter((b) => b.onDock);
-      return { route, dockTop: Math.round(dock.getBoundingClientRect().top), covered };
-    }, page_);
-    expect(buried.covered, `controls under the dock on #${buried.route}: ${JSON.stringify(buried.covered)}`).toEqual([]);
-  }
-  await page.evaluate(() => { window.location.hash = 'coach'; });
-  await page.waitForTimeout(400);
-
-  // Back to the runner: the row again, the dock gone.
+  // Back to the runner.
   await page.evaluate(() => { window.location.hash = 'home'; });
   await page.waitForTimeout(500);
-  const back = await page.evaluate(() => ({
-    dockShown: document.getElementById('rest-timer').style.display !== 'none',
-    inlineShown: !document.querySelector('[data-rest-inline]').hidden,
-  }));
-  expect(back.dockShown).toBe(false);
-  expect(back.inlineShown).toBe(true);
 
-  // A reload mid-rest resumes on the persisted deadline, in the row.
+  // A reload mid-rest resumes on the persisted deadline, on the clock.
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
   await pickRaed(page);
   const resumed = await page.evaluate(() => {
-    const inline = document.querySelector('[data-rest-inline]');
+    const clock = document.getElementById('session-clock');
     return {
       resting: document.body.classList.contains('resting'),
-      inlineShown: Boolean(inline) && !inline.hidden,
-      time: inline?.querySelector('.rt-time')?.textContent || null,
+      shown: Boolean(clock) && !clock.hidden,
+      time: clock?.querySelector('.rt-time')?.textContent || null,
     };
   });
   expect(resumed.resting, 'a reload mid-rest must resume the rest').toBe(true);
-  expect(resumed.inlineShown).toBe(true);
+  expect(resumed.shown, 'and the clock with it').toBe(true);
   expect(resumed.time).toMatch(/^\d{1,2}:\d{2}$/);
 
-  // Cancelling from the row cancels the one timer: the class, the dock and the
-  // persisted deadline all go.
-  await page.evaluate(() => document.querySelector('[data-rest-inline] [data-rest-cancel]').click());
+  // Skipping from the clock's pill cancels the one timer: the class, the clock
+  // itself and the persisted deadline all go.
+  await page.evaluate(() => document.querySelector('#session-clock .sc-disc').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 })));
+  await page.evaluate(() => document.querySelector('#session-clock .sc-disc').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 })));
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('[data-clock-skip]')?.click());
   await page.waitForTimeout(400);
   const cancelled = await page.evaluate(() => ({
     resting: document.body.classList.contains('resting'),
-    inlineShown: !document.querySelector('[data-rest-inline]').hidden,
-    dockShown: document.getElementById('rest-timer').style.display !== 'none',
+    shown: !document.getElementById('session-clock').hidden,
     restend: Object.keys(localStorage).filter((k) => /restend/.test(k)).length,
   }));
   expect(cancelled.resting).toBe(false);
-  expect(cancelled.inlineShown).toBe(false);
-  expect(cancelled.dockShown).toBe(false);
+  expect(cancelled.shown, 'no rest → no clock (Raed 2026-09-25)').toBe(false);
   expect(cancelled.restend, 'the persisted deadline must be cleared').toBe(0);
   expect(errs).toEqual([]);
 });

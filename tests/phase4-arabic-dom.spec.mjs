@@ -127,7 +127,7 @@ async function scanVisibleLatin(page, screen) {
       activePage?.querySelector('[data-session-runner]') || activePage,
       document.querySelector('.app-header'),
       document.querySelector('.tab-bar'),
-      document.querySelector('#rest-timer'),
+      document.querySelector('#session-clock'),
     ].filter(Boolean);
     for (const root of roots) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);

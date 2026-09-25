@@ -55,18 +55,19 @@ test('resolving the last exercise starts no rest and clears a running one', asyn
   });
   await page.waitForTimeout(1200);
   const after = await page.evaluate(() => {
-    const dock = document.getElementById('rest-timer');
+    const clock = document.getElementById('session-clock');
     return {
       done: Boolean(document.querySelector('[data-session-done]')),
       resting: document.body.classList.contains('resting'),
-      dockShown: Boolean(dock) && getComputedStyle(dock).display !== 'none',
-      inlineRow: Boolean(document.querySelector('[data-rest-inline]')),
+      // Round 6: the floating clock is the one surface, and (Raed 2026-09-25)
+      // it exists only while a rest counts down — after the last tick it must
+      // be gone, not counting a rest that does not exist.
+      clockShown: Boolean(clock) && !clock.hidden,
       restKey: Object.keys(localStorage).some((k) => /restend/.test(k)),
     };
   });
   expect(after.done, 'the tick must resolve the session').toBe(true);
   expect(after.resting, 'no rest may run once the lifting is over').toBe(false);
-  expect(after.dockShown, 'the dock must not sit on the cool-down').toBe(false);
-  expect(after.inlineRow, 'and there is no card left to carry an inline row').toBe(false);
+  expect(after.clockShown, 'the clock must not count a rest over the cool-down').toBe(false);
   expect(after.restKey, 'a persisted deadline would resurrect the rest on reload').toBe(false);
 });

@@ -98,3 +98,15 @@ def test_a_flood_of_bad_auth_cannot_lock_out_the_real_token():
 
     bad, why_bad = raedsync.auth_ok(con, "raed-v16", {"authorization": "Bearer wrong"})
     assert bad is False and why_bad == "rate", "a wrong token while throttled is still refused"
+
+
+# These are plain `test_*` functions (pytest style), which `unittest` does not
+# collect on its own — and pytest is not installed on the Mac or the HP. This
+# hook hands them to unittest so `python3 -m unittest discover -s server/tests
+# -t .` (the `verify` gate in package.json) runs them instead of skipping them.
+def load_tests(loader, tests, pattern):
+    import unittest
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            tests.addTest(unittest.FunctionTestCase(fn, description=name))
+    return tests

@@ -141,7 +141,11 @@ test('ramp loads follow the sourced table for the prescribed number of sets', as
     const s = Number(step) > 0 ? Number(step) : 2.5;
     return Math.max(s, Math.floor(n / s) * s);
   };
-  const rampLoadsFor = new Function('roundToGymIncrement', `${body}; return rampLoadsFor;`)(roundToGymIncrement);
+  // Round 6 §D: it also asks domain/clamps.js whether the step is the Matrix
+  // ladder and, if a ramp cannot ascend, for the next real load — the REAL
+  // helpers are handed in, not re-implemented.
+  const { isLadderStep, nextStepUp } = await import('../domain/clamps.js');
+  const rampLoadsFor = new Function('roundToGymIncrement', 'isLadderStep', 'nextStepUp', `${body}; return rampLoadsFor;`)(roundToGymIncrement, isLadderStep, nextStepUp);
 
   // ONE set is 60%, not the 50% first half of the two-set pair.
   assert.equal(rampLoadsFor(25, 1)[0].weight, 15, '25kg with one ramp set is 60% = 15kg');

@@ -1,7 +1,8 @@
 // Round 5 — the toast is not allowed to sit on a control.
 //
 // Two confirmed defects, both proved by BREAKING the running app at 390×844:
-//   · finishing a session raised a 9s undo toast ON TOP of the `.end-cta` row:
+//   · finishing a session raised a 9s undo toast ON TOP of the `.end-cta` row
+//     (round 6 §E then removed that toast outright — see the first test):
 //     both buttons measured hitH 0, and `elementFromPoint` at the centre of
 //     «تم» returned the toast's «تراجع» — so the tap that means "done" called
 //     reopenSession() and pulled the session back out of history;
@@ -125,7 +126,11 @@ const measureAgainstToast = (page, selector) => page.evaluate((sel) => {
   };
 }, selector);
 
-test('the undo toast cannot take the tap that means «تم»', async ({ page }) => {
+// Round 6 §E — Raed: «التراجع بعد ما أنهي الجلسة، شيله بالكامل». The end screen
+// IS the confirmation, so finishing raises no toast at all: no «تراجع», nothing
+// sitting over «تم». A session finished by mistake is still reachable from the
+// log («أعد فتح الجلسة», ui/history.js) — that is the one way back now.
+test('finishing raises no toast, and «تم» answers its own tap', async ({ page }) => {
   const errs = await boot(page);
   await startSession(page);
   const before = await readState(page);
@@ -139,36 +144,43 @@ test('the undo toast cannot take the tap that means «تم»', async ({ page }) 
   await page.evaluate(() => document.querySelector('[data-finish-session]')?.click());
   await page.waitForTimeout(700);
   const guard = page.locator('#modal [data-confirm-yes]');
-  if (await guard.count()) { await guard.click(); await page.waitForTimeout(700); }
+  if (await guard.count()) { await guard.click(); await page.waitForTimeout(300); }
 
   const saved = await readState(page);
   expect(saved.active, 'the session must actually be saved first').toBe(false);
   expect(saved.history).toBe(before.history + 1);
+  await expect(page.locator('#page-end'), 'and the end screen is the confirmation').toBeVisible();
 
-  // 1.5s in: the toast is up, and it is up for nine seconds (core/session.js).
-  await page.waitForTimeout(800);
+  // One second after finishing: the old 9s undo toast was up for all of it.
+  await page.waitForTimeout(1000);
+  const toasts = await page.evaluate(() => [...document.querySelectorAll('.toast')].map((el) => ({
+    shown: el.classList.contains('show'),
+    opacity: getComputedStyle(el).opacity,
+    text: el.textContent.trim(),
+    hasAction: Boolean(el.querySelector('button')),
+  })));
+  for (const tst of toasts) {
+    expect(tst.shown, `a toast is up after finishing: «${tst.text}»`).toBe(false);
+    expect(tst.hasAction, `and it carries an action: «${tst.text}»`).toBe(false);
+  }
+  expect(toasts.length, 'the toast element must exist, or this proves nothing').toBeGreaterThan(0);
+
+  // Both CTAs answer their own tap across their full height. Measured from the
+  // bottom of the page: the round-6 end screen (cooldown line, ledger) is
+  // taller than 844, and what is under test is that nothing floats over them.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(300);
   const end = await measureAgainstToast(page, '#page-end .end-cta a, #page-end .end-cta button');
-  expect(end.shown, 'the undo toast must be on screen — that is the state under test').toBe(true);
-  expect(end.hasAction, 'and it must still carry the undo').toBe(true);
   expect(end.controls.length, 'the end screen offers two CTAs').toBe(2);
-
   for (const c of end.controls) {
-    expect(c.hitIsToast, `«${c.label}» at ${c.rect} hit-tested to ${c.hit} (toast ${end.toastRect})`).toBe(false);
-    expect(c.hitIsSelf, `«${c.label}» at ${c.rect} hit-tested to ${c.hit} (toast ${end.toastRect})`).toBe(true);
+    expect(c.hitIsSelf, `«${c.label}» at ${c.rect} hit-tested to ${c.hit}`).toBe(true);
     expect(c.hitH, `«${c.label}» answered a tap over ${c.hitH}px of its ${c.rect[3]}px height`)
       .toBeGreaterThanOrEqual(c.rect[3] - 12);
-    expect(c.overlapsToast, `the toast ${end.toastRect} still overlaps «${c.label}» ${c.rect}`).toBe(false);
   }
-  // He cannot scroll them clear either — that is why the toast is what moves.
-  expect(end.maxScroll, 'the end screen barely scrolls').toBeLessThan(200);
-
-  // And the undo it carries is still one tap away: the fix moves the toast, it
-  // does not disarm it.
-  await page.locator('#toast button').click();
-  await page.waitForTimeout(900);
-  const undone = await readState(page);
-  expect(undone.active, 'the session is live again').toBe(true);
-  expect(undone.history, 'and it is out of the log again').toBe(before.history);
+  // The session stays saved: nothing on this screen can pull it back out.
+  const after = await readState(page);
+  expect(after.active).toBe(false);
+  expect(after.history).toBe(before.history + 1);
   expect(errs).toEqual([]);
 });
 

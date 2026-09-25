@@ -315,6 +315,18 @@ function renderCoachBody(root) {
     if ((coachState.results || []).length) renderCoachAnswer(root);
     return;
   }
+  // The server could not read its spend ledger, so it refused the paid call
+  // rather than guess the month is under the ceiling (server/coach-service.py
+  // spend_gate — fails closed since 2026-09-25). No figure is shown: the whole
+  // point is that nobody knows it.
+  if (coachState.answer && coachState.answer.status === 'spend_unverified') {
+    root.appendChild(h('div', { class: 'notice warn', 'data-coach-spend-unverified': 'true' },
+      h('strong', {}, t('coach_spend_unverified')),
+      h('p', { class: 'tiny muted coach-notice-hint' }, t('coach_spend_unverified_hint')),
+    ));
+    if ((coachState.results || []).length) renderCoachAnswer(root);
+    return;
+  }
   if (coachState.status === 'no_match') {
     // Deliberately NOT `.warn`: the library answered, and «nothing here» is an
     // answer. Painting it in the failure colour is the exact conflation the

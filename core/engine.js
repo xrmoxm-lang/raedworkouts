@@ -4,6 +4,7 @@
 import { $, h, toast } from '../core/dom.js';
 import {
   fmtKgValue,
+  fmtLoadKg,
   hasWorkingWeight,
   localISODate,
   muscleLabel,
@@ -15,7 +16,19 @@ import { focusExerciseIdx, setFocusExerciseIdx } from '../core/session.js';
 import { saveLocal, settings, state } from '../core/store.js';
 import { getAllExercises } from '../core/videos.js';
 import { canonicalPattern } from '../domain/catalogue.js';
-import { CLAMP_IDS, bodyweightSanityCeilingKg, ceilingAbove, clampWorkingWeight } from '../domain/clamps.js';
+import {
+  CLAMP_IDS,
+  MATRIX_LADDER,
+  MATRIX_NOMINAL_STEP_KG,
+  bodyweightSanityCeilingKg,
+  ceilingAbove,
+  clampWorkingWeight,
+  isLadderStep,
+  nextStepDown,
+  nextStepUp,
+  roundDownToStep,
+  stepSpecFor,
+} from '../domain/clamps.js';
 import {
   REPORTED_SIGNS,
   SIGN_THRESHOLD,
@@ -317,6 +330,8 @@ function effectiveStartKg(planned) {
 // percentage — a 9 kg working weight produced a 5 kg "50%" warm-up.
 function roundToGymIncrement(value, step) {
   const n = Number(value) || 0;
+  // The Matrix ladder: the label at or under the load, never under plate one.
+  if (isLadderStep(step)) return roundDownToStep(n, step) ?? nextStepUp(0, step);
   const s = Number(step) > 0 ? Number(step) : 2.5;
   return Math.max(s, Math.floor(n / s) * s);
 }
@@ -398,7 +413,7 @@ function applyWarmupFeel(exState, exerciseId) {
   if (!last || !last.completed || !last.effort || last.effort === 'medium') return null;
   const working = sets.filter((set) => !set.is_warmup && !set.completed);
   if (!working.length) return null;
-  const step = equipmentStepKg(exerciseId);
+  const step = equipmentStep(exerciseId);
   const lighter = last.effort === 'very_hard';
   // «your first working set» for heavy; «your working sets» for light.
   const targets = lighter ? working.slice(0, 1) : working;
@@ -411,7 +426,7 @@ function applyWarmupFeel(exState, exerciseId) {
     // Rounding to the equipment step can swallow the whole adjustment on a
     // light load — 10 kg ±7.5% is 9.25/10.75, both of which round back to 10
     // on a 2.5 kg step.
-    if (next === current) next = lighter ? current - step : current + step;
+    if (next === current) next = lighter ? nextStepDown(current, step) : nextStepUp(current, step);
     if (next > 0 && next !== current) { set.weight = next; changed += 1; }
   }
   if (!changed) return null;
@@ -441,7 +456,7 @@ function applyCalibrationProbe(exState, exerciseId) {
   if (!hit) return null;
   const pct = terminalRampPct(ramps.length);
   if (!pct) return null;
-  const derived = roundToGymIncrement(Number(hit.weight) / pct, equipmentStepKg(exerciseId));
+  const derived = roundToGymIncrement(Number(hit.weight) / pct, equipmentStep(exerciseId));
   if (!(derived > 0)) return null;
   for (const set of working) set.weight = derived;
   exState.calibrated_from = { weight: Number(hit.weight), pct, ramps: ramps.length };
@@ -449,14 +464,14 @@ function applyCalibrationProbe(exState, exerciseId) {
 }
 
 export function rampLoadsFor(weight, count, step) {
-  const s = Number(step) > 0 ? Number(step) : 2.5;
+  const s = isLadderStep(step) ? step : (Number(step) > 0 ? Number(step) : 2.5);
   if (count <= 1) {
     return [{ weight: roundToGymIncrement(weight * 0.6, s), reps: 8 }];
   }
   const first = roundToGymIncrement(weight * 0.5, s);
   let second = roundToGymIncrement(weight * 0.7, s);
   if (second <= first) {
-    const lifted = first + s;
+    const lifted = nextStepUp(first, s);
     if (lifted < Number(weight)) second = lifted;
     else return [{ weight: first, reps: 10 }];
   }
@@ -472,7 +487,7 @@ export function warmupText(planned, suggestedWeight) {
     // rampLoadsFor can legitimately return ONE entry, when the load is
     // too light for two distinct ramp weights. Indexing [1] blindly would throw
     // here and take the whole card's render down with it.
-    const warmups = rampLoadsFor(suggestedWeight, 2, equipmentStepKg(planned.exercise_id));
+    const warmups = rampLoadsFor(suggestedWeight, 2, equipmentStep(planned.exercise_id));
     const parts = warmups.map((w, i) => `${fmtKgValue(w.weight)}kg×${i === 0 ? 10 : 6}`);
     return `${warmups.length} ${warmups.length === 1 ? 'set' : 'sets'}: ${parts.join(', ')}`;
   }
@@ -663,17 +678,22 @@ export function suggestNextWeight(exercise_id, planned) {
   // Accessories still add reps BEFORE weight — that half of the rule is sound
   // and is enforced by the two-consecutive-sessions gate below, not by the
   // size of the step.
-  const bump = equipmentStepKg(exercise_id);
+  // A number of kg, or the Matrix ladder; both step through nextStepUp/Down.
+  const bump = equipmentStep(exercise_id);
   if (allHitTarget && last2.length === 2) {
     const prevAllHit = hitTopOfRange(prevSets, prevSetsTarget, topReps);
     if (prevAllHit) {
       if (finalEffort === 'very_hard') {
         return { weight: lastTopSet.weight, note: t('why_hold_very_hard') };
       }
-      if (bump > 0) {
+      if (bump) {
+        // On the equipment's grid (nextStepUp), and the note names the load it
+        // lands on and the real delta — «ارفع 2.5 كغ» over a 4.5 kg stack was
+        // a number he could not set.
+        const up = nextStepUp(lastTopSet.weight, bump);
         return clampedIncreaseResult(
-          exercise_id, lastTopSet.weight, lastTopSet.weight + bump,
-          tf('why_bump_twice', { reps: topReps, kg: bump }),
+          exercise_id, lastTopSet.weight, up,
+          tf('why_bump_twice', { reps: topReps, kg: fmtLoadKg(up - Number(lastTopSet.weight)), target: fmtLoadKg(up) }),
         );
       } else {
         return { weight: lastTopSet.weight, note: t('why_accessory_reps') };
@@ -687,20 +707,22 @@ export function suggestNextWeight(exercise_id, planned) {
   // The completeness gate runs DOWNWARD too: this was `.some()` over an
   // arbitrarily short set list, so two abandoned single-set sessions under the
   // floor walked the load back on evidence of a session that never happened.
-  if (last2.length === 2 && bump > 0 && Number(lastTopSet.weight) > 0) {
+  if (last2.length === 2 && bump && Number(lastTopSet.weight) > 0) {
     if (fellBelowRepFloor(workingSets, latestSetsTarget, bottomReps)
       && fellBelowRepFloor(prevSets, prevSetsTarget, bottomReps)) {
-      const lowered = roundToGymIncrement(Math.max(0, Number(lastTopSet.weight) - bump), bump);
-      const weight = lowered < Number(lastTopSet.weight) ? lowered : Math.max(0, Number(lastTopSet.weight) - bump);
-      return { weight, note: tf('why_regress', { reps: bottomReps, kg: bump }) };
+      // nextStepDown: on the grid, unless the grid would cut more than a step
+      // and a half (40 kg on a 4.5 kg stack used to floor to 31.5).
+      const weight = nextStepDown(lastTopSet.weight, bump);
+      return { weight, note: tf('why_regress', { reps: bottomReps, kg: fmtLoadKg(weight) }) };
     }
   }
   // Deliberately NOT for accessories: one easy session is the moment to add a
   // rep, not load. They only graduate on the two-session branch above.
-  if (allHitTarget && finalEffort === 'easy' && bump > 0 && !isAccessory) {
+  if (allHitTarget && finalEffort === 'easy' && bump && !isAccessory) {
+    const up = nextStepUp(lastTopSet.weight, bump);
     return clampedIncreaseResult(
-      exercise_id, lastTopSet.weight, lastTopSet.weight + bump,
-      tf('why_easy_bump', { reps: topReps, kg: bump }),
+      exercise_id, lastTopSet.weight, up,
+      tf('why_easy_bump', { reps: topReps, kg: fmtLoadKg(up - Number(lastTopSet.weight)), target: fmtLoadKg(up) }),
     );
   }
   // A machine that carries its own stack logs 0, and 0 is a real load — but
@@ -812,14 +834,18 @@ export function prescribedEffortSequence(planned) {
 }
 
 // The load increment, from the equipment — not from a body-part guess.
+// The kind he PICKS in the sheet. His gym is Matrix (Raed 2026-09-25), so a
+// «machine» is a Matrix pin stack — its kg-labelled ladder 5 · 9 · 14 · 18 …,
+// not the generic 5 (source and his logged 14/23/32 on EQUIPMENT_STEP_CLASSES
+// in data.js) — and «plates» is the pair of
+// 2.5 kg plates a KSA rack starts at, 5 kg a side-pair (ROUND6 brief §D.1).
 const EQUIPMENT_STEP_KG = {
-  machine: 5,      // pin stack
+  machine: MATRIX_LADDER,
   cable: 2.5,
   dumbbells: 2.5,
-  plates: 2.5,     // a 1.25 kg plate per side
+  plates: 5,
   bodyweight: 2.5,
 };
-const DEFAULT_STEP_KG = 2.5;
 function learnedStepFromHistory(exerciseId) {
   const weights = new Set();
   for (const session of state.history || []) {
@@ -841,11 +867,45 @@ function learnedStepFromHistory(exerciseId) {
   if (!Number.isFinite(smallest) || smallest < 0.5 || smallest > 10) return null;
   return smallest;
 }
+// How this movement's equipment moves: a number of kg, or the Matrix ladder
+// (MATRIX_LADDER, domain/clamps.js). Every suggested LOAD goes through this.
+export function equipmentStep(exerciseId) {
+  const prefs = exercisePrefs(exerciseId);
+  const exercise = getAllExercises().find((item) => item.id === exerciseId) || null;
+  const kindStep = EQUIPMENT_STEP_KG[prefs.equipment] || null;
+  // What the equipment is SAID to step by, before his log is consulted.
+  const declared = stepSpecFor({ kind_step_kg: kindStep, exercise });
+  // Learning may only make the step COARSER than what is declared — the rule
+  // domain/catalogue.js already states for the canonical learner. Smallest-gap
+  // learning reads one «.5» he typed (12 then 12.5 on a 2.5-spaced rack) as a
+  // 0.5 kg machine and proposes +0.5 forever. Now that ⚙️ «درجة الجهاز» exists,
+  // a genuinely finer machine is his to state, not the log's to guess. And it
+  // never overrides a ladder: the gaps on a Matrix stack (4, 5) are the ladder.
+  const learned = isLadderStep(declared) ? null : learnedStepFromHistory(exerciseId);
+  return stepSpecFor({
+    prefs,
+    learned_step_kg: learned && learned >= declared ? learned : null,
+    kind_step_kg: kindStep,
+    exercise,
+  });
+}
+// The same, as the NUMBER the clamps (C3–C5) and the fat-finger guard need; a
+// ladder answers with its widest rung gap so «one step» never trims a rung.
 export function equipmentStepKg(exerciseId) {
-  const learned = learnedStepFromHistory(exerciseId);
-  if (learned) return learned;
-  const kind = exercisePrefs(exerciseId).equipment;
-  return EQUIPMENT_STEP_KG[kind] || DEFAULT_STEP_KG;
+  const spec = equipmentStep(exerciseId);
+  return isLadderStep(spec) ? MATRIX_NOMINAL_STEP_KG : spec;
+}
+
+// The suggestion's number, stated: the load the NEXT earned increase lands on
+// and by how much. Null when there is nothing to step from (calibration, or a
+// machine logged at 0 that carries its own stack).
+export function nextEarnedLoad(exerciseId, currentKg) {
+  const current = Number(currentKg);
+  if (!hasWorkingWeight(current)) return null;
+  const step = equipmentStep(exerciseId);
+  const weight = nextStepUp(current, step);
+  if (!hasWorkingWeight(weight)) return null;
+  return { weight, delta: Math.round((weight - current) * 1000) / 1000, step };
 }
 
 // ---- Session warm-up phase ---------------------------------

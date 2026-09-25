@@ -38,7 +38,8 @@ test('D16/D17 effort is final-set-only, a brake, and never a load driver', () =>
 
   const easyFirstTop = progress(initial, topSets('easy'));
   assert.equal(easyFirstTop.action, 'increase', 'easy may land a reps-earned top exposure one session sooner');
-  assert.equal(easyFirstTop.next_state.load_kg, 52.5);
+  // Round 6 §D: the sled's step is 5 kg (data.js), so 52.5 is not a load it has.
+  assert.equal(easyFirstTop.next_state.load_kg, 55);
 
   const belowTopEasy = progress(initial, [
     { kind: 'working', valid: true, reps: 9, form_ok: true },

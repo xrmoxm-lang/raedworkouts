@@ -25,11 +25,108 @@
  *   - everything else: this tab wins, because it is the one he just touched.
  *
  * The bias is deliberate: a merge here can only ever keep MORE training
- * evidence than either side alone. The one thing it cannot see is a deliberate
- * delete made in the other tab — a session deleted in tab A while tab B holds a
- * pre-delete copy comes back. That is the right way round: a resurrected row he
- * can delete again, a deleted workout he cannot re-live.
+ * evidence than either side alone — with one exception he asked for by name.
+ *
+ * A deliberate history delete is data, not an absence. Until 2026-09-25 delete
+ * was a bare `history.splice()`, and both this union and the server's
+ * (raedsync.py merge_history) put the session straight back the moment a stale
+ * tab, a stale device or a stale server row still held a copy
+ * (CODEX-AUDIT-2026-09-25.md, «NOT DONE» #1). ui/history.js now stamps a
+ * tombstone into `state.history_tombstones`; both merges union the tombstones
+ * and drop every session they name. Old clients never send the key, and with no
+ * tombstones anywhere every rule above behaves exactly as before.
  */
+
+/* ---- History tombstones ---------------------------------------------------
+ * Shape mirrors the tombstone payload in domain/events.js (target_type,
+ * target_id, deleted_at) so the event-log migration can lift them verbatim. It
+ * does NOT go through createTombstoneEvent(): that asserts a UUID target, and
+ * real history uids include the pre-crypto `sess-…` fallback (core/store.js
+ * backfillSessionUids) and the server's `srv-…` / `dup-…` (raedsync.py) — a
+ * delete that throws on those would be worse than the resurrection it fixes.
+ *
+ * Matching (identical in server/raedsync.py _tombstone_kills):
+ *   - by uid, always;
+ *   - by session key (started_at|session_id) too, because a stale device can
+ *     hold the same session under a different uid (backfilled independently
+ *     before it ever synced) and the server collapses copies by key. A
+ *     `recovered_duplicate` is a DIFFERENT session that happens to share the
+ *     key (raedsync.py merge_session_into_history), so its tombstone records no
+ *     key and key-matching never kills one.
+ *   - a session carrying `revived_at` later than the tombstone survives: that
+ *     is a restore/import/undo he chose (reviveRestoredState below).
+ */
+export const HISTORY_TOMBSTONE_CAP = 500;
+
+export function historyTombstoneFor(sess, deletedAt = new Date().toISOString()) {
+  if (!sess || typeof sess !== 'object') return null;
+  const uid = sess.uid ? String(sess.uid) : '';
+  const key = sess.recovered_duplicate ? '' : sessionKeyOf(sess);
+  if (!uid && (!key || key === '|')) return null;
+  return { target_type: 'session', target_id: uid, key, deleted_at: String(deletedAt) };
+}
+
+function tombstoneId(tomb) {
+  return tomb.target_id ? `uid:${tomb.target_id}` : `key:${tomb.key}`;
+}
+
+function validTombstone(tomb) {
+  return tomb && typeof tomb === 'object' && (tomb.target_id || (tomb.key && tomb.key !== '|'));
+}
+
+export function mergeHistoryTombstones(...lists) {
+  const byId = new Map();
+  lists.forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((tomb) => {
+      if (!validTombstone(tomb)) return;
+      const id = tombstoneId(tomb);
+      const seen = byId.get(id);
+      // The later delete wins: a session revived and deleted again must stay dead.
+      if (!seen || String(tomb.deleted_at || '') > String(seen.deleted_at || '')) byId.set(id, { ...tomb });
+    });
+  });
+  const out = [...byId.values()].sort((a, b) => String(a.deleted_at || '').localeCompare(String(b.deleted_at || '')));
+  // Bounded: deletes are rare, but the list rides in every push.
+  return out.length > HISTORY_TOMBSTONE_CAP ? out.slice(out.length - HISTORY_TOMBSTONE_CAP) : out;
+}
+
+export function isSessionTombstoned(sess, tombstones) {
+  if (!sess || typeof sess !== 'object' || !Array.isArray(tombstones) || !tombstones.length) return false;
+  const uid = sess.uid ? String(sess.uid) : '';
+  const key = sessionKeyOf(sess);
+  const revived = String(sess.revived_at || '');
+  return tombstones.some((tomb) => {
+    if (!validTombstone(tomb)) return false;
+    const hit = (uid && tomb.target_id && uid === String(tomb.target_id))
+      || (!sess.recovered_duplicate && tomb.key && tomb.key === key);
+    if (!hit) return false;
+    return !(revived && revived > String(tomb.deleted_at || ''));
+  });
+}
+
+export function dropTombstoned(history, tombstones) {
+  if (!Array.isArray(history)) return history;
+  if (!Array.isArray(tombstones) || !tombstones.length) return history;
+  return history.filter((sess) => !isSessionTombstoned(sess, tombstones));
+}
+
+/**
+ * A restore / import / undo is him choosing a copy. Every session in it that a
+ * tombstone (his current one or the restored one) would kill is stamped
+ * `revived_at`, so a stale device still carrying the old tombstone cannot
+ * delete it again on the next merge. Tombstones for sessions NOT in the
+ * restored copy are kept — those deletes still stand.
+ */
+export function reviveRestoredState(restored, priorTombstones, now = new Date().toISOString()) {
+  if (!restored || typeof restored !== 'object') return restored;
+  const tombs = mergeHistoryTombstones(priorTombstones, restored.history_tombstones);
+  const history = (Array.isArray(restored.history) ? restored.history : []).map((sess) => (
+    isSessionTombstoned(sess, tombs) ? { ...sess, revived_at: now } : sess
+  ));
+  const out = { ...restored, history };
+  if (tombs.length) out.history_tombstones = tombs;
+  return out;
+}
 
 export function sessionKeyOf(sess) {
   if (!sess || typeof sess !== 'object') return '';
@@ -116,10 +213,20 @@ export function mergeLocalStates(ours, theirs) {
   const mine = ours && typeof ours === 'object' ? ours : {};
   const other = theirs && typeof theirs === 'object' ? theirs : {};
   const out = { ...other, ...mine };
-  out.history = mergeHistories(mine.history, other.history);
+  const tombstones = mergeHistoryTombstones(other.history_tombstones, mine.history_tombstones);
+  // Filter each side BEFORE the union so a dead copy can never win a
+  // richer-copy tie against a revived one.
+  out.history = dropTombstoned(
+    mergeHistories(dropTombstoned(mine.history, tombstones), dropTombstoned(other.history, tombstones)),
+    tombstones,
+  );
+  if (tombstones.length) out.history_tombstones = tombstones;
   out.bodyweight_log = mergeBodyweight(mine.bodyweight_log, other.bodyweight_log);
   out.prs = mergePrs(mine.prs, other.prs);
   out.active_session = mergeActive(mine, other);
+  // A stale tab can still hold a deleted session as its LIVE one (it never saw
+  // the finish); a tombstoned uid/key means it is a finished-then-deleted copy.
+  if (out.active_session && isSessionTombstoned(out.active_session, tombstones)) out.active_session = null;
   return out;
 }
 

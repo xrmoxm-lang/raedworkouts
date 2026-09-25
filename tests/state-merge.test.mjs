@@ -14,7 +14,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { completedSetsOf, mergeChangedOurs, mergeLocalStates, sessionKeyOf } from '../domain/state-merge.js';
+import {
+  completedSetsOf, historyTombstoneFor, mergeChangedOurs, mergeHistoryTombstones, mergeLocalStates,
+  reviveRestoredState, sessionKeyOf,
+} from '../domain/state-merge.js';
 
 const session = (sets, { id = 'upper_a', started = '2026-09-23T17:00:00Z' } = {}) => ({
   session_id: id,
@@ -110,4 +113,66 @@ test('everything else belongs to the tab he just touched', () => {
 test('a merge that changed nothing does not claim it did', () => {
   const ours = { history: [], active_session: null, prs: {} };
   assert.equal(mergeChangedOurs(ours, mergeLocalStates(ours, { history: [], active_session: null })), false);
+});
+
+// ---- History deletion tombstones (CODEX-AUDIT-2026-09-25 «NOT DONE» #1) ----
+// Deletion used to be a bare history.splice(); the union above then handed the
+// session straight back from any tab that still held a pre-delete copy.
+const done = (sets, opts) => ({ ...session(sets, opts), ended_at: '2026-09-20T18:00:00Z' });
+
+test('a session deleted in this tab does not come back from a stale tab on disk', () => {
+  const doomed = done(3, { id: 'upper_a', started: '2026-09-20T17:00:00Z' });
+  const kept = done(2, { id: 'lower_b', started: '2026-09-21T17:00:00Z' });
+  const ours = { history: [kept], history_tombstones: [historyTombstoneFor(doomed, '2026-09-25T10:00:00Z')] };
+  const stale = { history: [doomed, kept] };
+  const merged = mergeLocalStates(ours, stale);
+  assert.deepEqual(merged.history.map((s) => s.session_id), ['lower_b'], 'the deleted session must stay deleted');
+  assert.equal(merged.history_tombstones.length, 1, 'and the tombstone must survive the merge');
+  // …in the other direction too: the stale tab is the one saving now.
+  const reverse = mergeLocalStates(stale, ours);
+  assert.deepEqual(reverse.history.map((s) => s.session_id), ['lower_b'], 'a stale tab saving must adopt the delete');
+});
+
+test('a stale copy of a deleted session under a DIFFERENT uid is still dead (key match)', () => {
+  const doomed = done(3, { id: 'upper_a' });
+  const staleCopy = { ...doomed, uid: 'sess-backfilled-elsewhere', exercises: { x: { sets: [
+    { completed: true }, { completed: true }, { completed: true }, { completed: true }] } } };
+  const merged = mergeLocalStates(
+    { history: [], history_tombstones: [historyTombstoneFor(doomed, '2026-09-25T10:00:00Z')] },
+    { history: [staleCopy] },
+  );
+  assert.equal(merged.history.length, 0, 'not even a RICHER stale copy may resurrect it');
+});
+
+test('deleting a recovered duplicate does not kill the original that shares its key', () => {
+  const original = done(3, { id: 'upper_a' });
+  const dup = { ...original, uid: 'dup-abc', recovered_duplicate: true, note: 'other copy' };
+  const merged = mergeLocalStates(
+    { history: [original], history_tombstones: [historyTombstoneFor(dup, '2026-09-25T10:00:00Z')] },
+    { history: [original, dup] },
+  );
+  assert.deepEqual(merged.history.map((s) => s.uid), [original.uid]);
+});
+
+test('with no tombstones anywhere the merge is exactly the old union (old clients unchanged)', () => {
+  const a = done(2, { id: 'upper_a', started: '2026-09-20T17:00:00Z' });
+  const b = done(2, { id: 'lower_b', started: '2026-09-21T17:00:00Z' });
+  const merged = mergeLocalStates({ history: [a] }, { history: [b] });
+  assert.equal(merged.history.length, 2);
+  assert.equal('history_tombstones' in merged, false, 'no tombstone key is invented for an old state');
+});
+
+test('a restore revives the sessions in it, so a stale tombstone cannot re-delete them', () => {
+  const doomed = done(3, { id: 'upper_a' });
+  const tomb = historyTombstoneFor(doomed, '2026-09-25T10:00:00Z');
+  const restored = reviveRestoredState({ history: [doomed] }, [tomb], '2026-09-25T11:00:00Z');
+  assert.equal(restored.history[0].revived_at, '2026-09-25T11:00:00Z');
+  // A stale device still carrying the tombstone merges with the restored copy.
+  const merged = mergeLocalStates(restored, { history: [], history_tombstones: [tomb] });
+  assert.equal(merged.history.length, 1, 'the session he restored must survive');
+  // …and deleting it AGAIN after the restore still wins.
+  const again = historyTombstoneFor(restored.history[0], '2026-09-25T12:00:00Z');
+  const tombs = mergeHistoryTombstones(merged.history_tombstones, [again]);
+  assert.equal(tombs.length, 1, 'one tombstone per session, the later delete');
+  assert.equal(mergeLocalStates({ history: [], history_tombstones: tombs }, { history: restored.history }).history.length, 0);
 });

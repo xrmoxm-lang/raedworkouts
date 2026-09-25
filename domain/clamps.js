@@ -53,9 +53,163 @@ function currentPattern(exercise) {
   return exercise.canonical_pattern || exercise.pattern || 'isolation';
 }
 
-function stepFor(context) {
-  const step = Number(context.equipment_step_kg ?? context.exercise?.equipment_step_kg ?? DEFAULT_EQUIPMENT_STEP_KG);
-  return Number.isFinite(step) && step > 0 ? step : DEFAULT_EQUIPMENT_STEP_KG;
+function positiveKg(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+// ---- The Matrix stack ladder ------------------------------------------------
+// Raed's REAL logged stack loads (sync DB, read-only, 2026-09-25): 4.5, 9, 14,
+// 18, 23, 32, 63 — face pull 9/14, lat pulldown 18/25/32, cable row 25/32. That
+// is Matrix's 10-lb plate printed in kg and ROUNDED to the integer: n × 4.5359
+// → 5, 9, 14, 18, 23, 27, 32, 36, 41 … A linear 4.5 step proposes 13.5 / 22.5
+// / 31.5, which no label on his stack says. He sometimes types 4.5 for the
+// first plate, so that is rung 1 too.
+export const MATRIX_LADDER = 'matrix';
+export const MATRIX_KG_PER_PLATE = 4.5359;
+export const MATRIX_RUNGS = 40;
+// The widest gap between two labels (18 → 23). The clamps (C3–C5) and the
+// canonical engine speak numbers; this is the number a ladder answers with, so
+// C4's «one equipment step» ceiling never trims a real next rung.
+export const MATRIX_NOMINAL_STEP_KG = 5;
+// A load within this of n × 4.5359 IS rung n: every printed label (rounded, so
+// within 0.5), his 4.5 for the first plate, the 13.5 / 22.5 / 31.5 the linear
+// step used to write, and his logged 63 (= 14 × 4.5359 = 63.50, however the
+// decal rounds it). A whole kilo, not half: a 40 he typed (40.82 is rung 9)
+// must step to 45, not to a «+1 kg» 41. 16 and 25 (a different station) are
+// ≥ 1.8 kg off every rung: not rungs, left as typed.
+const RUNG_TOLERANCE_KG = 1;
+
+export function stackLabelKg(n) {
+  return Math.round(n * MATRIX_KG_PER_PLATE);
+}
+export function isLadderStep(step) {
+  return step === MATRIX_LADDER;
+}
+/** The rung a load sits on, or null when it is not on the ladder. */
+export function matrixRung(weightKg) {
+  const weight = Number(weightKg);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  const n = Math.round(weight / MATRIX_KG_PER_PLATE);
+  if (n < 1 || n > MATRIX_RUNGS) return null;
+  return Math.abs(weight - n * MATRIX_KG_PER_PLATE) <= RUNG_TOLERANCE_KG ? n : null;
+}
+
+// A step is a positive number of kg, or the Matrix ladder.
+function stepSpec(value) {
+  return isLadderStep(value) ? MATRIX_LADDER : positiveKg(value);
+}
+
+/**
+ * How THIS equipment moves, first answer wins — a number of kg, or the Matrix
+ * ladder:
+ *   1. `equipment_step_kg` — a caller that already resolved it (the pipeline
+ *      below is handed `core/engine.js equipmentStepKg`'s answer);
+ *   2. `prefs.steps[prefs.device]` — what he set in ⚙️ «درجة الجهاز» for the
+ *      machine he is standing at (two leg presses are two sleds);
+ *   3. `prefs.step_kg` — the same, for the movement when no machine is named;
+ *   4. `learned_step_kg` — a step read off his own log, only ever COARSER than
+ *      the static one and never over a ladder (the caller enforces both);
+ *   5. `kind_step_kg` — the equipment kind he picked in the sheet;
+ *   6. `exercise.equipment_ladder` / `exercise.equipment_step_kg` — data.js;
+ *   7. 2.5 kg, research/06 §5.2's fallback «when the increment is unknown».
+ * Before Round 6 only 1, 6 and 7 existed and data.js carried no step at all, so
+ * every movement resolved to 2.5 whatever it was.
+ */
+export function stepSpecFor(context = {}) {
+  const prefs = context.prefs || null;
+  const device = String(prefs?.device || '').trim();
+  const candidates = [
+    context.equipment_step_kg,
+    device ? prefs?.steps?.[device] : null,
+    prefs?.step_kg,
+    context.learned_step_kg,
+    context.kind_step_kg,
+    context.exercise?.equipment_ladder,
+    context.exercise?.equipment_step_kg,
+  ];
+  for (const candidate of candidates) {
+    const step = stepSpec(candidate);
+    if (step) return step;
+  }
+  return DEFAULT_EQUIPMENT_STEP_KG;
+}
+
+/** The same resolution, as the number the clamps and percentages need. */
+export function stepFor(context = {}) {
+  const spec = stepSpecFor(context);
+  return isLadderStep(spec) ? MATRIX_NOMINAL_STEP_KG : spec;
+}
+
+/**
+ * C3's direction on either kind of equipment: the heaviest load at or under
+ * `weightKg` that the equipment has. On the ladder a load already ON a rung
+ * reads as that rung's label (13.5 → 14), anything else floors to the label
+ * below it. Null when nothing fits (under the first plate).
+ */
+export function roundDownToStep(weightKg, step) {
+  if (!isLadderStep(step)) return roundDownToEquipmentStep(weightKg, positiveKg(step) || DEFAULT_EQUIPMENT_STEP_KG);
+  const weight = Number(weightKg);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  const rung = matrixRung(weight);
+  if (rung) return stackLabelKg(rung);
+  let best = null;
+  for (let n = 1; n <= MATRIX_RUNGS && stackLabelKg(n) <= weight; n += 1) best = stackLabelKg(n);
+  return best;
+}
+
+/**
+ * One earned step up.
+ * Ladder: on a rung → the next label (4.5 → 9, 23 → 27, 63 → 68); off it (16,
+ * 25 — a station that differs) → the first label ABOVE what he typed (18, 27).
+ * Past the top of the stack, the nominal step.
+ * Numbers: landed on the equipment's grid when that is honest. `last + step`
+ * alone inherits whatever grid `last` sat on: an 8 kg dumbbell + 2.5 proposes
+ * 10.5, which no rack holds, where 10 is right there. So the sum is rounded
+ * DOWN to the step (C3's direction) — unless that would swallow more than half
+ * the step; then his own history wins and the step is added as-is. Never above
+ * `last + step`, so C4's one-step ceiling is never what trims it. Rounded to
+ * grams so float noise never reaches the screen.
+ */
+export function nextStepUp(lastKg, step) {
+  const last = Number(lastKg);
+  if (!Number.isFinite(last) || last < 0) return null;
+  if (isLadderStep(step)) {
+    const rung = matrixRung(last);
+    if (rung && rung < MATRIX_RUNGS) return stackLabelKg(rung + 1);
+    for (let n = 1; n <= MATRIX_RUNGS; n += 1) if (!rung && stackLabelKg(n) > last) return stackLabelKg(n);
+    return Math.round((last + MATRIX_NOMINAL_STEP_KG) * 1000) / 1000;
+  }
+  const size = positiveKg(step);
+  if (!size) return null;
+  const snapped = roundDownToEquipmentStep(last + size, size);
+  const next = snapped - last >= size / 2 ? snapped : last + size;
+  return Math.round(next * 1000) / 1000;
+}
+
+/**
+ * The mirror image, for research/06 §5.3 R6's walk-back. Ladder: the label
+ * below his rung (23 → 18), or below what he typed (16 → 14); 0 under the
+ * first plate. Numbers: one step down, on the grid unless the grid would take
+ * more than one and a half steps off him. Never below zero.
+ */
+export function nextStepDown(lastKg, step) {
+  const last = Number(lastKg);
+  if (!Number.isFinite(last) || last <= 0) return null;
+  if (isLadderStep(step)) {
+    const rung = matrixRung(last);
+    if (rung) return rung > 1 ? stackLabelKg(rung - 1) : 0;
+    let below = 0;
+    for (let n = 1; n <= MATRIX_RUNGS && stackLabelKg(n) < last; n += 1) below = stackLabelKg(n);
+    return below;
+  }
+  const size = positiveKg(step);
+  if (!size) return null;
+  const target = Math.max(0, last - size);
+  const snapped = target > 0 ? (roundDownToEquipmentStep(target, size) ?? 0) : 0;
+  const next = snapped > 0 && last - snapped <= size * 1.5 ? snapped : target;
+  return Math.round(next * 1000) / 1000;
 }
 
 /**

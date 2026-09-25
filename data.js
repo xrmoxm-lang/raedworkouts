@@ -608,6 +608,87 @@ phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', p
   phase5Exercise({ id: 'plate_weighted_crunch', name: 'Plate-Weighted Crunch', primary: 'abs', pattern: 'isolation_core' }),
 );
 
+// ---- Equipment step: the smallest load change the equipment offers ---------
+// Raed 2026-09-25: «the whole gym is Matrix, all in kg, sometimes .5». Until
+// now every movement shared one 2.5 kg default (domain/catalogue.js), so a pin
+// stack, a leg-press sled and a dumbbell rack all «moved» by the same amount.
+// Resolution order lives in `stepSpecFor` (domain/clamps.js): his ⚙️ «درجة الجهاز»
+// for this machine → for this movement → a coarser step learned from his log →
+// the equipment kind he picked → THIS table → 2.5.
+const EQUIPMENT_STEP_CLASSES = Object.freeze({
+  // Matrix selectorized stacks (Ultra / Versa / Aura / Go) are pound-native:
+  // «WEIGHT PLATE INCREMENTS 4.5 kg / 10 lbs · INCREMENTAL WEIGHT SYSTEM 1.1,
+  // 2.3, 3.4 kg» — Matrix sell sheet, https://matrixfitness.com/uk/eng/sellsheet/96653
+  // (Go: «Optional Incremental Weight 2.3 kg / 5 lbs», same plates). His kg-
+  // labelled stacks print n × 4.5359 ROUNDED to the integer — 5, 9, 14, 18, 23,
+  // 27, 32 … — and his own log proves it: completed working sets at 14, 23 and
+  // 32 (face pull 9/14, lat pulldown 18/25/32, cable row 25/32; sync DB, read
+  // 2026-09-25). A linear 4.5 step would propose 13.5 / 22.5 / 31.5, which no
+  // label says. So a stack is not a number: it is the LADDER in
+  // domain/clamps.js (`stackLabelKg`), 4.5 accepted as the first rung.
+  stack: 'matrix',
+  // Plate-loaded (leg press, hack squat, T-bar, barbell): the smallest pair of
+  // plates on a KSA rack is 2 × 2.5 kg, so the load moves by 5. ROUND6 brief §D.1.
+  plates: 5,
+  // Dumbbell racks in KSA gyms are 2.5 kg apart above 10 kg. ROUND6 brief §D.1;
+  // the weight box keeps step="0.5" because he sometimes logs a «.5».
+  dumbbells: 2.5,
+  // Cable columns: Matrix adjustable pulleys are 2:1, so one 4.5 kg plate is
+  // «effective resistance» ≈ 2.3 kg (Matrix brochure: «VS-FTIW 2.3 kg / 5 lb
+  // increment weight (effective resistance 1.1 kg / 2.5 lb)»). 2.5 is the brief's
+  // figure and the nearest kg reading; NOT confirmed per station — his log wins.
+  cable: 2.5,
+  // A fixed EZ bar or a single plate held for a crunch: 2.5 kg apart.
+  small: 2.5,
+});
+const EQUIPMENT_STEP_BY_EXERCISE = Object.freeze({
+  // stack — Matrix selectorized
+  incline_chest_press: 'stack', chest_press_machine: 'stack', chest_fly: 'stack', pec_dec: 'stack',
+  shoulder_press_machine: 'stack', seated_dips: 'stack', lat_pulldown: 'stack', lat_pulldown_neutral: 'stack',
+  low_row_machine: 'stack', seated_cable_row: 'stack', rear_delt_fly: 'stack', leg_extension: 'stack',
+  prone_leg_curl: 'stack', standing_leg_curl: 'stack', seated_leg_curl: 'stack', standing_calf: 'stack',
+  reverse_grip_lat_pulldown: 'stack', assisted_dip: 'stack', machine_lateral_raise: 'stack',
+  single_leg_leg_extension: 'stack', machine_crunch: 'stack', two_grip_lat_pulldown: 'stack',
+  machine_pulldown: 'stack', machine_shoulder_press: 'stack', machine_row: 'stack',
+  machine_incline_press: 'stack', reverse_grip_assisted_pullup: 'stack',
+  leg_extension_machine_hip_thrust: 'stack',
+  // plates — plate-loaded or barbell
+  leg_press: 'plates', hack_squat: 'plates', tbar_row: 'plates', hip_thrust: 'plates', rdl: 'plates',
+  seated_calf: 'plates', leg_press_toe_press: 'plates', hammer_strength_press: 'plates',
+  machine_squat: 'plates', barbell_rdl: 'plates', incline_smith_press: 'plates',
+  // dumbbells
+  incline_db_press: 'dumbbells', lateral_raise_db: 'dumbbells', biceps_curl: 'dumbbells', hammer_curl: 'dumbbells',
+  reverse_curl: 'dumbbells', goblet_squat: 'dumbbells', db_walking_lunge: 'dumbbells', db_incline_curl: 'dumbbells',
+  flat_db_press: 'dumbbells', standing_db_press: 'dumbbells', chest_supported_db_row: 'dumbbells',
+  db_standing_calf_raise: 'dumbbells', decline_db_press: 'dumbbells', single_arm_db_row: 'dumbbells',
+  db_single_leg_hip_thrust: 'dumbbells', db_leg_curl: 'dumbbells', reverse_lunge: 'dumbbells', db_step_up: 'dumbbells',
+  // cable
+  cable_fly: 'cable', lateral_raise_cable: 'cable', tricep_pushdown: 'cable', overhead_rope: 'cable',
+  face_pull: 'cable', ab_crunch: 'cable', single_arm_rope_triceps_extension: 'cable', cable_ez_curl: 'cable',
+  bayesian_cable_curl: 'cable', cable_reverse_flye: 'cable', single_arm_pulldown: 'cable',
+  // small — EZ bar, a held plate, or bodyweight with a plate added
+  ez_bar_curl: 'small', ez_bar_skull_crusher: 'small', plate_weighted_crunch: 'small', hanging_leg_raise: 'small',
+  bicycle_crunch: 'small', crunch: 'small', reverse_crunch: 'small', roman_chair_crunch: 'small',
+  degree_45_hyperextension: 'small', glute_ham_raise: 'small',
+});
+for (const exercise of EXERCISES) {
+  const kind = EQUIPMENT_STEP_BY_EXERCISE[exercise.id];
+  // A movement without a class would silently fall back to 2.5 — the exact bug
+  // this table ends. Not thrown here (a throw in this classic script blanks the
+  // whole app); tests/round6-steps.test.mjs asserts every id is classed instead.
+  if (!kind) continue;
+  exercise.equipment_class = kind;
+  const step = EQUIPMENT_STEP_CLASSES[kind];
+  if (step === 'matrix') {
+    exercise.equipment_ladder = 'matrix';
+    // The number the clamps and percentages need: the widest gap between two
+    // labels (18 → 23). The ladder, not this, decides the suggested load.
+    exercise.equipment_step_kg = 5;
+  } else {
+    exercise.equipment_step_kg = step;
+  }
+}
+
 // ---- v15 programme archive (not exported or scheduled) ------
 // Block 1 (Weeks 1-4) = trimmed full-body for calibration.
 // Block 2 (Weeks 5-8) = adds volume + RDL + pec deck.

@@ -225,5 +225,128 @@ class EmptyStateFastPathTests(unittest.TestCase):
         self.assertEqual(self.head_state()["history"], [])
 
 
+class HistoryTombstoneTests(EmptyStateFastPathTests):
+    """A deleted history session never resurrects through a merge (2026-09-25).
+
+    The pre-existing test above proves a delete only when the deleting client's
+    base_rev MATCHES the head (verbatim fast path). These are the stale cases
+    CODEX-AUDIT-2026-09-25.md «NOT DONE» #1 names: a stale device pushing its
+    pre-delete copy, and a delete that itself lands on a stale head row.
+    """
+
+    USER_STATE = None
+
+    def seeded(self):
+        return {
+            "history": [dict(session_with(4, session_id="upper_a", started_at="2026-09-20T17:00:00Z"),
+                             ended_at="2026-09-20T18:00:00Z"),
+                        dict(session_with(4, session_id="lower_b", started_at="2026-09-21T17:00:00Z"),
+                             ended_at="2026-09-21T18:00:00Z")],
+            "prs": {"chest_press_machine": {"kg": 60, "reps": 8, "score": 74}},
+            "bodyweight_log": [{"date": "2026-09-20", "kg": 82}],
+            "active_session": None,
+        }
+
+    def tombstone(self, sess, at="2026-09-25T10:00:00Z"):
+        return {"target_type": "session", "target_id": sess["uid"],
+                "key": self.raedsync.session_key(sess), "deleted_at": at}
+
+    def setUp(self):
+        # Every test starts from a clean head via an explicit replace.
+        self.first = self.post(self.seeded(), base_rev=None, mode="replace", updated_at="2026-09-24T10:00:00Z")
+
+    def test_a_stale_device_pushing_its_pre_delete_copy_does_not_resurrect_the_session(self):
+        seeded = self.seeded()
+        doomed = seeded["history"][1]
+        deleted = copy.deepcopy(seeded)
+        deleted["history"] = [seeded["history"][0]]
+        deleted["history_tombstones"] = [self.tombstone(doomed)]
+        self.post(deleted, base_rev=self.first["rev"], updated_at="2026-09-25T10:00:00Z")
+        self.assertEqual([h["session_id"] for h in self.head_state()["history"]], ["upper_a"])
+
+        # The phone that never saw the delete: old base_rev, full history, and a
+        # NEWER clock — the worst case for a union.
+        answer = self.post(self.seeded(), base_rev=self.first["rev"], updated_at="2026-09-25T11:00:00Z")
+        self.assertTrue(answer["merged"])
+        head = self.head_state()
+        self.assertEqual([h["session_id"] for h in head["history"]], ["upper_a"],
+                         "a stale device must not bring a deleted session back")
+        self.assertEqual(len(head["history_tombstones"]), 1, "the head keeps the tombstone")
+        self.assertEqual([h["session_id"] for h in answer["state_json"]["history"]], ["upper_a"],
+                         "and the stale device is handed the delete on the same request")
+
+    def test_a_delete_that_lands_on_a_stale_head_row_still_deletes(self):
+        # Another device pushed in between, so the deleting client's base_rev
+        # is stale and its push goes through merge, where head still HAS it.
+        seeded = self.seeded()
+        other = copy.deepcopy(seeded)
+        other["bodyweight_log"].append({"date": "2026-09-24", "kg": 81.5})
+        self.post(other, base_rev=self.first["rev"], updated_at="2026-09-24T12:00:00Z")
+        deleted = copy.deepcopy(seeded)
+        deleted["history"] = [seeded["history"][0]]
+        deleted["history_tombstones"] = [self.tombstone(seeded["history"][1])]
+        answer = self.post(deleted, base_rev=self.first["rev"], updated_at="2026-09-25T10:00:00Z")
+        self.assertTrue(answer["merged"])
+        self.assertEqual([h["session_id"] for h in self.head_state()["history"]], ["upper_a"],
+                         "the stale head row must not undo the delete")
+
+    def test_a_stale_copy_under_another_uid_is_matched_by_session_key(self):
+        seeded = self.seeded()
+        deleted = copy.deepcopy(seeded)
+        deleted["history"] = [seeded["history"][0]]
+        deleted["history_tombstones"] = [self.tombstone(seeded["history"][1])]
+        self.post(deleted, base_rev=self.first["rev"], updated_at="2026-09-25T10:00:00Z")
+        stale = self.seeded()
+        stale["history"][1]["uid"] = "sess-backfilled-elsewhere"
+        stale["history"][1]["exercises"]["chest_press_machine"]["sets"].append(
+            {"is_warmup": False, "weight": 40, "reps": 10, "completed": True})
+        self.post(stale, base_rev=self.first["rev"], updated_at="2026-09-25T11:00:00Z")
+        self.assertEqual([h["session_id"] for h in self.head_state()["history"]], ["upper_a"])
+
+    def test_a_stale_device_holding_the_deleted_session_as_live_does_not_revive_it(self):
+        seeded = self.seeded()
+        doomed = seeded["history"][1]
+        deleted = copy.deepcopy(seeded)
+        deleted["history"] = [seeded["history"][0]]
+        deleted["history_tombstones"] = [self.tombstone(doomed)]
+        self.post(deleted, base_rev=self.first["rev"], updated_at="2026-09-25T10:00:00Z")
+        stale = self.seeded()
+        stale["history"] = [seeded["history"][0]]
+        live = copy.deepcopy(doomed)
+        live.pop("ended_at", None)
+        stale["active_session"] = live
+        self.post(stale, base_rev=self.first["rev"], updated_at="2026-09-25T11:00:00Z")
+        head = self.head_state()
+        self.assertIsNone(head.get("active_session"))
+        self.assertEqual([h["session_id"] for h in head["history"]], ["upper_a"])
+
+    def test_a_restored_session_survives_a_stale_tombstone(self):
+        seeded = self.seeded()
+        doomed = seeded["history"][1]
+        tomb = self.tombstone(doomed)
+        restored = self.seeded()
+        restored["history"][1]["revived_at"] = "2026-09-25T12:00:00Z"
+        restored["history_tombstones"] = [tomb]
+        self.post(restored, base_rev=None, mode="replace", updated_at="2026-09-25T12:00:00Z")
+        stale = self.seeded()
+        stale["history"] = [seeded["history"][0]]
+        stale["history_tombstones"] = [tomb]
+        self.post(stale, base_rev=self.first["rev"], updated_at="2026-09-25T13:00:00Z")
+        self.assertEqual(len(self.head_state()["history"]), 2, "a session he restored must stay restored")
+
+    def test_old_clients_without_tombstones_merge_exactly_as_before(self):
+        head = self.seeded()
+        incoming = {"history": [dict(session_with(3, session_id="upper_b", started_at="2026-09-22T17:00:00Z"),
+                                     ended_at="2026-09-22T18:00:00Z")]}
+        out = self.raedsync.merge_states(head, incoming, OLDER_AT, HEAD_AT)
+        self.assertEqual([h["session_id"] for h in out["history"]], ["upper_a", "lower_b", "upper_b"])
+        self.assertNotIn("history_tombstones", out)
+
+    # The inherited HTTP tests are not re-run here.
+    test_a_defaultstate_push_with_a_matching_base_rev_does_not_wipe_the_head = None
+    test_deleting_a_session_still_works = None
+    test_an_explicit_restore_may_still_replace_everything = None
+
+
 if __name__ == "__main__":
     unittest.main()

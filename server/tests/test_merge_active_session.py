@@ -77,3 +77,15 @@ def test_a_client_that_sends_no_tombstone_keeps_the_old_behaviour():
     # session because the server learned a new field.
     out = _merge({"history": [], "active_session": None})
     assert out["active_session"] is not None
+
+
+# These are plain `test_*` functions (pytest style), which `unittest` does not
+# collect on its own — and pytest is not installed on the Mac or the HP. This
+# hook hands them to unittest so `python3 -m unittest discover -s server/tests
+# -t .` (the `verify` gate in package.json) runs them instead of skipping them.
+def load_tests(loader, tests, pattern):
+    import unittest
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            tests.addTest(unittest.FunctionTestCase(fn, description=name))
+    return tests
