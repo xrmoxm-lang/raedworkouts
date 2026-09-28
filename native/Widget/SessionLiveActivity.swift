@@ -11,6 +11,9 @@ import WidgetKit
 struct SessionLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: SessionAttributes.self) { context in
+            // Written from the EXTENSION: the one proof, readable from the Mac,
+            // that iOS actually asked us to draw the activity (round 7 §F).
+            let _ = StatusLog.island("lock \(context.state.done)/\(context.state.total)")
             // `isStale` is the only thing that makes the system re-render a face
             // without an update from the app — the staleDate is set to the rest
             // deadline for exactly this, so «انتهت الراحة» appears while the
@@ -24,6 +27,7 @@ struct SessionLiveActivity: Widget {
                 .activitySystemActionForegroundColor(context.state.palette.label)
         } dynamicIsland: { context in
             let restOver = context.isStale || context.state.isRestOver()
+            StatusLog.island("island \(context.state.done)/\(context.state.total)")
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     SessionHeading(state: context.state, session: context.attributes.session)

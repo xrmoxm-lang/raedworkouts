@@ -1,8 +1,8 @@
-// Round 5 on the cool-down, driven in the browser at 390×844.
+// Round 5 on the cardio block (the «cool-down» until round 7), driven in the browser at 390×844.
 //
 // Three things this file proves, each of which passed every unit test the day
 // it shipped and was still wrong on screen:
-//   1. «طبّقه» applies a PRESCRIPTION. It used to apply the previous bout's
+//   1. Today's suggestion applies a PRESCRIPTION (round 7: as the prefill, no «طبّقه»). It used to apply the previous bout's
 //      whole record — completed_at included — so one tap archived a cool-down
 //      he never did, stamped with last session's clock.
 //   2. A box he empties is not a zero: the totals refuse, and the log button
@@ -87,33 +87,23 @@ const liveCardio = (page) => page.evaluate(() => {
   return JSON.parse(localStorage[key]).active_session?.cardio || null;
 });
 
-test('applying today\'s suggestion changes the plan and never logs the bout', async ({ page }) => {
+// Round 7 §B: there is no «طبّقه» any more — the suggestion IS the prefill,
+// written into the fields on first render. The Round 5 finding still stands on
+// that path: prefilling copies a PRESCRIPTION, never the previous bout's record.
+test('prefilling today\'s suggestion changes the plan and never logs the bout', async ({ page }) => {
   const errs = await driveToDone(page, { seedLastBout: LAST_BOUT });
 
   const before = await page.evaluate(() => ({
     form: Boolean(document.querySelector('[data-cardio-log]')),
     logged: Boolean(document.querySelector('[data-cardio-logged]')),
     suggestion: document.querySelector('[data-cardio-suggestion]')?.textContent?.trim() || '',
-    // «نقطة جهد» is a unit this app coined. Defined once, in the intro.
-    effortDef: document.querySelector('[data-cardio-effort-def]')?.textContent || '',
+    apply: document.querySelectorAll('[data-cardio-apply]').length,
   }));
-  expect(before.effortDef, `intro read «${before.effortDef}»`).toContain('MET');
-  expect(before.effortDef, 'the definition must say what the score is made of').toMatch(/الشدة.*الدقائق/);
-  expect(before.form, 'the live form must be on screen before the tap').toBe(true);
-  expect(before.logged).toBe(false);
+  expect(before.form, 'the live form must be on screen').toBe(true);
+  expect(before.logged, 'prefilling must not close the block into its logged state').toBe(false);
+  expect(before.apply, 'no «طبّقه» button').toBe(0);
   // With a completed 15-minute bout behind him the one change is the duration.
   expect(before.suggestion, `suggestion read «${before.suggestion}»`).toMatch(/20/);
-
-  await page.evaluate(() => document.querySelector('[data-cardio-apply]')?.click());
-  await page.waitForTimeout(700);
-
-  const after = await page.evaluate(() => ({
-    form: Boolean(document.querySelector('[data-cardio-log]')),
-    logged: Boolean(document.querySelector('[data-cardio-logged]')),
-  }));
-  // The whole finding in one line: the form is still a form.
-  expect(after.form, 'the cool-down must still be loggable after applying a suggestion').toBe(true);
-  expect(after.logged, 'applying a suggestion must not close the block into its logged state').toBe(false);
 
   const cardio = await liveCardio(page);
   expect(cardio.completed_at, 'today\'s bout must not inherit the previous bout\'s completion').toBeNull();
@@ -135,8 +125,6 @@ test('a cleared box stops the totals and disables the log', async ({ page }) => 
       warned: Boolean(document.querySelector('[data-cardio-incomplete]')),
       total: document.querySelector('.cardio-total-main')?.textContent || null,
       disabled: document.querySelector('[data-cardio-log]').disabled,
-      // An empty speed has no pace either — Number('') is 0, which is a walk.
-      paceShown: !document.querySelector('[data-cardio-pace]').hidden,
     };
   });
   // A blank speed used to be read as 0 and priced as standing still: 3.5 METs
@@ -144,7 +132,6 @@ test('a cleared box stops the totals and disables the log', async ({ page }) => 
   expect(blank.warned, 'an empty speed must be named, not computed around').toBe(true);
   expect(blank.total, 'no total may be printed from a number he never gave').toBeNull();
   expect(blank.disabled, 'and it must not be loggable').toBe(true);
-  expect(blank.paceShown, 'a blank speed must not be labelled a walk').toBe(false);
 
   const refilled = await page.evaluate(async () => {
     const el = document.querySelector('[data-cardio-field="base_speed"]');
@@ -171,13 +158,9 @@ test('the treadmill unit is a control, and switching it converts the belt', asyn
   const start = await page.evaluate(() => ({
     speed: document.querySelector('[data-cardio-field="base_speed"]').value,
     label: document.querySelector('[data-cardio-field="base_speed"]').closest('.cardio-field').textContent,
-    pace: document.querySelector('[data-cardio-pace]')?.dataset.cardioPace,
   }));
   expect(Number(start.speed)).toBe(5.1);
   expect(start.label, `the unit must ride in the label — read «${start.label}»`).toContain('ميل');
-  // 5.1 mph is 137 m/min. That is a jog, and the block has to say so instead of
-  // scoring it with the walking equation's Zone 2 band.
-  expect(start.pace, 'his base is jogged, not walked').toBe('run');
 
   await page.evaluate(() => { window.location.hash = 'settings'; });
   await page.waitForTimeout(800);
@@ -204,7 +187,6 @@ test('the treadmill unit is a control, and switching it converts the belt', asyn
     burst: Number(document.querySelector('[data-cardio-field="burst_speed"]').value),
     label: document.querySelector('[data-cardio-field="base_speed"]').closest('.cardio-field').textContent,
     total: Number(document.querySelector('.cardio-total-main')?.textContent),
-    pace: document.querySelector('[data-cardio-pace]')?.dataset.cardioPace,
   }));
   // The same belt, read off a machine set the other way — 5.1 mph IS 8.2 km/h.
   expect(converted.speed).toBe(8.2);
@@ -212,6 +194,5 @@ test('the treadmill unit is a control, and switching it converts the belt', asyn
   expect(converted.label).toContain('كم');
   // And therefore the same workout: the effort score does not move with the unit.
   expect(converted.total, 'switching the unit must change the numerals, not the work').toBe(153);
-  expect(converted.pace).toBe('run');
   expect(errs).toEqual([]);
 });

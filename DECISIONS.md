@@ -2171,3 +2171,34 @@ file was almost always written after the bug it prevents was proven on a phone.
 > the number he feels; it is never the goal, so it sits with the sets and the
 > load and nothing on this screen says «longer is better». No toast and no undo
 > on finish — the screen is the confirmation.
+
+
+---
+
+## Round 7 (2026-09-28) — rulings that supersede earlier notes above
+
+### applyWarmupFeel (core/engine.js)
+
+> Raed: «it's downgrading the weights on only a single set, not the rest». Heavy
+> used to touch the FIRST working set only; now both directions adjust every
+> open working set. The one-application flag and the calibration guard stay.
+
+### equipmentStep / stepSourceFor (core/engine.js, domain/clamps.js)
+
+> Raed: «based on the exercises I'm doing and the history, you should know
+> which is which». The coarsen-only learner is replaced by inference from his
+> last 12 sessions on the named machine: ≥3 distinct loads, ≥80% of SETS within
+> 1 kg of a Matrix rung → the ladder; else a 5 / 2.5 / 1.25 grid by evidence;
+> else the data.js class. Precedence: his hand (⚙️) > history > data.js >
+> default, and the ⚙️ line names the source.
+
+### renderCardioBlock (ui/cardio.js)
+
+> Raed: it is CARDIO, not «تهدئة»; and «much simpler, uniform». The suggestion
+> IS the prefill (written once per bout); duration · speed · incline · bursts
+> on one card, burst details collapsed, one totals line, compact «سجّل».
+
+### The rest circle (ui/clock.js, styles.css)
+
+> Raed: «small, I cannot notice it». 72px, accent-filled, 22px digits in the
+> accent foreground, the ring drawn on the accent — visible on ورق in a gym.

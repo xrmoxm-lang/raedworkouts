@@ -82,17 +82,21 @@ test('the Matrix ladder is his stack: n × 4.5359 rounded, 4.5 accepted as plate
   assert.equal(roundDownToStep(22.5, MATRIX_LADDER), 23, 'on a rung, the rung\'s label');
 });
 
-test('stepFor / stepSpecFor resolve device pref → movement pref → learned → kind → data.js → 2.5', () => {
+test('stepFor / stepSpecFor resolve device pref → movement pref → history → kind → data.js → 2.5', () => {
   const exercise = { equipment_step_kg: 2.5 };
   assert.equal(stepFor({}), 2.5, 'nothing known: research/06 §5.2 fallback');
   assert.equal(stepFor({ exercise: { equipment_step_kg: 5 } }), 5, 'data.js beats the fallback');
   assert.equal(stepSpecFor({ exercise: { equipment_ladder: 'matrix', equipment_step_kg: 5 } }), MATRIX_LADDER, 'a data.js ladder beats its nominal number');
   assert.equal(stepFor({ exercise: { equipment_ladder: 'matrix' } }), 5, 'the clamps get the widest rung gap');
   assert.equal(stepFor({ exercise, kind_step_kg: 10 }), 10, 'the kind he picked beats data.js');
-  assert.equal(stepFor({ exercise, kind_step_kg: 2.5, learned_step_kg: 10 }), 10, 'a (coarser) learned step beats the kind');
+  // Round 7 §E: the step his log proves (a number or the ladder) beats the kind
+  // and data.js; Round 6's «learned, only ever coarser» input is gone.
+  assert.equal(stepFor({ exercise, kind_step_kg: 2.5, history_step: 10 }), 10, 'his history beats the kind');
+  assert.equal(stepSpecFor({ exercise: { equipment_ladder: 'matrix' }, history_step: 2.5 }), 2.5, 'his history beats a data.js ladder');
+  assert.equal(stepSpecFor({ exercise, history_step: MATRIX_LADDER }), MATRIX_LADDER, 'and can put a data.js number on the ladder');
   const prefs = { device: 'Sled B', step_kg: 1.25, steps: { 'Sled A': 10, 'Sled B': 5 } };
-  assert.equal(stepFor({ exercise, learned_step_kg: 10, prefs: { step_kg: 1.25 } }), 1.25, 'his stated step beats learning');
-  assert.equal(stepFor({ exercise, learned_step_kg: 10, prefs }), 5, 'the machine he stands at beats the movement');
+  assert.equal(stepFor({ exercise, history_step: 10, prefs: { step_kg: 1.25 } }), 1.25, 'his stated step beats his history');
+  assert.equal(stepFor({ exercise, history_step: 10, prefs }), 5, 'the machine he stands at beats the movement');
   assert.equal(stepFor({ exercise, prefs: { ...prefs, device: 'Unknown' } }), 1.25, 'a device with no step falls to the movement');
   assert.equal(stepSpecFor({ exercise, prefs: { device: 'M', steps: { M: 'matrix' } } }), MATRIX_LADDER, 'the ⚙️ ladder chip');
   assert.equal(stepSpecFor({ exercise: { equipment_ladder: 'matrix' }, prefs: { device: 'M', steps: { M: 5 } } }), 5, 'his number beats the ladder');
@@ -155,7 +159,7 @@ test('his ⚙️ step for THIS machine moves the suggestion by exactly that step
   assert.equal(suggestNextWeight('leg_press', PLANNED).weight, 23);
 });
 
-test('one «.5» he typed cannot teach a 0.5 kg machine; a coarser rack still can; the ladder is never learned over', () => {
+test('one «.5» he typed cannot teach a 0.5 kg machine; a rack he uses in fives reads as 5; his stack reads as the ladder', () => {
   // 12 then 12.5 on dumbbells: smallest-gap learning read that as a 0.5 kg
   // step and proposed +0.5 forever.
   seed([
@@ -165,7 +169,8 @@ test('one «.5» he typed cannot teach a 0.5 kg machine; a coarser rack still ca
   assert.equal(equipmentStepKg('lateral_raise_db'), 2.5);
   seed([20, 25, 30].map((kg, index) => ({ date: `2026-08-0${index + 1}`, exercises: { lateral_raise_db: { sets: [{ weight: kg, reps: 12, completed: true }] } } })));
   assert.equal(equipmentStepKg('lateral_raise_db'), 5, 'a rack he only ever used in fives');
-  // His lat pulldown log 18 / 32 / 41: a gap-learner would read 9 kg steps.
+  // His lat pulldown log 18 / 32 / 41: a gap-learner would read 9 kg steps;
+  // all three are Matrix labels (Round 7 §E), so it is the ladder.
   seed([18, 32, 41].map((kg, index) => ({ date: `2026-08-0${index + 1}`, exercises: { lat_pulldown: { sets: [{ weight: kg, reps: 10, completed: true }] } } })));
   assert.equal(equipmentStep('lat_pulldown'), MATRIX_LADDER);
 });

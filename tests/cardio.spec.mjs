@@ -84,11 +84,11 @@ test('a finished session is timed on the clock, not in loose minutes', async ({ 
   expect(errs).toEqual([]);
 });
 
-test('the cool-down computes, records, and gives him a number to beat', async ({ page }) => {
+test('the cardio computes, records, and gives him a number to beat', async ({ page }) => {
   const errs = await driveToDone(page);
 
   const present = await page.evaluate(() => Boolean(document.querySelector('[data-cardio-block]')));
-  expect(present, 'the cool-down block must appear once the lifting is done').toBe(true);
+  expect(present, 'the cardio block must appear once the lifting is done').toBe(true);
 
   // His own numbers: 15 min, 5.1 base, 2.5% grade, 4 bursts of 30s at 7.3 —
   // in MPH since 2026-09-23, which is what makes the base a jog and moves the
@@ -139,43 +139,11 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
   });
   expect(runs, 'an isolated run must not hold half a bracket pair').toEqual([]);
 
-  // A jogged base gets the fact, not a verdict: the Zone 2 band and the solved
-  // grade are both answers from the WALKING equation, and 5.1 mph is 137 m/min.
-  const jog = await page.evaluate(() => ({
-    fact: document.querySelector('[data-cardio-base-fact]')?.textContent || '',
-    band: document.querySelector('[data-cardio-band]')?.textContent || null,
-  }));
-  expect(jog.fact, 'a jogged base must be priced, not scored against a walking band').toContain('9.7');
-  expect(jog.band, 'and it gets no band verdict at all').toBeNull();
-
-  // Drop the belt to a real walk and the solved incline comes back — this is
-  // the «most beneficial incline» he asked to have calculated. At 3.0 mph
-  // (80.5 m/min) the walk needs 5.5% to reach the band.
-  const walking = await page.evaluate(async () => {
-    const el = document.querySelector('[data-cardio-field="base_speed"]');
-    el.value = '3';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 400));
-    return {
-      pace: document.querySelector('[data-cardio-pace]')?.dataset.cardioPace,
-      ideal: document.querySelector('.cardio-ideal')?.textContent || '',
-      band: document.querySelector('[data-cardio-band]')?.dataset.cardioBand || null,
-    };
-  });
-  expect(walking.pace).toBe('walk');
-  expect(walking.ideal, 'the block must state the incline that reaches the zone').toContain('5.5');
-  // Three states, not two: at 2.5% this walk is UNDER the band.
-  expect(walking.band).toBe('under');
-
-  // Back to his own belt speed before the rest of the bout is dialled in.
-  await page.evaluate(async () => {
-    const el = document.querySelector('[data-cardio-field="base_speed"]');
-    el.value = '5.1';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 300));
-  });
+  // Round 7 §B: the block no longer prints a pace label, a MET note, a solved
+  // grade or a band verdict — the totals are one line (tests/cardio-round7).
+  const quiet = await page.evaluate(() => document.querySelectorAll(
+    '[data-cardio-base-fact], [data-cardio-band], [data-cardio-pace], .cardio-ideal').length);
+  expect(quiet, 'the simplified block carries no per-pace notes').toBe(0);
 
   // Break it. Twelve bursts is the stepper's ceiling, so the only way to overrun
   // a bout is the combination he could actually dial in: the short 10-minute
@@ -183,13 +151,14 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
   // inside ten, and the block has to say so rather than quietly clip the walk
   // to zero and keep printing a total.
   const overfilled = await page.evaluate(async () => {
-    const pick = (label) => {
-      const btn = [...document.querySelectorAll('.seg-btn')].find((b) => b.textContent.trim().startsWith(label));
+    // Scoped: «30» is both a duration and a burst length.
+    const pick = (group, label) => {
+      const btn = [...document.querySelectorAll(`[data-cardio-${group}] .seg-btn`)].find((b) => b.textContent.trim() === label);
       if (btn) btn.click();
     };
-    pick('10');
+    pick('duration', '10');
     await new Promise((r) => setTimeout(r, 250));
-    pick('60');
+    pick('burst-seconds', '60');
     await new Promise((r) => setTimeout(r, 250));
     for (let i = 0; i < 14; i += 1) {
       const plus = [...document.querySelectorAll('.cardio-step')].find((b) => b.textContent.trim() === '+');
@@ -204,13 +173,13 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
 
   // Back to a bout he could really do, then log it and close the session.
   await page.evaluate(async () => {
-    const pick = (label) => {
-      const btn = [...document.querySelectorAll('.seg-btn')].find((b) => b.textContent.trim().startsWith(label));
+    const pick = (group, label) => {
+      const btn = [...document.querySelectorAll(`[data-cardio-${group}] .seg-btn`)].find((b) => b.textContent.trim() === label);
       if (btn) btn.click();
     };
-    pick('15');
+    pick('duration', '15');
     await new Promise((r) => setTimeout(r, 250));
-    pick('30');
+    pick('burst-seconds', '30');
     await new Promise((r) => setTimeout(r, 250));
     for (let i = 0; i < 20; i += 1) {
       const value = Number(document.querySelector('.cardio-step-value')?.textContent || 0);
@@ -262,7 +231,7 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
   expect(end.count, 'the end screen ledger carries the three counts').toBe(3);
   // The same clock format the done panel uses: m:ss under an hour.
   expect(end.duration, `duration read «${end.duration}»`).toMatch(/^\d{1,2}:\d{2}(?::\d{2})?$/);
-  expect(end.cardio, 'the cool-down must be summarised where the session is summarised').not.toBeNull();
+  expect(end.cardio, 'the cardio must be summarised where the session is summarised').not.toBeNull();
   expect(end.cardio, 'and it must be the same score the block logged').toContain(logged.effort);
   expect(end.cardio).toContain('ميل');
 
@@ -273,7 +242,7 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
     const line = document.querySelector('#page-history [data-cardio-summary]');
     return line ? { text: line.textContent, muted: line.classList.contains('muted') } : null;
   });
-  expect(inHistory, 'the log must show the cool-down it archived').not.toBeNull();
+  expect(inHistory, 'the log must show the cardio it archived').not.toBeNull();
   expect(inHistory.text).toContain(logged.effort);
   expect(inHistory.muted, 'quietly — the row is about the lifting').toBe(true);
 
@@ -284,7 +253,7 @@ test('the cool-down computes, records, and gives him a number to beat', async ({
     const last = (p.history || [])[p.history.length - 1];
     return last?.cardio || null;
   });
-  expect(stored, 'the cool-down must be archived with the session').not.toBeNull();
+  expect(stored, 'the cardio must be archived with the session').not.toBeNull();
   expect(stored.completed_at, 'and it must be marked completed').toBeTruthy();
   expect(Number(stored.base_speed)).toBe(5.1);
   expect(Number(stored.incline)).toBe(2.5);

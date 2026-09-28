@@ -6,7 +6,7 @@ import {
   advanceSuperset,
   assessSessionSubstitution,
   detectPR,
-  equipmentStep,
+  equipmentStepSource,
   exerciseHistoryRows,
   exercisePrefs,
   getActiveProgramme,
@@ -664,6 +664,7 @@ function saveManualStep(prefs, value) {
 }
 function buildEquipmentStepControl(actualId, prefs, reopen) {
   const current = manualStepKg(prefs);
+  const resolved = equipmentStepSource(actualId);
   const custom = h('input', {
     type: 'number', inputmode: 'decimal', step: '0.05',
     min: String(STEP_MIN_KG), max: String(STEP_MAX_KG),
@@ -691,12 +692,17 @@ function buildEquipmentStepControl(actualId, prefs, reopen) {
       }, t('save')),
     ),
     h('div', { class: 'xs-sub', 'data-equipment-step-now': 'true' },
-      isLadderStep(equipmentStep(actualId))
+      isLadderStep(resolved.step)
         ? t('equipment_step_now_matrix')
-        : tf('equipment_step_now', { kg: fmtLoadKg(equipmentStep(actualId)) }),
-      current !== null && prefs.device
-        ? [' · ', tf('equipment_step_for_device', { device: prefs.device })]
-        : null,
+        : tf('equipment_step_now', { kg: fmtLoadKg(resolved.step) }),
+      // Round 7 §E.3: say where the number came from — his hand, his log, the
+      // machine (data.js / the kind he picked), or the fallback — so a step the
+      // app read off his history is never mistaken for one he set.
+      ' · ',
+      h('span', { 'data-equipment-step-source': resolved.source },
+        resolved.source === 'hand' && prefs.device
+          ? tf('equipment_step_for_device', { device: prefs.device })
+          : t(`equipment_step_from_${resolved.source}`)),
     ),
   );
 }

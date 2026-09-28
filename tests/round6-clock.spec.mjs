@@ -101,8 +101,9 @@ test('the clock is hidden with no rest running (even mid-session, on every page)
   expect(home.time).toMatch(/^\d{1,2}:\d{2}$/);
   // There is no second face to switch to.
   expect(home.face, 'no elapsed face exists any more').toBeNull();
-  expect(home.rect.w).toBe(56);
-  expect(home.rect.h).toBe(56);
+  // Round 7 §C: «the timer is small, I cannot notice it». 72px, not 56.
+  expect(home.rect.w).toBe(72);
+  expect(home.rect.h).toBe(72);
   const tabTop = await page.evaluate(() => Math.round(document.querySelector('.tab-bar').getBoundingClientRect().top));
   expect(home.rect.bottom, 'the clock must sit above the tab bar').toBeLessThanOrEqual(tabTop);
   // Default anchor is the start edge — physical right in RTL.
@@ -262,4 +263,57 @@ test('finishing hides the clock, even mid-rest', async ({ page }) => {
   await page.waitForTimeout(800);
   expect(await page.evaluate(() => window.location.hash)).toBe('#end');
   expect((await clockState(page)).hidden).toBe(true);
+});
+
+// Round 7 §C — Raed: «the timer is small, I cannot notice it; colour/design, a
+// bit bigger». He trains on ورق (cream); a cream disc with a 2px ring on cream
+// is invisible in a gym. So: a 72px ACCENT disc, 22px digits in accent-fg, and
+// the default anchor still clear of the runner's nav.
+test('the rest disc is 72px, filled with the accent, 22px digits, and the nav still hits itself', async ({ page }) => {
+  await boot(page);
+  await startSession(page);
+  await startRestByTicking(page);
+  const look = await page.evaluate(() => {
+    const disc = document.querySelector('#session-clock .sc-disc');
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--accent)';
+    document.body.appendChild(probe);
+    const accent = getComputedStyle(probe).color;
+    probe.style.color = 'var(--accent-fg)';
+    const accentFg = getComputedStyle(probe).color;
+    probe.remove();
+    const time = disc.querySelector('.rt-time');
+    const fill = disc.querySelector('.sc-fill');
+    const svg = disc.querySelector('.sc-ring');
+    const r = disc.getBoundingClientRect();
+    return {
+      w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom),
+      bg: getComputedStyle(disc).backgroundColor, accent, accentFg,
+      digits: getComputedStyle(time).color, font: parseFloat(getComputedStyle(time).fontSize),
+      fillStroke: getComputedStyle(fill).stroke, fillWidth: parseFloat(getComputedStyle(fill).strokeWidth),
+      viewBox: svg.getAttribute('viewBox'), r: fill.getAttribute('r'),
+    };
+  });
+  expect(look.w).toBe(72);
+  expect(look.h).toBe(72);
+  expect(look.bg, 'the disc is filled with the accent token').toBe(look.accent);
+  expect(look.digits, 'digits in accent-fg').toBe(look.accentFg);
+  expect(look.font, 'digits at least 22px').toBeGreaterThanOrEqual(22);
+  expect(look.fillStroke, 'the draining fill is accent-fg').toBe(look.accentFg);
+  expect(look.fillWidth).toBe(3);
+  expect(look.viewBox).toBe('0 0 72 72');
+  expect(look.r).toBe('34');
+  console.log(`rest disc at 390×844: ${look.w}×${look.h}, spans ${look.top}–${look.bottom}`);
+
+  // The runner's nav buttons must still hit themselves with the disc at its
+  // default anchor (68px above the tab bar).
+  const hits = await page.evaluate(() => [...document.querySelectorAll('#page-home .runner-nav button, #page-home [data-runner-nav] button, #page-home .ex-nav button')]
+    .filter((b) => b.offsetParent !== null)
+    .map((b) => {
+      const r = b.getBoundingClientRect();
+      const pts = [[r.left + 4, r.top + r.height / 2], [r.right - 4, r.top + r.height / 2], [r.left + r.width / 2, r.top + r.height / 2]];
+      return { text: b.textContent.trim(), ok: pts.every(([x, y]) => { const el = document.elementFromPoint(x, y); return el === b || b.contains(el); }) };
+    }));
+  expect(hits.length, 'the runner nav is on screen').toBeGreaterThan(0);
+  for (const hit of hits) expect(hit.ok, `nav «${hit.text}» must hit itself`).toBe(true);
 });

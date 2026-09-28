@@ -1,6 +1,13 @@
-/* The post-workout conditioning block, shown when the lifting is finished. */
+/* The post-workout cardio block, shown when the lifting is finished.
+ *
+ * Round 7 (ROUND7-FABLE-BRIEF §A/§B, Raed 2026-09-28): it is «الكارديو», not
+ * «التهدئة», and «it seems complicated; I wanted much simpler, uniform». Eleven
+ * controls became five: the suggestion IS the prefill — written into the fields
+ * once per session — so on a normal day he taps «سجّل» and nothing else. Burst
+ * length and burst speed sit in a collapsed <details>; the totals are one line.
+ * The maths in domain/cardio.js is untouched. */
 
-import { h, setUiText } from '../core/dom.js';
+import { h } from '../core/dom.js';
 import { arabicMinutes, t, tf } from '../core/i18n.js';
 import { render } from '../core/shell.js';
 import { saveLocal, settings, state } from '../core/store.js';
@@ -11,9 +18,10 @@ import {
   GRADE_STEP,
   bestBout,
   boutTotals,
+  convertCardioUnit,
   defaultCardio,
-  idealGradeFor,
   normalizeUnit,
+  prescriptionOf,
   suggestNext,
 } from '../domain/cardio.js';
 
@@ -72,14 +80,46 @@ function stepper(labelKey, value, opts, onChange) {
   );
 }
 
-// The suggestion is one sentence, and it says WHY. «ارفع الميل» with no reason
-// is an instruction; with the reason it is a coach.
-const REASON_KEY = {
-  incline: 'cardio_why_incline',
-  duration: 'cardio_why_duration',
-  bursts: 'cardio_why_bursts',
-  burst_speed: 'cardio_why_burst_speed',
-};
+/*
+ * Round 7 §B: the suggestion IS the prefill. The first time the block renders
+ * for a session, today's prescription — the last logged bout with its one
+ * suggested change (domain `suggestNext`), or that bout as it was when every
+ * lever is at its ceiling — is written INTO the fields, and
+ * `applied_suggestion` records that it happened so it happens once: his own
+ * edits are never overwritten by a re-render or a reload.
+ *
+ * Only a PRESCRIPTION is copied (`prescriptionOf`), never the old record: before
+ * Round 5 one «طبّقه» tap copied the previous bout's completed_at onto today's
+ * block and archived a cardio he never did (tests/cardio-round5.spec.mjs).
+ *
+ * `started_at` doubles as the "he has already logged this once" mark: a bout
+ * reopened with «تعديل» keeps it, so an archived bout from before this flag
+ * existed is never re-prefilled over what he actually did.
+ */
+function todayPlan(session, unit) {
+  const last = lastLoggedCardio((state.history || []).filter((one) => one !== session));
+  if (!last) return null;
+  const suggestion = suggestNext(last, unit);
+  // A copy in the unit he trains in now — the bout may have been logged in the other.
+  const plan = convertCardioUnit({ ...(suggestion ? suggestion.cardio : prescriptionOf(last)) }, unit);
+  return plan;
+}
+
+function prefillOnce(session, c, unit) {
+  if (c.applied_suggestion || c.completed_at || c.skipped || c.started_at) return;
+  const plan = todayPlan(session, unit);
+  if (plan) {
+    Object.assign(c, prescriptionOf(plan), {
+      unit, started_at: c.started_at || null, completed_at: null, skipped: false,
+    });
+  }
+  c.applied_suggestion = true;
+  saveLocal();
+}
+
+// The collapsed burst details stay open across the re-render a tap inside them
+// triggers. Render-only, per page load: it is a view state, not data.
+let moreOpen = false;
 
 export function renderCardioBlock(activeSession) {
   const unit = normalizeUnit(settings.speed_unit);
@@ -88,7 +128,9 @@ export function renderCardioBlock(activeSession) {
   c.unit = unit;
 
   const wrap = h('section', { class: 'cardio', 'data-cardio-block': 'true' });
-  const best = bestBout(state.history || []);
+  // The bar is every OTHER bout: on the end screen this session is already in
+  // history, and a bout must not be measured against itself.
+  const best = bestBout((state.history || []).filter((one) => one !== activeSession));
 
   // ---- Already logged: a closed row, not a live form ----------------------
   if (c.completed_at && !c.skipped) {
@@ -126,52 +168,32 @@ export function renderCardioBlock(activeSession) {
   }
 
   // ---- The live form -------------------------------------------------------
+  prefillOnce(activeSession, c, unit);
+
+  // Head: the name, and the bar to beat — muted, where every other screen puts
+  // its count.
   wrap.appendChild(h('div', { class: 'section-head' },
     h('span', { class: 'eyebrow' }, t('cardio_title')),
-    // The bar to beat sits in the head, where every other screen puts its count.
-    best ? h('span', { class: 'tiny muted' },
+    best ? h('span', { class: 'tiny muted', 'data-cardio-best': 'true' },
       t('cardio_best'), ' ', h('span', { class: 'num' }, String(best.met_minutes))) : null,
   ));
-  // «نقطة جهد» is a coined unit, and a coined unit that is never defined is a
-  // number he has to take on faith. Said once, in the intro, and never again on
-  // the screen: effort = intensity × minutes, which is literally MET·min.
-  wrap.appendChild(h('p', { class: 'tiny muted cardio-intro' },
-    t('cardio_sub'), ' ',
-    h('span', { 'data-cardio-effort-def': 'true' }, t('cardio_effort_def')),
-  ));
 
-  // Today's one change, computed from the last bout he actually did.
-  const suggestion = suggestNext(lastLoggedCardio(state.history || []) || c, unit);
-  if (suggestion) {
-    wrap.appendChild(h('div', { class: 'cardio-target', 'data-cardio-suggestion': 'true' },
-      h('div', { class: 'cardio-target-line' },
-        h('strong', {}, t('cardio_today')), ' ',
-        h('span', {}, tf(REASON_KEY[suggestion.reason] || 'cardio_why_incline', {
-          from: suggestion.from, to: suggestion.to,
-        })),
-      ),
-      h('button', {
-        class: 'btn tiny', 'data-cardio-apply': 'true',
-        // Belt and braces on top of the domain fix: the suggestion is a
-        // PRESCRIPTION, so applying it may change what he is about to do and
-        // must never touch what has happened. Before Round 5 this one tap
-        // copied the previous bout's completed_at onto today's block and
-        // archived a cool-down he never did.
-        onClick: () => {
-          Object.assign(c, suggestion.cardio, {
-            unit, started_at: c.started_at, completed_at: null, skipped: false,
-          });
-          saveLocal(); render();
-        },
-      }, t('cardio_apply')),
-    ));
+  // Today, in one muted line: the suggestion, already applied. Recomputed from
+  // history rather than stored, so it needs no field of its own; it says what
+  // was PROPOSED, and the fields below say what he has made of it.
+  const plan = todayPlan(activeSession, unit);
+  if (plan) {
+    wrap.appendChild(h('div', { class: 'tiny muted cardio-today', 'data-cardio-suggestion': 'true' },
+      tf('cardio_today_line', {
+        min: arabicMinutes(Number(plan.planned_minutes)),
+        grade: round1(plan.incline),
+      })));
   }
 
-  // 1. Duration — the same segmented control the warm-up uses, because it is
-  // the same kind of choice: one value out of a short fixed list.
-  wrap.appendChild(h('div', { class: 'cardio-step-block' },
-    h('strong', {}, t('cardio_duration')),
-    h('div', { class: 'seg full' }, DURATION_CHOICES.map((minutes) => h('button', {
+  // 1. Duration — label and the five choices on one line.
+  wrap.appendChild(h('div', { class: 'cardio-line' },
+    h('span', { class: 'cardio-field-label' }, t('cardio_duration')),
+    h('div', { class: 'seg full', 'data-cardio-duration': 'true' }, DURATION_CHOICES.map((minutes) => h('button', {
       type: 'button',
       class: 'seg-btn' + (Number(c.planned_minutes) === minutes ? ' active' : ''),
       'aria-pressed': Number(c.planned_minutes) === minutes ? 'true' : 'false',
@@ -179,59 +201,49 @@ export function renderCardioBlock(activeSession) {
     }, h('span', { class: 'num' }, String(minutes))))),
   ));
 
-  // 2. The base — walked or jogged. Raed 2026-09-23: the unit is mph, so his
-  // own 5.1 is 137 m/min and the section can no longer be called «المشي». It is
-  // «الأساس», and the pace label says which one it is today.
-  //
-  // Both the label and the note under the row are repainted with the totals
-  // rather than built once. Typing 3.0 over 5.1 does not just change a number:
-  // it moves the base from the running equation to the walking one, and a
-  // «الهرولة» label left standing over a walk is the block lying about which
-  // ruler it is using.
-  const paceLabel = h('span', { class: 'tiny muted cardio-pace' });
-  const baseNote = h('div', { class: 'tiny muted cardio-ideal' });
-  const walkRow = h('div', { class: 'cardio-row' });
-  walkRow.appendChild(numField('cardio_speed', c.base_speed,
-    { min: 1, max: 20, step: 0.1, field: 'base_speed', suffix: t(unit === 'mph' ? 'unit_mph' : 'unit_kmh') },
+  // 2. Speed · incline · bursts — the three things that change, on one row.
+  const speedUnit = t(unit === 'mph' ? 'unit_mph' : 'unit_kmh');
+  const mainRow = h('div', { class: 'cardio-row' });
+  mainRow.appendChild(numField('cardio_speed', c.base_speed,
+    { min: 1, max: 20, step: 0.1, field: 'base_speed', suffix: speedUnit },
     (v) => { c.base_speed = v === '' ? '' : Number(v); repaint(); }));
-  walkRow.appendChild(numField('cardio_incline', c.incline,
+  mainRow.appendChild(numField('cardio_incline', c.incline,
     { min: 0, max: GRADE_MAX, step: GRADE_STEP, field: 'incline', suffix: '%' },
     (v) => { c.incline = v === '' ? '' : Number(v); repaint(); }));
-  wrap.appendChild(h('div', { class: 'cardio-step-block' },
-    h('div', { class: 'cardio-block-head' },
-      h('strong', {}, t('cardio_base')),
-      paceLabel,
-    ),
-    walkRow,
-    baseNote,
-  ));
-
-  // 3. The bursts. He runs them inside the bout, so they eat into the walk.
-  const burstRow = h('div', { class: 'cardio-row' });
-  burstRow.appendChild(stepper('cardio_burst_count', Number(c.burst_count) || 0,
+  mainRow.appendChild(stepper('cardio_bursts', Number(c.burst_count) || 0,
     { min: 0, max: 12, step: 1 },
     (v) => { c.burst_count = v; saveLocal(); render(); }));
-  burstRow.appendChild(numField('cardio_burst_speed', c.burst_speed,
-    { min: 1, max: 25, step: 0.1, field: 'burst_speed', suffix: t(unit === 'mph' ? 'unit_mph' : 'unit_kmh') },
-    (v) => { c.burst_speed = v === '' ? '' : Number(v); repaint(); }));
-  wrap.appendChild(h('div', { class: 'cardio-step-block' },
-    h('strong', {}, t('cardio_bursts')),
-    h('div', { class: 'seg full' }, BURST_SECOND_CHOICES.map((secs) => h('button', {
-      type: 'button',
-      class: 'seg-btn' + (Number(c.burst_seconds) === secs ? ' active' : ''),
-      'aria-pressed': Number(c.burst_seconds) === secs ? 'true' : 'false',
-      onClick: () => { c.burst_seconds = secs; saveLocal(); render(); },
-    }, h('span', { class: 'num' }, String(secs)), ' ', t('cardio_seconds')))),
-    burstRow,
-  ));
+  wrap.appendChild(mainRow);
 
-  // ---- The running total, repainted in place while he types ---------------
+  // 3. Burst length and speed: the same every session, so folded away. The
+  // summary carries both values, so closed it still says what they are.
+  const moreValues = h('span', { class: 'cardio-more-values' });
+  const more = h('details', { class: 'cardio-more', 'data-cardio-more': 'true' },
+    h('summary', {}, h('span', {}, t('cardio_more')), moreValues),
+    h('div', { class: 'cardio-more-body' },
+      h('div', { class: 'seg full', 'data-cardio-burst-seconds': 'true' }, BURST_SECOND_CHOICES.map((secs) => h('button', {
+        type: 'button',
+        class: 'seg-btn' + (Number(c.burst_seconds) === secs ? ' active' : ''),
+        'aria-pressed': Number(c.burst_seconds) === secs ? 'true' : 'false',
+        'aria-label': `${t('cardio_burst_seconds')} ${secs} ${t('cardio_seconds')}`,
+        onClick: () => { c.burst_seconds = secs; saveLocal(); render(); },
+      }, h('span', { class: 'num' }, String(secs))))),
+      numField('cardio_burst_speed', c.burst_speed,
+        { min: 1, max: 25, step: 0.1, field: 'burst_speed', suffix: speedUnit },
+        (v) => { c.burst_speed = v === '' ? '' : Number(v); repaint(); }),
+    ),
+  );
+  if (moreOpen) more.open = true;
+  more.addEventListener('toggle', () => { moreOpen = more.open; });
+  wrap.appendChild(more);
+
+  // ---- The running total: ONE line, repainted in place while he types ------
   const totalsNode = h('div', { class: 'cardio-totals', 'data-cardio-totals': 'true' });
   // Built here rather than in the actions row below, because `repaint` has to be
   // able to disable it: logging a bout with a blank speed writes a record that
   // is priced at standing still.
   const logBtn = h('button', {
-    class: 'btn', 'data-cardio-log': 'true',
+    class: 'btn primary', 'data-cardio-log': 'true',
     onClick: () => {
       if (boutTotals(c).incomplete) return;
       c.completed_at = new Date().toISOString();
@@ -239,33 +251,19 @@ export function renderCardioBlock(activeSession) {
       if (!c.started_at) c.started_at = new Date().toISOString();
       saveLocal(); render();
     },
-  }, t('cardio_log'));
+  }, t('cardio_log_short'));
   function repaint() {
     const totals = boutTotals(c);
     totalsNode.innerHTML = '';
     logBtn.disabled = totals.incomplete;
-
-    // Which pace this base is, and the one true thing that can be said about it.
-    // A walk gets the solved grade — the «most beneficial incline» he asked to
-    // have calculated. A jog gets neither that nor a Zone 2 verdict, because
-    // both are answers from the WALKING equation; it gets what it costs.
-    const kind = totals.pace_kind;
-    paceLabel.setAttribute('data-cardio-pace', kind);
-    setUiText(paceLabel, t(kind === 'run' ? 'cardio_pace_jog' : 'cardio_pace_walk'));
-    // An empty speed has no pace. Calling it «المشي» because Number('') is 0 is
-    // the same lie the totals used to tell one line lower.
-    paceLabel.hidden = totals.missing.includes('base_speed');
-    const ideal = kind === 'walk' ? idealGradeFor(c.base_speed, unit) : null;
-    if (kind === 'run') {
-      baseNote.setAttribute('data-cardio-base-fact', 'true');
-      setUiText(baseNote, tf('cardio_base_jog_fact', { mets: totals.base_mets }));
-    } else {
-      baseNote.removeAttribute('data-cardio-base-fact');
-      // No note at all when the belt is already past the target flat: the honest
-      // answer there is "walk flat", not a grade the machine cannot produce.
-      setUiText(baseNote, ideal != null ? tf('cardio_ideal_grade', { grade: ideal, speed: c.base_speed }) : '');
-    }
-    baseNote.hidden = totals.incomplete || (kind === 'walk' && ideal == null);
+    // Built from nodes, not one interpolated string: «30 ث · 7.3» as a single
+    // text run let the bidi algorithm reorder it to «7.3 · ث 30» (seen in the
+    // 390×844 probe). Each number is its own isolated mono run.
+    moreValues.replaceChildren(
+      h('span', { class: 'num' }, String(c.burst_seconds === '' ? '–' : c.burst_seconds)), ' ',
+      t('cardio_seconds_short'), ' · ',
+      h('span', { class: 'num' }, String(c.burst_speed === '' ? '–' : c.burst_speed)),
+    );
     // A field he has cleared is not a zero. Printing a total here would be
     // arithmetic on a number he never gave — and he would then log it.
     if (totals.incomplete) {
@@ -278,66 +276,40 @@ export function renderCardioBlock(activeSession) {
         t('cardio_overfilled')));
       return;
     }
-    totalsNode.appendChild(h('div', { class: 'cardio-total-row' },
-      h('span', { class: 'cardio-total-main num' }, String(totals.met_minutes)),
-      h('span', { class: 'cardio-total-unit' }, t('cardio_effort')),
-    ));
-    totalsNode.appendChild(h('div', { class: 'tiny muted' },
+    // «153 نقطة جهد · 1.35 ميل». The accent only when he is actually over the
+    // bar, with «رقم جديد» — nothing else competes with it.
+    const beaten = Boolean(best && best.met_minutes && totals.met_minutes > best.met_minutes);
+    totalsNode.appendChild(h('div', {
+      class: 'cardio-total-line' + (beaten ? ' beaten' : ''),
+      'data-cardio-record': beaten ? 'true' : 'false',
+    },
+      h('span', { class: 'cardio-total-main num' }, String(totals.met_minutes)), ' ',
+      t('cardio_effort'),
+      ' · ',
       // Stored in km, shown in his unit — the belt says miles, so the block says
       // miles, and history keeps the km so an old bout stays readable.
       h('span', { class: 'num' }, String(totals.distance_display)), ' ',
       t(unit === 'mph' ? 'cardio_mile' : 'cardio_km'),
-      ' · ',
-      // «دقيقة مشي» is wrong for a base he is jogging; the word follows the pace.
-      h('span', { class: 'num' }, String(totals.base_minutes)), ' ',
-      t(totals.pace_kind === 'run' ? 'cardio_jog_min' : 'cardio_walk_min'),
-      totals.burst_minutes ? h('span', {}, ' · ',
-        h('span', { class: 'num' }, String(totals.burst_minutes)), ' ', t('cardio_burst_min')) : null,
+      beaten ? h('span', { class: 'cardio-record' }, ' · ', t('cardio_record')) : null,
     ));
-    // Against the bar. The accent only appears when he is actually over it.
-    if (best && best.met_minutes) {
-      const delta = totals.met_minutes - best.met_minutes;
-      totalsNode.appendChild(h('div', {
-        class: 'cardio-versus' + (delta > 0 ? ' beaten' : ''),
-        'data-cardio-versus': delta > 0 ? 'over' : 'under',
-      }, delta > 0
-        ? tf('cardio_beat_by', { n: delta })
-        : tf('cardio_below_best', { n: Math.abs(delta) })));
-    } else {
-      totalsNode.appendChild(h('div', { class: 'tiny muted' }, t('cardio_first')));
-    }
-    // Whether the WALK is in the band the block is aiming at. Separate from the
-    // total, because a bout can score well on bursts while the walk stays easy.
-    // Three states, not two: «under the zone» printed at a base that is OVER it
-    // sent him the wrong way. And no verdict at all for a jog — the band is a
-    // walking-equation idea, and the MET fact under the base row says the true
-    // thing instead.
-    const BAND_KEY = { under: 'cardio_below_band', in: 'cardio_in_band', over: 'cardio_above_band' };
-    if (totals.band_state) {
-      totalsNode.appendChild(h('div', {
-        class: 'tiny muted', 'data-cardio-band': totals.band_state,
-      }, tf(BAND_KEY[totals.band_state], { mets: totals.base_mets })));
-    }
   }
   repaint();
   wrap.appendChild(totalsNode);
 
-  // Deliberately NOT `primary full`. The primary action on this screen is
-  // finishing the session, and a second full-width accent button directly above
-  // it made two things look like the way forward. A compact pair also matches
-  // what Raed asks for everywhere: «أحب الأشياء صغيرة».
+  // Compact, not full width — his «أحب الأشياء صغيرة». «سجّل» is the one accent
+  // in the block; «تخطَّ» is text.
   wrap.appendChild(h('div', { class: 'cardio-actions' },
     logBtn,
     h('button', {
       class: 'btn ghost', 'data-cardio-skip': 'true',
       onClick: () => { c.skipped = true; c.completed_at = null; saveLocal(); render(); },
-    }, t('cardio_skip')),
+    }, t('cardio_skip_short')),
   ));
   return wrap;
 }
 
 /*
- * One line that says what the cool-down was: «التهدئة · 15 دقيقة · 1.35 ميل ·
+ * One line that says what the cardio was: «الكارديو · 15 دقيقة · 1.35 ميل ·
  * 153 نقطة جهد».
  *
  * He logged it and then never saw it again — the end screen counted sets, reps

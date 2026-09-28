@@ -613,8 +613,10 @@ phase5Exercise({ id: 'bicycle_crunch', name: 'Bicycle Crunch', primary: 'abs', p
 // now every movement shared one 2.5 kg default (domain/catalogue.js), so a pin
 // stack, a leg-press sled and a dumbbell rack all «moved» by the same amount.
 // Resolution order lives in `stepSpecFor` (domain/clamps.js): his ⚙️ «درجة الجهاز»
-// for this machine → for this movement → a coarser step learned from his log →
-// the equipment kind he picked → THIS table → 2.5.
+// for this machine → for this movement → the step his own log proves (Round 7
+// §E: ≥3 distinct loads, 80% on a Matrix label → the ladder, else the grid they
+// all sit on — `inferStepFromWeights`) → the equipment kind he picked → THIS
+// table → 2.5. So a row here is the answer only until his log says otherwise.
 const EQUIPMENT_STEP_CLASSES = Object.freeze({
   // Matrix selectorized stacks (Ultra / Versa / Aura / Go) are pound-native:
   // «WEIGHT PLATE INCREMENTS 4.5 kg / 10 lbs · INCREMENTAL WEIGHT SYSTEM 1.1,
