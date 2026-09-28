@@ -23,11 +23,12 @@ import {
   bodyweightSanityCeilingKg,
   ceilingAbove,
   clampWorkingWeight,
+  inferStepFromWeights,
   isLadderStep,
   nextStepDown,
   nextStepUp,
   roundDownToStep,
-  stepSpecFor,
+  stepSourceFor,
 } from '../domain/clamps.js';
 import {
   REPORTED_SIGNS,
@@ -415,8 +416,13 @@ function applyWarmupFeel(exState, exerciseId) {
   if (!working.length) return null;
   const step = equipmentStep(exerciseId);
   const lighter = last.effort === 'very_hard';
-  // «your first working set» for heavy; «your working sets» for light.
-  const targets = lighter ? working.slice(0, 1) : working;
+  // Every OPEN working set, both directions. Until Round 7 a heavy ramp eased
+  // only the first set («ease into your first working set», research/06) and
+  // the rest stayed at the load the ramp had just said was too much. Raed
+  // 2026-09-28: «warm-up easy/difficult downgrades the weight on only a single
+  // set, not the rest» — he wants all of them. Sets he already finished are
+  // his and are not in `working`.
+  const targets = working;
   let changed = 0;
   for (const set of targets) {
     const current = Number(set.weight);
@@ -846,48 +852,57 @@ const EQUIPMENT_STEP_KG = {
   plates: 5,
   bodyweight: 2.5,
 };
-function learnedStepFromHistory(exerciseId) {
-  const weights = new Set();
-  for (const session of state.history || []) {
-    const entry = findPerformedEntry(session, exerciseId);
-    for (const set of entry?.sets || []) {
-      if (set.is_warmup) continue;
-      const w = Number(set.weight);
-      if (Number.isFinite(w) && w > 0) weights.add(w);
-    }
+// Round 7 §E: the step his own log proves. His completed working sets for this
+// movement — on THIS machine when one is named (two leg presses are two sleds,
+// and another station's labels say nothing about this one) — over the last 12
+// sessions he did it, one load per SET so the 80% reads what he lifted. The
+// rule itself is `inferStepFromWeights` (domain/clamps.js).
+// This replaces Round 6's smallest-gap learner, which could only COARSEN a
+// numeric step and never touch a ladder: it read his face pull 14 / 23 / 32 as
+// a 9 kg machine and could not see that a «cable» logged 9 / 14 / 18 is a
+// Matrix stack. A device with nothing logged on it yet learns nothing — the
+// data.js class stands until three distinct loads say otherwise.
+const HISTORY_STEP_SESSIONS = 12;
+function historyStepFor(exerciseId, device) {
+  const loads = [];
+  let counted = 0;
+  const history = state.history || [];
+  for (let i = history.length - 1; i >= 0 && counted < HISTORY_STEP_SESSIONS; i -= 1) {
+    const entry = findPerformedEntry(history[i], exerciseId);
+    if (!entry) continue;
+    if (device && (entry.device || '') !== device) continue;
+    const sets = (entry.sets || []).filter(isCountableWorkingSet)
+      .map((set) => Number(set.weight)).filter((weight) => Number.isFinite(weight) && weight > 0);
+    if (!sets.length) continue;
+    counted += 1;
+    loads.push(...sets);
   }
-  const sorted = [...weights].sort((a, b) => a - b);
-  if (sorted.length < 2) return null;
-  let smallest = Infinity;
-  for (let i = 1; i < sorted.length; i++) {
-    const gap = Math.round((sorted[i] - sorted[i - 1]) * 100) / 100;
-    if (gap > 0 && gap < smallest) smallest = gap;
-  }
-  // A gap outside this range is noise — a typo, or a machine swap — not a step.
-  if (!Number.isFinite(smallest) || smallest < 0.5 || smallest > 10) return null;
-  return smallest;
+  return inferStepFromWeights(loads);
 }
-// How this movement's equipment moves: a number of kg, or the Matrix ladder
-// (MATRIX_LADDER, domain/clamps.js). Every suggested LOAD goes through this.
-export function equipmentStep(exerciseId) {
+// Where the ⚙️ sheet says the step came from: his hand, his log, the machine
+// (the kind he picked or data.js), or the research fallback.
+const STEP_SOURCE_LABEL = {
+  resolved: 'hand', device: 'hand', movement: 'hand',
+  history: 'history', kind: 'equipment', catalogue: 'equipment', default: 'default',
+};
+// How this movement's equipment moves — a number of kg, or the Matrix ladder
+// (MATRIX_LADDER, domain/clamps.js) — and where that came from. Precedence
+// (Round 7 §E.3): a step he set by hand > his history > data.js > default.
+export function equipmentStepSource(exerciseId) {
   const prefs = exercisePrefs(exerciseId);
   const exercise = getAllExercises().find((item) => item.id === exerciseId) || null;
-  const kindStep = EQUIPMENT_STEP_KG[prefs.equipment] || null;
-  // What the equipment is SAID to step by, before his log is consulted.
-  const declared = stepSpecFor({ kind_step_kg: kindStep, exercise });
-  // Learning may only make the step COARSER than what is declared — the rule
-  // domain/catalogue.js already states for the canonical learner. Smallest-gap
-  // learning reads one «.5» he typed (12 then 12.5 on a 2.5-spaced rack) as a
-  // 0.5 kg machine and proposes +0.5 forever. Now that ⚙️ «درجة الجهاز» exists,
-  // a genuinely finer machine is his to state, not the log's to guess. And it
-  // never overrides a ladder: the gaps on a Matrix stack (4, 5) are the ladder.
-  const learned = isLadderStep(declared) ? null : learnedStepFromHistory(exerciseId);
-  return stepSpecFor({
+  const device = String(prefs.device || '').trim();
+  const resolved = stepSourceFor({
     prefs,
-    learned_step_kg: learned && learned >= declared ? learned : null,
-    kind_step_kg: kindStep,
+    history_step: historyStepFor(exerciseId, device),
+    kind_step_kg: EQUIPMENT_STEP_KG[prefs.equipment] || null,
     exercise,
   });
+  return { step: resolved.step, source: STEP_SOURCE_LABEL[resolved.source] || 'default' };
+}
+// Every suggested LOAD goes through this.
+export function equipmentStep(exerciseId) {
+  return equipmentStepSource(exerciseId).step;
 }
 // The same, as the NUMBER the clamps (C3–C5) and the fat-finger guard need; a
 // ladder answers with its widest rung gap so «one step» never trims a rung.

@@ -101,39 +101,99 @@ function stepSpec(value) {
   return isLadderStep(value) ? MATRIX_LADDER : positiveKg(value);
 }
 
+// ---- Reading the equipment off his own log (Round 7 §E) --------------------
+// Raed 2026-09-28: «for Matrix, based on the exercises I'm doing and the
+// history, you should know which is which». Round 6 let his log only COARSEN a
+// numeric step (smallest gap between loads) and never touch a ladder, so his
+// face pull — a «cable» in data.js, logged 9 / 14 on a Matrix stack — stayed
+// on +2.5, and a gap-learner read his 14 / 23 / 32 as a 9 kg machine. Now the
+// log is evidence, judged by what the loads ARE, not by how far apart:
+//   · fewer than 3 distinct loads say nothing (one plateau is not a grid);
+//   · ≥ 80% of his sets within 1 kg of a printed Matrix label → the ladder
+//     (80% of SETS, so one typo — 16 among 9 / 14 / 18 — does not undo it);
+//   · else every distinct load a multiple of 5 → 5, of 2.5 → 2.5, of 1.25 →
+//     1.25 — the coarsest grid that holds all of them;
+//   · else nothing: the data.js class stands.
+// One refinement to the brief's grid rule, from its own example: 20 / 40 / 60
+// is «ambiguous → data.js». Every one is a multiple of 5 — and of 10 and 20 —
+// so it cannot tell a 5 kg sled from round numbers typed on any machine. The
+// 5 kg answer therefore needs at least one load that is NOT a multiple of 10
+// (20 / 25 / 30 is a 5 kg rack; 20 / 40 / 60 is not evidence). The finer grids
+// need no such check: a load off the 5 grid already rules the coarser one out.
+export const HISTORY_STEP_MIN_DISTINCT = 3;
+export const HISTORY_RUNG_SHARE = 0.8;
+const HISTORY_GRIDS_KG = [5, 2.5, 1.25];
+
+function nearStackLabel(weight) {
+  const n = Math.round(weight / MATRIX_KG_PER_PLATE);
+  for (let k = Math.max(1, n - 1); k <= Math.min(MATRIX_RUNGS, n + 1); k += 1) {
+    if (Math.abs(weight - stackLabelKg(k)) <= RUNG_TOLERANCE_KG) return true;
+  }
+  return false;
+}
+function onGrid(weight, grid) {
+  const units = weight / grid;
+  return Math.abs(units - Math.round(units)) < 1e-6;
+}
+
+/**
+ * The step his logged working loads prove, or null when they prove nothing.
+ * `weights` is every completed working-set load (one entry per SET, repeats
+ * kept — the 80% is a share of what he lifted).
+ */
+export function inferStepFromWeights(weights = []) {
+  const loads = weights.map(Number).filter((weight) => Number.isFinite(weight) && weight > 0);
+  const distinct = [...new Set(loads.map((weight) => Math.round(weight * 1000) / 1000))];
+  if (distinct.length < HISTORY_STEP_MIN_DISTINCT) return null;
+  const onLabel = loads.filter(nearStackLabel).length;
+  if (onLabel / loads.length >= HISTORY_RUNG_SHARE) return MATRIX_LADDER;
+  for (const grid of HISTORY_GRIDS_KG) {
+    if (!distinct.every((weight) => onGrid(weight, grid))) continue;
+    if (grid === 5 && distinct.every((weight) => onGrid(weight, 10))) return null;
+    return grid;
+  }
+  return null;
+}
+
 /**
  * How THIS equipment moves, first answer wins — a number of kg, or the Matrix
- * ladder:
+ * ladder — and WHERE that answer came from (the ⚙️ sheet says it):
  *   1. `equipment_step_kg` — a caller that already resolved it (the pipeline
- *      below is handed `core/engine.js equipmentStepKg`'s answer);
+ *      below is handed `core/engine.js equipmentStepKg`'s answer) → 'resolved';
  *   2. `prefs.steps[prefs.device]` — what he set in ⚙️ «درجة الجهاز» for the
- *      machine he is standing at (two leg presses are two sleds);
- *   3. `prefs.step_kg` — the same, for the movement when no machine is named;
- *   4. `learned_step_kg` — a step read off his own log, only ever COARSER than
- *      the static one and never over a ladder (the caller enforces both);
- *   5. `kind_step_kg` — the equipment kind he picked in the sheet;
- *   6. `exercise.equipment_ladder` / `exercise.equipment_step_kg` — data.js;
- *   7. 2.5 kg, research/06 §5.2's fallback «when the increment is unknown».
+ *      machine he is standing at (two leg presses are two sleds) → 'device';
+ *   3. `prefs.step_kg` — the same, for the movement when no machine is named
+ *      → 'movement';
+ *   4. `history_step` — `inferStepFromWeights` over his own log, a number OR
+ *      the ladder (Round 7 §E: his hand > his history > data.js) → 'history';
+ *   5. `kind_step_kg` — the equipment kind he picked in the sheet → 'kind';
+ *   6. `exercise.equipment_ladder` / `exercise.equipment_step_kg` — data.js
+ *      → 'catalogue';
+ *   7. 2.5 kg, research/06 §5.2's fallback «when the increment is unknown»
+ *      → 'default'.
  * Before Round 6 only 1, 6 and 7 existed and data.js carried no step at all, so
  * every movement resolved to 2.5 whatever it was.
  */
-export function stepSpecFor(context = {}) {
+export function stepSourceFor(context = {}) {
   const prefs = context.prefs || null;
   const device = String(prefs?.device || '').trim();
   const candidates = [
-    context.equipment_step_kg,
-    device ? prefs?.steps?.[device] : null,
-    prefs?.step_kg,
-    context.learned_step_kg,
-    context.kind_step_kg,
-    context.exercise?.equipment_ladder,
-    context.exercise?.equipment_step_kg,
+    [context.equipment_step_kg, 'resolved'],
+    [device ? prefs?.steps?.[device] : null, 'device'],
+    [prefs?.step_kg, 'movement'],
+    [context.history_step, 'history'],
+    [context.kind_step_kg, 'kind'],
+    [context.exercise?.equipment_ladder, 'catalogue'],
+    [context.exercise?.equipment_step_kg, 'catalogue'],
   ];
-  for (const candidate of candidates) {
+  for (const [candidate, source] of candidates) {
     const step = stepSpec(candidate);
-    if (step) return step;
+    if (step) return { step, source };
   }
-  return DEFAULT_EQUIPMENT_STEP_KG;
+  return { step: DEFAULT_EQUIPMENT_STEP_KG, source: 'default' };
+}
+export function stepSpecFor(context = {}) {
+  return stepSourceFor(context).step;
 }
 
 /** The same resolution, as the number the clamps and percentages need. */

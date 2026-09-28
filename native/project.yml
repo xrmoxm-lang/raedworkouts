@@ -13,7 +13,13 @@ settings:
     # multitasking check ("All interface orientations must be supported").
     TARGETED_DEVICE_FAMILY: "1"
     MARKETING_VERSION: 1.0.0
-    CURRENT_PROJECT_VERSION: 1
+    # Bump on EVERY build that goes to the phone (round 7 §F). Every install
+    # until 2026-09-28 shipped CFBundleVersion 1 for both the app and the widget
+    # extension, so an in-place reinstall looked to iOS like the same extension
+    # build, and the system may keep serving the extension it had cached rather
+    # than the one just installed. The Info.plists read this value; it is no
+    # longer hard-coded in either.
+    CURRENT_PROJECT_VERSION: 2
 targets:
   RaedworkoutsGo:
     type: application
@@ -60,6 +66,7 @@ targets:
         # demands every orientation.
         UIRequiresFullScreen: true
         NSSupportsLiveActivities: true
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:
           - CFBundleURLName: com.raedmohammed.raedworkouts
             CFBundleURLSchemes:
@@ -113,6 +120,7 @@ targets:
       path: Widget/Info.plist
       properties:
         CFBundleDisplayName: Raedworkouts
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 schemes:

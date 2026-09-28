@@ -520,30 +520,35 @@ label > input, label > select { margin-top: 6px; }
 
 /* ===== The floating session clock =====
    Raed 2026-09-25: «أحب الديزاين floating وأقدر أحركه يمين، يسار … زي الدائرة
-   صغيرة … أنظف وأرتب». One 56px circle, on every screen, ONLY while a rest runs
+   صغيرة … أنظف وأرتب». One circle, on every screen, ONLY while a rest runs
    — after the preview: «أبغاه يختفي إذا ما فيه عداد، مو يطلع وقت الزمن». So
-   there is one face: the ring is the draining bar (accent, from --p) and the
-   digits are the countdown. It snaps to an edge and remembers where he left it
-   (ui/clock.js). Round 5's dock and in-flow row are retired with it. */
+   there is one face: the ring is the draining bar (from --p) and the digits are
+   the countdown. It snaps to an edge and remembers where he left it
+   (ui/clock.js). Round 5's dock and in-flow row are retired with it.
+   Round 7 §C, Raed 2026-09-28: «the timer is small, I cannot notice it». He
+   trains on ورق (cream), where a 56px cream disc with a 2px ring disappeared.
+   Now 72px and FILLED with the accent — the one live thing on screen gets the
+   one accent (DESIGN-SYSTEM §1) — digits and ring in accent-fg. Dark skins use
+   the same tokens: the accent is already tuned per skin. */
 .session-clock {
-  position: fixed; z-index: var(--z-rest); width: 56px; height: 56px;
+  position: fixed; z-index: var(--z-rest); width: 72px; height: 72px;
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
 .session-clock[hidden] { display: none; }
 .session-clock .sc-disc {
-  position: relative; width: 56px; height: 56px; border-radius: 50%; padding: 0; border: 0;
-  background: var(--bg-card); color: var(--text);
-  box-shadow: var(--shadow-md); cursor: grab; display: grid; place-items: center;
+  position: relative; width: 72px; height: 72px; border-radius: 50%; padding: 0; border: 0;
+  background: var(--accent); color: var(--accent-fg);
+  box-shadow: var(--shadow-lg); cursor: grab; display: grid; place-items: center;
   transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 .session-clock.dragging .sc-disc { cursor: grabbing; transform: scale(1.06); box-shadow: var(--shadow-lg); transition: none; }
-.session-clock .sc-ring { position: absolute; inset: 0; width: 56px; height: 56px; transform: rotate(-90deg); pointer-events: none; }
-.session-clock .sc-ring circle { fill: none; stroke-width: 2; }
-.session-clock .sc-track { stroke: color-mix(in srgb, var(--accent) 22%, transparent); }
-/* r=26 → circumference 163.4; the fill drains as --p goes 1 → 0. */
-.session-clock .sc-fill { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 163.4; stroke-dashoffset: calc(163.4 * (1 - var(--p, 0))); transition: stroke-dashoffset 200ms linear; }
-.session-clock .rt-time { font-family: var(--font-mono); font-weight: 600; font-size: 16px; line-height: 1; direction: ltr; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; color: var(--accent-label); }
-/* The pill: beside the circle, on the side that has room. */
+.session-clock .sc-ring { position: absolute; inset: 0; width: 72px; height: 72px; transform: rotate(-90deg); pointer-events: none; }
+.session-clock .sc-ring circle { fill: none; stroke-width: 3; }
+.session-clock .sc-track { stroke: color-mix(in srgb, var(--accent-fg) 28%, transparent); }
+/* r=34 → circumference 213.6; the fill drains as --p goes 1 → 0. */
+.session-clock .sc-fill { stroke: var(--accent-fg); stroke-linecap: round; stroke-dasharray: 213.6; stroke-dashoffset: calc(213.6 * (1 - var(--p, 0))); transition: stroke-dashoffset 200ms linear; }
+.session-clock .rt-time { font-family: var(--font-mono); font-weight: 600; font-size: 22px; line-height: 1; direction: ltr; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--accent-fg); }
+/* The pill: beside the circle (72 + 8), on the side that has room. Unchanged. */
 .session-clock .sc-pill {
   position: absolute; top: 50%; transform: translateY(-50%);
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
@@ -551,8 +556,8 @@ label > input, label > select { margin-top: 6px; }
   box-shadow: var(--shadow-md); font-size: 13.5px;
 }
 .session-clock .sc-pill[hidden] { display: none; }
-.session-clock[data-side="left"] .sc-pill { left: 64px; }
-.session-clock[data-side="right"] .sc-pill { right: 64px; }
+.session-clock[data-side="left"] .sc-pill { left: 80px; }
+.session-clock[data-side="right"] .sc-pill { right: 80px; }
 .session-clock .sc-pill-label { font-weight: 600; }
 .session-clock .sc-pill .btn.tiny { min-height: 32px; padding: 0 10px; }
 @media (prefers-reduced-motion: reduce) { .session-clock .sc-fill { transition: none; } }
@@ -1056,31 +1061,28 @@ details.advanced-settings[open] > summary::after { transform: rotate(-135deg); }
    being a footnote pinned to the bottom of a form. */
 .coach-scope.alone { margin-top: var(--space-6); }
 
-/* ---- Post-workout conditioning (Raed 2026-09-22) -------------------------
+/* ---- Post-workout cardio (Raed 2026-09-22; simplified round 7) -----------
    Sits under the finished-session summary, which is centred; this is a form,
    so it goes back to reading from the start edge. No card, no fill around the
    whole block — a hairline above it is the whole container, exactly as the
-   ledger rows do it. */
-.cardio { text-align: start; margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--hair); }
-.cardio-intro { margin: 0 0 var(--space-4); }
-.cardio-step-block { margin-bottom: var(--space-5); display: flex; flex-direction: column; gap: 8px; }
-.cardio-step-block > strong { font-size: 16px; font-weight: 600; }
+   ledger rows do it. Round 7 §B («it seems complicated; I wanted much simpler,
+   uniform»): one line per thing, the burst details folded away, one totals
+   line, a compact button pair. Measured at 390×844 with the details closed:
+   under 520px (tests/cardio-round7.spec.mjs). */
+.cardio { text-align: start; margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: var(--space-3); }
+.cardio > .section-head { margin: 0; }
+.cardio-today { margin-top: -4px; }
 
-/* The one accent in the block: today's single change. Same treatment as the
-   superset note — a soft accent field, not a coloured rail — because the rail
-   is spoken for: it marks the live set, and two meanings for one mark is one
-   too many. */
-.cardio-target {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin-bottom: var(--space-5); padding: 10px 12px; border-radius: var(--radius-sm);
-  background: var(--accent-soft); color: var(--accent-label); font-size: 13.5px;
-}
-.cardio-target-line { flex: 1 1 200px; line-height: 1.5; }
-.cardio-target .btn { margin-inline-start: auto; }
+/* Label + control on one line: the duration's five choices. */
+.cardio-line { display: flex; align-items: center; gap: 10px; }
+.cardio-line > .cardio-field-label { flex: 0 0 auto; }
+.cardio-line > .seg { flex: 1 1 auto; }
+.cardio .seg-btn { padding: 0 6px; }
 
-.cardio-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.cardio-field { flex: 1 1 140px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.cardio-field-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+/* Speed · incline · bursts on one row, the stepper at its natural width. */
+.cardio-row { display: flex; gap: 8px; align-items: flex-end; }
+.cardio-field { flex: 1 1 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cardio-field-label { font-size: 12px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
 .cardio-field-input { display: flex; align-items: center; gap: 6px; }
 /* Numbers he types use the same mono face and the same 48px floor as the set
    ledger, so a speed and a working weight are entered the same way. */
@@ -1089,9 +1091,10 @@ details.advanced-settings[open] > summary::after { transform: rotate(-135deg); }
   font-family: var(--font-mono); font-size: 20px; font-weight: 500;
   text-align: center; padding: 0 6px; direction: ltr;
 }
-.cardio-suffix { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+.cardio-suffix { font-size: 12px; color: var(--text-muted); white-space: nowrap; font-weight: 500; }
+.cardio-row .cardio-field:has(.cardio-stepper) { flex: 0 0 auto; }
 
-.cardio-stepper { display: flex; align-items: center; gap: 4px; }
+.cardio-stepper { display: flex; align-items: center; gap: 2px; }
 .cardio-step {
   width: 48px; height: 48px; flex: 0 0 48px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -1099,36 +1102,47 @@ details.advanced-settings[open] > summary::after { transform: rotate(-135deg); }
 }
 .cardio-step[disabled] { opacity: .4; }
 .cardio-step-value {
-  flex: 1 1 auto; text-align: center; font-family: var(--font-mono);
+  min-width: 28px; text-align: center; font-family: var(--font-mono);
   font-size: 20px; font-weight: 600; direction: ltr;
 }
 
-/* The running total. The big number is the thing he is trying to beat, so it
-   gets the ledger's stat size and nothing else competes with it. */
-.cardio-totals { padding-top: var(--space-4); border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 4px; }
-.cardio-total-row { display: flex; align-items: baseline; gap: 8px; }
-.cardio-total-main { font-family: var(--font-mono); font-size: 30px; font-weight: 600; line-height: 1; }
-.cardio-total-unit { font-size: 13px; color: var(--text-muted); }
-.cardio-versus { font-size: 13px; font-weight: 600; color: var(--text-muted); }
-/* Accent only when he is actually over the bar — otherwise it is a number, not
-   an achievement. */
-.cardio-versus.beaten { color: var(--accent-label); }
+/* The burst details: folded, the two current values in the summary. */
+.cardio-more > summary {
+  cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 600; color: var(--text-muted);
+}
+.cardio-more > summary { list-style: none; }
+.cardio-more > summary::-webkit-details-marker { display: none; }
+/* `display: flex` drops the UA disclosure triangle, so the ▸ is drawn: it
+   points along the reading direction closed and down open. */
+.cardio-more > summary::before {
+  content: ''; width: 0; height: 0; flex: 0 0 auto;
+  border-block: 4.5px solid transparent; border-inline-start: 6px solid currentColor;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.cardio-more[open] > summary::before { transform: rotate(90deg); }
+[dir="rtl"] .cardio-more[open] > summary::before { transform: rotate(-90deg); }
+.cardio-more-values { font-weight: 500; }
+.cardio-more-values .num { font-family: var(--font-mono); }
+.cardio-more-body { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+
+/* The running total: one line. The number is the thing he is trying to beat,
+   so it carries the weight; the accent only when he is actually over the bar. */
+.cardio-totals { padding-top: var(--space-3); border-top: 1px solid var(--hair); }
+.cardio-total-line { font-size: 14px; color: var(--text-muted); }
+.cardio-total-line .num { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
+.cardio-total-main { font-size: 18px; }
+.cardio-total-line.beaten, .cardio-total-line.beaten .num { color: var(--accent-label); }
+.cardio-record { font-weight: 600; }
 .cardio-warn { font-size: 13px; font-weight: 600; color: var(--warning); }
-.cardio-ideal { line-height: 1.5; }
 
-/* The base section's head: «الأساس» with the pace it is being run at today,
-   quiet and on the same baseline — the label answers "which equation is this",
-   so it belongs beside the title, not in the totals. */
-.cardio-block-head { display: flex; align-items: baseline; gap: 8px; }
-.cardio-pace { font-weight: 500; }
-
-.cardio-actions { display: flex; gap: 8px; margin-top: var(--space-4); }
-.cardio-actions .btn { flex: 1 1 auto; min-height: 44px; }
+.cardio-actions { display: flex; gap: 8px; align-items: center; }
+.cardio-actions .btn { flex: 0 0 auto; min-height: 48px; padding: 0 22px; }
 /* A disabled log button is the block refusing to record a bout priced from a
    box he emptied. It has to LOOK refused, not merely be inert. */
 .cardio-actions .btn[disabled] { opacity: .45; }
-/* The cool-down's one line on the end screen and in the log. Accent only when
-   it beat every bout before it, the same rule .cardio-versus follows. */
+/* The cardio's one line on the end screen and in the log. Accent only when
+   it beat every bout before it, the same rule the block's totals line follows. */
 .cardio-summary-line { margin: 6px 0 0; line-height: 1.5; }
 .cardio-summary-line .num { font-family: var(--font-mono); }
 .cardio-summary-line.beaten { color: var(--accent-label); font-weight: 600; }

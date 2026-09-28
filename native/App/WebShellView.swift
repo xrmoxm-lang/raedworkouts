@@ -23,6 +23,8 @@ struct WebShellView: View {
                     Text("الصفحة: \(StatusLog.pageStatus())")
                     Text("خطأ الصفحة: \(StatusLog.jsErrorStatus())")
                     Text("الجلسة: \(StatusLog.activityStatus())")
+                    Text("الجزيرة: \(StatusLog.islandStatus())")
+                    Text("النظام: \(StatusLog.activityKitStatus())")
                     Text("الملخّص: \(StatusLog.summaryStatus())")
                     Text("الوسيط: \(StatusLog.proxyStatus())")
                     Text("الودجت: \(StatusLog.widgetStatus())")

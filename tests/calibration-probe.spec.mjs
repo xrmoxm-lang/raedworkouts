@@ -209,7 +209,10 @@ async function rateLastRamp(page, faceIndex) {
   return { id, ramps };
 }
 
-test('a heavy warm-up eases the FIRST working set, and only that one', async ({ page }) => {
+// Round 7 §D, Raed 2026-09-28: «warm-up easy/difficult downgrades the weight on
+// only a single set, not the rest». Until then a heavy ramp eased working set 1
+// only (research/06's «ease into your first working set»); now every open one.
+test('a heavy warm-up eases EVERY working set', async ({ page }) => {
   await intoSessionWithHistory(page);
   const before = await activeSession(page);
   const id = Object.keys(before.exercises)[0];
@@ -221,11 +224,9 @@ test('a heavy warm-up eases the FIRST working set, and only that one', async ({ 
   const after = await activeSession(page);
   const state = after.exercises[id];
   const workingAfter = state.sets.filter((s) => !s.is_warmup).map((s) => Number(s.weight));
-  expect(workingAfter[0], 'the first working set eases').toBeLessThan(workingBefore[0]);
   expect(state.warmup_feel_applied).toBe('very_hard');
-  // «ease into your FIRST working set» — the rest are untouched.
-  for (let i = 1; i < workingBefore.length; i += 1) {
-    expect(workingAfter[i], `working set ${i + 1} must be untouched`).toBe(workingBefore[i]);
+  for (let i = 0; i < workingBefore.length; i += 1) {
+    expect(workingAfter[i], `working set ${i + 1} must ease`).toBeLessThan(workingBefore[i]);
   }
 });
 

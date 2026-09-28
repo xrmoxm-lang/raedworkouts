@@ -25,6 +25,15 @@ enum RW {
     // The gym launcher gets its own line for the same reason: «it just did
     // nothing» is the one report we cannot diagnose without one.
     static let gymStatusKey = "rw.status.gym"
+    // Round 7 §F: «the Island stopped» had three indistinguishable causes from
+    // the Mac — the page never posted, ActivityKit refused or dropped the
+    // activity, or the widget extension never drew it. These two lines split
+    // them. `island` is written by the EXTENSION when it renders a face, so an
+    // `activity` line saying «started» with no `island` line means iOS accepted
+    // the activity and the extension never ran. `activitykit` is the system's
+    // own answer, re-read on every foreground: is it allowed, and how many live.
+    static let islandStatusKey = "rw.status.island"
+    static let activityKitStatusKey = "rw.status.activitykit"
     // The gym app's real URL scheme, learned from iOS rather than guessed.
     static let gymSchemeKey = "rw.gym.scheme"
     // IN2 Fitness declares no URL scheme (19 candidates probed on the device,
@@ -68,10 +77,14 @@ enum StatusLog {
     static func proxy(_ value: String) { write(value, RW.proxyStatusKey) }
     static func page(_ value: String) { write(value, RW.pageStatusKey) }
     static func gym(_ value: String) { write(value, RW.gymStatusKey) }
+    static func island(_ value: String) { write(value, RW.islandStatusKey) }
+    static func activityKit(_ value: String) { write(value, RW.activityKitStatusKey) }
     static func jsError(_ value: String) { write(value, RW.jsErrorStatusKey) }
 
     static func activityStatus() -> String { read(RW.activityStatusKey) }
     static func gymStatus() -> String { read(RW.gymStatusKey) }
+    static func islandStatus() -> String { read(RW.islandStatusKey) }
+    static func activityKitStatus() -> String { read(RW.activityKitStatusKey) }
     static func summaryStatus() -> String { read(RW.summaryStatusKey) }
     static func widgetStatus() -> String { read(RW.widgetStatusKey) }
     static func proxyStatus() -> String { read(RW.proxyStatusKey) }
@@ -81,6 +94,14 @@ enum StatusLog {
     static func describe(_ error: Error) -> String {
         let ns = error as NSError
         return "\(ns.domain.replacingOccurrences(of: "Error", with: "")):\(ns.code)"
+    }
+
+    /// ActivityKit's errors are Swift enums (`ActivityAuthorizationError`); their
+    /// bridged NSError code is an ordinal nobody can read back from a plist. The
+    /// case name — `.denied`, `.globalMaximumExceeded`, `.unsupportedTarget` —
+    /// is the answer, so it rides along, capped so one line stays one line.
+    static func describeVerbose(_ error: Error) -> String {
+        "\(describe(error)) \(String(describing: error).prefix(120))"
     }
 
     private static func write(_ value: String, _ key: String) {

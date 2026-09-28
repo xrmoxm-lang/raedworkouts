@@ -88,8 +88,8 @@ export const LOCALE = Object.freeze({
     'Warm-up felt light — working sets nudged up to {kg} kg.',
     'الإحماء طلع سهل — رفعت مجموعات العمل إلى {kg} كغ.'),
   warmup_felt_heavy: pair(
-    'Warm-up felt heavy — easing into the first set at {kg} kg. Hit the target and it counts.',
-    'الإحماء طلع ثقيل — نبدأ أول مجموعة بـ {kg} كغ. لو وصلت الهدف فهي محسوبة.'),
+    'Warm-up felt heavy — working sets eased to {kg} kg.',
+    'الإحماء طلع ثقيل — نزّلت مجموعات العمل إلى {kg} كغ'),
   superset_next: pair('Straight into {name} — no rest.', 'على طول إلى {name} — بلا راحة.'),
   effort_label: pair('Effort', 'الجهد'),
   why_machine_reps: pair(
@@ -595,6 +595,11 @@ export const LOCALE = Object.freeze({
   // His Matrix stacks print n × 4.5359 kg rounded (5 · 9 · 14 · 18 · 23 …).
   equipment_step_matrix: pair('Matrix ladder', 'سلّم ماتريكس'),
   equipment_step_now_matrix: pair('Each increase: the next label on the Matrix stack', 'كل زيادة: الرقم التالي على سلّم ماتريكس'),
+  // Round 7 §E — where the step on the ⚙️ line came from (hand > log > machine > default).
+  equipment_step_from_hand: pair('Set by you', 'ضبطتها أنت'),
+  equipment_step_from_history: pair('From your log', 'من سجلّك'),
+  equipment_step_from_equipment: pair('From the machine', 'من الجهاز'),
+  equipment_step_from_default: pair('Default', 'الافتراضي'),
   machine_weight_only_short: pair('Machine weight only — no number to enter', 'وزن الجهاز فقط — ما فيه رقم أدخله'),
   add_set: pair('Add a set', 'أضف مجموعة'),
   log_col_date: pair('Date', 'التاريخ'),
@@ -726,58 +731,39 @@ export const LOCALE = Object.freeze({
   // ---- Post-workout conditioning (Raed 2026-09-22) -----------------------
   // «الجهد» is MET-minutes: intensity x time. It is the only total that prices
   // the incline, which is why it and not distance is the number he beats.
-  cardio_title: pair('Cool-down cardio', 'التهدئة'),
-  cardio_sub: pair('Optional, and recorded — so the next one has something to beat.', 'اختيارية، وتُسجَّل — حتى يكون للمرة القادمة رقم تتجاوزه.'),
+  // Raed 2026-09-28 (ROUND7-FABLE-BRIEF §A): «post-workout is named cool-down,
+  // which is not — it should be cardio». It is «الكارديو» everywhere; the word
+  // «تهدئة» is gone from the app's copy. Masculine agreement follows the noun.
+  cardio_title: pair('Cardio', 'الكارديو'),
   cardio_duration: pair('Duration', 'المدة'),
-  // Raed 2026-09-23: the belt reads mph, so his 5.1 base is 137 m/min — a jog,
-  // not a walk. The section is «الأساس» and the pace label says which it is; the
-  // old «المشي» title is gone rather than left to mislabel a jog.
-  cardio_base: pair('The base', 'الأساس'),
-  cardio_pace_walk: pair('walking', 'المشي'),
-  cardio_pace_jog: pair('jogging', 'الهرولة'),
   cardio_speed: pair('Speed', 'السرعة'),
   cardio_incline: pair('Incline', 'الميل'),
   cardio_bursts: pair('Bursts', 'الانطلاقات'),
-  cardio_burst_count: pair('How many', 'العدد'),
   cardio_burst_speed: pair('Burst speed', 'سرعة الانطلاقة'),
+  cardio_burst_seconds: pair('Burst length', 'مدة الانطلاقة'),
   cardio_seconds: pair('sec', 'ثانية'),
   cardio_effort: pair('effort', 'نقطة جهد'),
-  // Said ONCE, in the intro. «نقطة جهد» is a unit this app coined, and a coined
-  // unit nobody defines is a number he has to take on trust. Written MET-min and
-  // not MET·min on purpose: the bidi isolator's run class has no '·', so the
-  // middle dot splits the run and strands the '(' in the Arabic node, where the
-  // bidi algorithm mirrors it into a second ')' — Raed's doubled-paren bug.
-  cardio_effort_def: pair('Effort = intensity × minutes (MET-min).', 'الجهد = الشدة × الدقائق (MET-min).'),
   cardio_km: pair('km', 'كم'),
   cardio_mile: pair('mi', 'ميل'),
-  cardio_walk_min: pair('min walking', 'دقيقة مشي'),
-  cardio_jog_min: pair('min jogging', 'دقيقة هرولة'),
-  cardio_burst_min: pair('min bursting', 'دقيقة انطلاق'),
-  cardio_log: pair('Log the cool-down', 'سجّل التهدئة'),
-  cardio_skip: pair('Skip the cool-down', 'تخطَّ التهدئة'),
-  cardio_skipped: pair('Skipped today.', 'تُخطّيت اليوم.'),
-  // The end screen, when he finished without deciding on the cool-down.
-  cardio_not_logged: pair('Not logged yet.', 'ما سُجّلت بعد.'),
+  // Round 7 §B: the block is one screen he taps once. The long button names
+  // live on the end screen, where there is no «الكارديو» head above them; inside
+  // the block the head already says what is being logged.
+  cardio_log: pair('Log the cardio', 'سجّل الكارديو'),
+  cardio_skip: pair('Skip the cardio', 'تخطَّ الكارديو'),
+  cardio_log_short: pair('Log it', 'سجّل'),
+  cardio_skip_short: pair('Skip it', 'تخطَّ'),
+  cardio_skipped: pair('Skipped today.', 'تخطّيته اليوم.'),
+  // The end screen, when he finished without deciding on the cardio.
+  cardio_not_logged: pair('Not logged yet.', 'ما سُجّل بعد.'),
   cardio_edit: pair('Edit', 'تعديل'),
-  cardio_best: pair('Best', 'أفضلك'),
-  cardio_beat_by: pair('{n} above your best', '{n} فوق أفضلك'),
-  cardio_below_best: pair('{n} short of your best', 'يفصلك {n} عن أفضلك'),
-  cardio_first: pair('First one — this becomes the mark.', 'أول مرة — هذه ستصير العلامة.'),
-  cardio_today: pair('Today:', 'اليوم:'),
-  cardio_apply: pair('Use it', 'طبّقه'),
-  cardio_why_incline: pair('take the incline from {from}% to {to}% — same minutes, more work.', 'ارفع الميل من {from}% إلى {to}% — نفس الدقائق وجهد أكبر.'),
-  cardio_why_duration: pair('go from {from} to {to} minutes.', 'من {from} إلى {to} دقيقة.'),
-  cardio_why_bursts: pair('add one burst, {from} to {to}.', 'زد انطلاقة واحدة، من {from} إلى {to}.'),
-  cardio_why_burst_speed: pair('take the bursts from {from} to {to}.', 'ارفع سرعة الانطلاق من {from} إلى {to}.'),
-  cardio_ideal_grade: pair('At {speed}, a {grade}% incline puts the walk in the useful zone.', 'عند السرعة {speed}، الميل {grade}% يضع المشي في النطاق المفيد.'),
-  cardio_in_band: pair('The walk is in the zone ({mets} METs).', 'المشي داخل النطاق ({mets} MET).'),
-  cardio_below_band: pair('The walk is under the zone ({mets} METs).', 'المشي تحت النطاق ({mets} MET).'),
-  // The third state. «تحت النطاق» used to be printed for a walk that was OVER
-  // it, which is the one direction where the advice it implies is backwards.
-  cardio_above_band: pair('The walk is over the zone ({mets} METs).', 'المشي فوق النطاق ({mets} MET).'),
-  // A jogged base gets no band verdict — the band is a walking-equation idea —
-  // so it gets the fact instead: what the jog actually costs.
-  cardio_base_jog_fact: pair('Jogging base · {mets} MET', 'الأساس هرولة · {mets} MET'),
+  cardio_best: pair('Best', 'أفضل رقم'),
+  // The suggestion, already written into the fields (§B: «the suggestion IS the
+  // prefill»). One muted line that says what today is.
+  cardio_today_line: pair('Today: {min} · {grade}% incline', 'اليوم: {min} · ميل {grade}%'),
+  cardio_record: pair('new best', 'رقم جديد'),
+  // The collapsed burst details; the summary carries the two current values.
+  cardio_more: pair('Burst details', 'تفاصيل الانطلاقات'),
+  cardio_seconds_short: pair('s', 'ث'),
   cardio_overfilled: pair('The bursts fill the whole bout. Add minutes, or drop one.', 'الانطلاقات تملأ المدة كلها. زد الدقائق أو انقص واحدة.'),
   // A cleared box is not a zero, and a total computed from one is a bout that
   // never happened. The block says this and disables the log button instead.
@@ -787,7 +773,7 @@ export const LOCALE = Object.freeze({
   // The treadmill's unit, in Settings. Switching it converts what he already
   // typed — the same belt, read off a machine set the other way.
   speed_unit: pair('Treadmill unit', 'وحدة المشاية'),
-  speed_unit_desc: pair('Speeds in the cool-down are converted, not relabelled.', 'سرعات التهدئة تُحوَّل، لا تُعاد تسميتها فقط.'),
+  speed_unit_desc: pair('Cardio speeds are converted, not relabelled.', 'سرعات الكارديو تُحوَّل، لا تُعاد تسميتها فقط.'),
   speed_unit_converted: pair('Speeds converted to the new unit.', 'حُوِّلت السرعات إلى الوحدة الجديدة.'),
   // The finished-session duration, now a clock reading rather than a minute count.
   session_duration: pair('Duration', 'مدة الجلسة'),

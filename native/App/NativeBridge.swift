@@ -89,11 +89,15 @@ final class NativeBridge: NSObject, WKScriptMessageHandler {
                 return
             }
             let attributes = SessionAttributes(session: Self.string(payload["session"]))
+            // Written BEFORE the request: `request` is synchronous, so if this
+            // line survives, the request itself never returned.
+            StatusLog.activity("requesting \(Self.line(state))")
             do {
-                _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
-                StatusLog.activity("started \(Self.line(state))")
+                let activity = try Activity.request(attributes: attributes, content: content, pushType: nil)
+                StatusLog.activity("started \(Self.line(state)) state=\(activity.activityState)")
+                observe(SessionActivityBox(activity: activity))
             } catch {
-                StatusLog.activity("activity_failed:\(StatusLog.describe(error))")
+                StatusLog.activity("activity_failed:\(StatusLog.describeVerbose(error))")
             }
             return
         }
@@ -114,6 +118,52 @@ final class NativeBridge: NSObject, WKScriptMessageHandler {
             if !extras.isEmpty { StatusLog.activity("duplicates_ended \(extras.count)") }
         }
     }
+
+    /// iOS can accept a request and then end or dismiss the activity on its
+    /// own — a budget, a setting flipped mid-session, an extension that failed
+    /// to draw. Without this the last line would still say «started» over an
+    /// empty Island. Only a transition away from `.active` is worth a line.
+    private func observe(_ box: SessionActivityBox) {
+        Task {
+            for await phase in box.activity.activityStateUpdates where phase != .active {
+                StatusLog.activity("system_state \(phase)")
+            }
+        }
+    }
+
+    /// The system's own view, written on every foreground so the Mac can read
+    /// it without the app in front: is the app allowed Live Activities at all,
+    /// and how many of ours are alive.
+    func recordActivityKitStatus() {
+        let info = ActivityAuthorizationInfo()
+        let live = SessionActivityBox.all()
+        let states = live.map { "\($0.activity.activityState)" }.joined(separator: ",")
+        StatusLog.activityKit("enabled=\(info.areActivitiesEnabled ? 1 : 0) live=\(live.count)\(states.isEmpty ? "" : " [\(states)]")")
+    }
+
+    #if DEBUG
+    /// Debug builds only: launched with `RW_ACTIVITY_SELFTEST=1` in the
+    /// environment (`SIMCTL_CHILD_RW_ACTIVITY_SELFTEST=1 xcrun simctl launch …`),
+    /// the shell posts itself the exact message `core/native.js` posts for a
+    /// session mid-rest. It exercises request → extension render → status lines
+    /// with no page, no sign-in and no data. Compiled out of every Release build.
+    func runSelfTestIfAsked() {
+        guard ProcessInfo.processInfo.environment["RW_ACTIVITY_SELFTEST"] == "1" else { return }
+        let now = Date()
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        applyActivity([
+            "type": "activity", "active": true,
+            "started_at": iso.string(from: now.addingTimeInterval(-600)),
+            "session": "علوي أ", "exercise": "Lat Pulldown (Neutral Grip)",
+            "set_label": "المجموعة 2 من 3", "exercise_label": "تمرين 3 من 7",
+            "since_label": "منذ",
+            "rest_ends_at": iso.string(from: now.addingTimeInterval(90)),
+            "rest_started_at": iso.string(from: now),
+            "done": 2, "total": 7, "skin": "hadid",
+        ])
+    }
+    #endif
 
     private func endAll(reason: String) {
         // Everything live, not just the one this launch of the app started: a

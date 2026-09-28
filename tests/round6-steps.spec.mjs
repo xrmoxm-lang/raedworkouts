@@ -14,18 +14,18 @@ const user = 'dev';
 // Two COMPLETE exposures at the top of chest_press_machine's 8-10 range at
 // 20 kg: the two-session bump is earned. Same weight both times, so nothing
 // can be LEARNED from gaps — the step comes from data.js or from him.
-function earnedSession(dateISO) {
+function earnedSession(dateISO, weight = 20) {
   return {
     date: dateISO, session_id: 'upper_a', session_name: 'Upper A', duration_min: 60,
     exercises: { chest_press_machine: {
       device: 'Matrix Ultra',
       planned: { sets: 3 },
-      sets: [0, 1, 2].map(() => ({ is_warmup: false, weight: 20, reps: 10, completed: true })),
+      sets: [0, 1, 2].map(() => ({ is_warmup: false, weight, reps: 10, completed: true })),
     } },
   };
 }
 
-async function boot(page) {
+async function boot(page, hist = [earnedSession('2026-09-15T09:00:00.000Z'), earnedSession('2026-09-18T09:00:00.000Z')]) {
   // Seeds ONCE per tab (sessionStorage marker), so a reload keeps what the
   // test wrote instead of re-seeding over it.
   await page.addInitScript(({ u, hist }) => {
@@ -43,7 +43,7 @@ async function boot(page) {
       forced_next_session: 'upper_a',
       exercise_prefs: { chest_press_machine: { equipment: '', device: 'Matrix Ultra', known_devices: ['Matrix Ultra'] } },
     }));
-  }, { u: user, hist: [earnedSession('2026-09-15T09:00:00.000Z'), earnedSession('2026-09-18T09:00:00.000Z')] });
+  }, { u: user, hist });
   await blockLiveSync(page);
   await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
@@ -76,9 +76,14 @@ test('setting the machine step to 5 in ⚙️ moves the next suggestion by 5', a
 
   await openSheet(page);
   await expect(page.locator('#modal [data-equipment-step-now]')).toContainText('سلّم ماتريكس');
+  // Round 7 §E.3: one load (20) proves nothing, so the ladder is data.js's.
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveAttribute('data-equipment-step-source', 'equipment');
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveText('من الجهاز');
   await page.locator('#modal [data-equipment-step-chip="5"]').click();
   await expect(page.locator('#modal [data-equipment-step-chip="5"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#modal [data-equipment-step-now]')).toContainText('5');
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveAttribute('data-equipment-step-source', 'hand');
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveText('محفوظة لـ Matrix Ultra');
   // Stored per MACHINE, because a device is named.
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('raedworkouts.dev.state.v1')).exercise_prefs.chest_press_machine);
   expect(stored.steps).toEqual({ 'Matrix Ultra': 5 });
@@ -139,4 +144,26 @@ test('a typed 12.5 survives a step change, the tick, and a reload', async ({ pag
   await page.waitForTimeout(1200);
   expect(await readStored()).toEqual({ weight: 12.5, completed: true });
   await expect(page.locator(firstWeight).first()).toHaveValue('12.5');
+});
+
+// Round 7 §E: «based on the exercises I'm doing and the history, you should
+// know which is which». His chest press logged 12.5 / 15 / 17.5 / 17.5 on the
+// Matrix Ultra: three distinct loads, two of three off every Matrix label, all
+// on the 2.5 grid — a 2.5 kg machine, whatever data.js calls it. Before Round 7
+// the data.js ladder could not be overridden by his log: 17.5 read as rung 4
+// (18) and the suggestion jumped to 23.
+test('his log makes the step: 12.5 / 15 / 17.5 → +2.5, and ⚙️ says «من سجلّك»', async ({ page }) => {
+  await boot(page, [12.5, 15, 17.5, 17.5].map((kg, index) => earnedSession(`2026-09-${String(10 + index * 3).padStart(2, '0')}T09:00:00.000Z`, kg)));
+  const weight = page.locator(firstWeight).first();
+  await expect(weight, '17.5 + his 2.5 kg step').toHaveAttribute('placeholder', '20');
+  await expect(page.locator(`${card} [data-reps-goal] [data-step-delta]`).first()).toHaveText('(+2.5)');
+  await openSheet(page);
+  await expect(page.locator('#modal [data-equipment-step-now]')).toContainText('2.5');
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveAttribute('data-equipment-step-source', 'history');
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveText('من سجلّك');
+  // His hand still beats his log.
+  await page.locator('#modal [data-equipment-step-chip="matrix"]').click();
+  await expect(page.locator('#modal [data-equipment-step-source]')).toHaveAttribute('data-equipment-step-source', 'hand');
+  await page.evaluate(() => document.querySelector('#modal-overlay').classList.remove('show'));
+  await expect(weight).toHaveAttribute('placeholder', '23');
 });

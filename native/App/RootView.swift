@@ -15,11 +15,15 @@ struct RootView: View {
                 // The rest ran out while the phone was in his pocket: the app is
                 // in front again, so the Island stops counting a rest that is over.
                 bridge.endFinishedRests()
+                bridge.recordActivityKitStatus()
                 WidgetCenter.shared.reloadAllTimelines()
                 // Which scheme the gym app actually answers is a fact about his
                 // phone, not about our guess — ask iOS and keep the answer.
                 GymLauncher.refreshCache()
             }
+            #if DEBUG
+            .task { bridge.runSelfTestIfAsked() }
+            #endif
             .onOpenURL { url in
                 // `raedworkouts://…` from the Live Activity or the widget: the
                 // app coming forward is the whole point, and it already has.

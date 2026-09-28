@@ -17,7 +17,7 @@
  * Round 5 put the countdown in flow inside the card because a fixed dock sat on
  * the Next button at every scroll position (ROUND5-FABLE-BRIEF §A). A circle he
  * parks where he wants is the other honest answer to «a fixed bar is always on
- * top of something»: it is 56px, it snaps to an edge, and its position is his.
+ * top of something»: it is 72px (round 7), it snaps to an edge, and its position is his.
  *
  * Ownership: core/rest.js still owns the ONE timer and paints every
  * `[data-rest-surface]` on its 200ms tick (this element is now the only one);
@@ -30,14 +30,19 @@ import { t } from '../core/i18n.js';
 import { cancelRest, extendRest, restTimer } from '../core/rest.js';
 import { nsKey, safeGetItem, safeSetItem, settings, state } from '../core/store.js';
 
-const SIZE = 56;          // the circle, px — one tap target, no floor needed
+// Round 7 §C (Raed 2026-09-28: «the timer is small, I cannot notice it»): 72px,
+// an accent disc. The SVG geometry below follows SIZE — r = SIZE/2 − 2 = 34, so
+// the ring's circumference is 213.6 (the dasharray in styles.css).
+const SIZE = 72;          // the circle, px — one tap target, no floor needed
+const RING_R = SIZE / 2 - 2;
 const EDGE = 12;          // gap to the screen edge it snaps to
 // Default height above the tab bar. Measured on 390×844: after the rest-start
 // scroll the runner's nav sits at 724–768 (tab top 776 − 8); at 12px the
-// circle would span 700–756 and cover the end of the secondary button. At
-// 68px it spans 644–700 — clear of the nav at both the revealed and the
-// max-scroll positions (nav 708–752), and still in the thumb's reach. He can
-// drag it anywhere from there.
+// circle would span 684–756 and cover the end of the secondary button. At
+// 68px the 72px disc spans 628–700 — clear of the nav at both the revealed and
+// the max-scroll positions (nav 708–752), and still in the thumb's reach
+// (asserted with elementFromPoint in tests/round6-clock.spec.mjs). He can drag
+// it anywhere from there.
 const BOTTOM_DEFAULT = 68;
 const DRAG_THRESHOLD = 6; // px; under it a pointerdown/up pair is a tap
 const TAP_MS = 300;
@@ -205,12 +210,12 @@ export function mountSessionClock() {
   const disc = h('button', { type: 'button', class: 'sc-disc', 'aria-label': t('clock_aria'), 'data-clock-disc': 'true' });
   // The ring: always the rest countdown — the accent fill drains with --p.
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 56 56');
+  svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
   svg.setAttribute('aria-hidden', 'true');
   svg.classList.add('sc-ring');
   for (const cls of ['sc-track', 'sc-fill']) {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    c.setAttribute('cx', '28'); c.setAttribute('cy', '28'); c.setAttribute('r', '26');
+    c.setAttribute('cx', String(SIZE / 2)); c.setAttribute('cy', String(SIZE / 2)); c.setAttribute('r', String(RING_R));
     c.classList.add(cls);
     svg.appendChild(c);
   }
