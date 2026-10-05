@@ -207,3 +207,12 @@ test('§E only his last 12 sessions count, and only completed working sets', () 
   }]);
   assert.deepEqual(equipmentStepSource('face_pull'), { step: 2.5, source: 'equipment' });
 });
+
+
+// Fable review 2026-10-05: a 2.5-kg dumbbell rack whose loads happen to sit
+// within 1 kg of Matrix labels must NOT be read as the ladder.
+test('a dumbbell rack logged 5/10/15/17.5/22.5 stays a 2.5 grid, not a ladder', () => {
+  assert.equal(inferStepFromWeights([5, 5, 10, 10, 15, 15, 17.5, 17.5, 22.5, 22.5]), 2.5);
+  // His real stack labels still read as the ladder at the tighter tolerance.
+  assert.equal(inferStepFromWeights([4.5, 9, 9, 14, 14, 18, 23, 32]), 'matrix');
+});
