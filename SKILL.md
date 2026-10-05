@@ -1014,3 +1014,62 @@ You're not just a tracker. You're his coach. The data he logs is the ground trut
 Show up for him. He's showing up for himself.
 
 — mh
+
+---
+
+## Section 7 — v17 «الدفتر», the current truth (written 2026-10-05; overrides Section 6 where they differ)
+
+> Section 6 describes v16 (one `app.js`, worktree-v16). Since 2026-09-08 the app is **v17**: same engine,
+> rebuilt presentation, split into modules. **The CODE wins over this file.** Rounds 6 and 7 (2026-09-25 /
+> 09-28) are in `~/RaedWorkoutsV2/V17-CHECKLIST.md`, the briefs `ROUND6-FABLE-BRIEF.md` / `ROUND7-FABLE-BRIEF.md`,
+> and the rulings log `DECISIONS.md`.
+
+### Where it lives now
+- Repo `~/RaedWorkoutsV2/worktree-v17`, branch `v17-redesign`, merged to `main` after every round. Git dir under
+  `~/Documents/Claude/raedworkouts GITHUB/raedworkouts` (Terminal needs Full Disk Access; relaunch after granting).
+- Production **https://raedworkouts-v16.vercel.app** — deploy `vercel --prod --yes --token $(cat ~/.vercel_token)` from
+  worktree-v17 (it carries the `.vercel` link). Bump `sw.js` VERSION every deploy (v118 as of 2026-10-05).
+- Previews need a protection-bypass secret (team has Vercel Authentication): `PATCH /v1/projects/<id>/protection-bypass`
+  `{"generate":{}}` → `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`.
+- Native «Raedworkouts Go» in `native/` (XcodeGen; `native/Tools/sync-www.sh` copies the web app pre-build; bump
+  `CURRENT_PROJECT_VERSION` in `project.yml` every phone build). Install:
+  `xcrun devicectl device install app --device 082E4136-FCF1-5B86-A65B-1989A4262838 native/build/device/Build/Products/Release-iphoneos/RaedworkoutsGo.app`
+  (phone on home Wi-Fi + unlocked; `CoreDeviceError 4016/10003` = locked). Read its status from the Mac: App Group plist
+  keys `rw.status.activity / activitykit / island / rest / widget` (command in V17-CHECKLIST §Round 3).
+- Sync server `~/raedsync/raedsync.py` on the HP (`raedsync.service`, :8790, Tailscale `:8443`); coach retrieval
+  `~/raedworkouts-ai/service.py` (`raedworkouts-retrieval.service`, :8124). Both = `server/raedsync.py` /
+  `server/coach-service.py` in the repo. Deploy = backup → scp → py_compile → restart → health. **Check md5 before
+  touching: the live file was once a round behind the repo.**
+
+### Modules
+`core/` (engine, session, rest, store, sync, native, shell, dom, i18n…) · `ui/` (home, exercise-card, cardio, clock, end,
+history, library, coach, settings, warmup, recovery, figure, kit) · `domain/` (progression, clamps, cardio, state-merge,
+events, …). `core/` never imports `ui/` — it calls through `core/shell.js` hooks or DOM events (`rw:rest`).
+
+### Rules Raed set in rounds 6–7 (do not re-litigate)
+- **Rest clock** (`ui/clock.js`): one floating draggable 72px accent circle, **rest-only** — it exists only while a
+  countdown runs, never shows elapsed time («أبغاه يختفي إذا ما فيه عداد»). Tap → «+30 ث» / «تخطّ». Position remembered.
+  No dock, no in-flow row.
+- **Finish screen** (`ui/end.js`): the clock (h:mm:ss) is the hero; 3-cell ledger; the cardio line ALWAYS present and
+  loggable from the end screen; **no undo toast** (the log's «أعد فتح» is the way back). Discard undo stays.
+- **It is «الكارديو», never «التهدئة».** One card: the suggestion IS the prefill (once per bout), duration · speed ·
+  incline · bursts; burst details collapsed; one totals line; compact «سجّل». Treadmill unit **mph**; score = MET-min.
+- **Equipment steps:** Matrix stacks are kg-labelled 10-lb plates → the **ladder 5·9·14·18·23·27·32…**
+  (`domain/clamps.js` `MATRIX_LADDER`); plates 5; dumbbells 2.5 (2.5·5·7.5·10·12.5); cables 2.5. The step is
+  **inferred from his own log** (`inferStepFromWeights`: last 12 sessions on the named machine, ≥3 distinct loads, ≥80% of
+  sets within 0.6 kg of a label → ladder; else 5/2.5/1.25 grid; else data.js). Hand (⚙️) > history > data.js > default.
+- **Warm-up feel** adjusts EVERY open working set, both directions.
+- Home stat tiles centred. Figure fill 18%. Cable internal-rotation drill: keep.
+- Roles: **Fable plans + designs + reviews; Opus does the work; Codex audits chats; only Fable commits/deploys.**
+
+### Gate (never type the package-manager name — a hook blocks it)
+`node --test tests/*.test.mjs` · `node scripts/lint-contrast.mjs` · `node scripts/verify-arabic-ui.mjs` ·
+`node scripts/verify-coach-ai.mjs` · `node scripts/verify-phase3-identity.mjs` · `python3 -m unittest discover -s
+server/tests -t .` · `node node_modules/@playwright/test/cli.js test --grep-invert "Deploy PWA"`. 2026-10-05: 129 unit ·
+43 server · 173 browser. **Every browser run must use the fence** (`tests/_fixtures.mjs`: `serviceWorkers: 'block'` + a
+context route that continues only localhost) — a probe once wrote to his live row. Never sign in as «Raed» outside it.
+
+### Open
+- SYNC_KEY is a public bearer with cross-user wipe (explained to Raed 2026-09-28; his call).
+- Assisted dip / pull-up: «more weight» = more assistance; the step logic treats them as a stack.
+- The v15 «one exercise / show all» switch was never restored (ask before building).

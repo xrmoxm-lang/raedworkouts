@@ -124,10 +124,17 @@ export const HISTORY_STEP_MIN_DISTINCT = 3;
 export const HISTORY_RUNG_SHARE = 0.8;
 const HISTORY_GRIDS_KG = [5, 2.5, 1.25];
 
+// Fable review 2026-10-05: the STEPPING tolerance (1 kg, matrixRung) is too
+// loose for INFERENCE. A printed label is n × 4.536 rounded to the integer, so
+// a typed label is never more than 0.5 kg off — but at 1 kg a 2.5-kg dumbbell
+// rack logged 5 / 10 / 15 / 17.5 / 22.5 reads as 100% «on a label» (10≈9,
+// 15≈14) and the rack would become a ladder. At 0.6 those two fall off and the
+// rack stays a rack, while his real 4.5 / 9 / 14 / 18 / 23 / 32 all still count.
+export const INFER_LABEL_TOLERANCE_KG = 0.6;
 function nearStackLabel(weight) {
   const n = Math.round(weight / MATRIX_KG_PER_PLATE);
   for (let k = Math.max(1, n - 1); k <= Math.min(MATRIX_RUNGS, n + 1); k += 1) {
-    if (Math.abs(weight - stackLabelKg(k)) <= RUNG_TOLERANCE_KG) return true;
+    if (Math.abs(weight - stackLabelKg(k)) <= INFER_LABEL_TOLERANCE_KG) return true;
   }
   return false;
 }
