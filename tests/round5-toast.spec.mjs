@@ -234,9 +234,16 @@ test('an offline toast never lands on «أنهِ الجلسة»', async ({ page 
   // button must STILL answer the tap, because a message is not a tap target.
   const pinned = await page.evaluate(() => {
     const toast = document.getElementById('toast');
-    toast.style.setProperty('--toast-lift', '0px');
     const b = document.querySelector('.runner-nav [data-finish-session]');
     const r = b.getBoundingClientRect();
+    // Pin it ON the button, measured. This was `--toast-lift: 0px`, which only
+    // overlapped while the card was tall enough to push the nav down to the
+    // toast's resting band; removing the effort line and strip (2026-11-11)
+    // made the last card fit the screen, the nav rose 59px and the resting
+    // toast no longer touched it — so the precondition, not the rule, failed.
+    toast.style.setProperty('--toast-lift', '0px');
+    const rest = toast.getBoundingClientRect();
+    toast.style.setProperty('--toast-lift', `${Math.max(0, Math.round(rest.bottom - r.bottom))}px`);
     const tr = toast.getBoundingClientRect();
     const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
     return {

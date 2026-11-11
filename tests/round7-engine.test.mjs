@@ -11,7 +11,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import { format } from '../locale.js';
 import * as clamps from '../domain/clamps.js';
 
 // Namespace imports, so each test fails on its own assertion (not the whole
@@ -60,7 +59,7 @@ globalThis.localStorage = {
 new Function(fs.readFileSync(new URL('../data.js', import.meta.url), 'utf8'))();
 
 const engine = await import('../core/engine.js');
-const { equipmentStep, runRampRules } = engine;
+const { equipmentStep } = engine;
 const equipmentStepSource = (id) => engine.equipmentStepSource(id);
 const { state } = await import('../core/store.js');
 
@@ -84,53 +83,10 @@ function sessions(exerciseId, loadsPerSession, device = '') {
 }
 
 // ---- §D ---------------------------------------------------------------------
-function rampedExercise(effort, loads = [23, 23, 23]) {
-  return {
-    sets: [
-      { is_warmup: true, weight: 9, reps: 10, completed: true, effort: 'medium' },
-      { is_warmup: true, weight: 14, reps: 6, completed: true, effort },
-      ...loads.map((weight) => ({ is_warmup: false, weight, reps: null, completed: false })),
-    ],
-  };
-}
-const working = (exState) => exState.sets.filter((set) => !set.is_warmup).map((set) => set.weight);
-
-test('§D a «صعب جدًا» last ramp eases EVERY open working set, not only the first', () => {
-  seed();
-  // His chest press on the Matrix stack: 23 × 3. One step down the ladder is 18.
-  const exState = rampedExercise('very_hard');
-  runRampRules(exState, 'chest_press_machine');
-  assert.deepEqual(working(exState), [18, 18, 18], 'all three working sets drop one step');
-  assert.equal(exState.warmup_feel_applied, 'very_hard');
-  assert.equal(toastEl.textContent, 'الإحماء طلع ثقيل — نزّلت مجموعات العمل إلى 18 كغ',
-    'the heavy toast is plural, like the light one');
-  // Applied once: a re-tick of the same ramp never walks him down again.
-  runRampRules(exState, 'chest_press_machine');
-  assert.deepEqual(working(exState), [18, 18, 18]);
-});
-
-test('§D both directions, done sets untouched, calibration still wins', () => {
-  seed();
-  const light = rampedExercise('easy');
-  runRampRules(light, 'chest_press_machine');
-  assert.deepEqual(working(light), [27, 27, 27], 'easy: every working set up one rung');
-
-  // A working set he already finished is his; only the OPEN ones move.
-  const midway = rampedExercise('very_hard');
-  const firstWorking = midway.sets.find((set) => !set.is_warmup);
-  firstWorking.completed = true; firstWorking.reps = 10;
-  runRampRules(midway, 'chest_press_machine');
-  assert.deepEqual(working(midway), [23, 18, 18]);
-
-  const calibrated = rampedExercise('very_hard');
-  calibrated.calibrated_from = { weight: 14, pct: 0.7, ramps: 2 };
-  runRampRules(calibrated, 'chest_press_machine');
-  assert.deepEqual(working(calibrated), [23, 23, 23], 'a calibrated load already came from this ramp');
-});
-
-test('§D the English copy is plural too', () => {
-  assert.equal(format('warmup_felt_heavy', { kg: 25 }, 'en'), 'Warm-up felt heavy — working sets eased to 25 kg.');
-});
+// The warm-up feel rule (a «light»/«heavy» last ramp moving every open working
+// set) was removed with the effort rating on 2026-11-11 — Raed: «remove it from
+// the progression completely». Its three tests certified that behaviour and went
+// with it; tests/no-effort.test.mjs asserts the entry point is gone.
 
 // ---- §E ---------------------------------------------------------------------
 test('§E the rule itself: ≥3 distinct loads; ≥80% on a Matrix label → ladder; else the coarsest grid', () => {

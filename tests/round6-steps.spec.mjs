@@ -66,10 +66,13 @@ async function openSheet(page) {
 test('setting the machine step to 5 in ⚙️ moves the next suggestion by 5', async ({ page }) => {
   await boot(page);
   const weight = page.locator(firstWeight).first();
+  // 2026-11-11: the box holds last time's entry; the suggestion is the note.
+  const why = page.locator(`${card} [data-why-weight]`).first();
+  await expect(weight).toHaveAttribute('placeholder', '20');
   // data.js: a Matrix stack is the kg-labelled ladder 5 · 9 · 14 · 18 · 23 ·
   // 27 (n × 4.5359 rounded). 20 is off it → the next label, 23; the goal names
   // the label after that: 27, +4.
-  await expect(weight).toHaveAttribute('placeholder', '23');
+  await expect(why).toContainText('← 23 كغ');
   const goal = page.locator(`${card} [data-reps-goal]`).first();
   await expect(goal).toContainText('27');
   await expect(goal.locator('[data-step-delta]')).toHaveText('(+4)');
@@ -89,7 +92,7 @@ test('setting the machine step to 5 in ⚙️ moves the next suggestion by 5', a
   expect(stored.steps).toEqual({ 'Matrix Ultra': 5 });
   await page.evaluate(() => document.querySelector('#modal-overlay').classList.remove('show'));
 
-  await expect(weight, '20 + his 5 kg step').toHaveAttribute('placeholder', '25');
+  await expect(why, '20 + his 5 kg step').toContainText('ارفع 5 كغ ← 25 كغ');
   await expect(goal).toContainText('30');
   await expect(goal.locator('[data-step-delta]')).toHaveText('(+5)');
 
@@ -97,7 +100,7 @@ test('setting the machine step to 5 in ⚙️ moves the next suggestion by 5', a
   await openSheet(page);
   await page.locator('#modal [data-equipment-step-chip="5"]').click();
   await page.evaluate(() => document.querySelector('#modal-overlay').classList.remove('show'));
-  await expect(weight).toHaveAttribute('placeholder', '23');
+  await expect(why).toContainText('← 23 كغ');
 
   // «سلّم ماتريكس» stores the ladder itself, not a number.
   await openSheet(page);
@@ -108,7 +111,7 @@ test('setting the machine step to 5 in ⚙️ moves the next suggestion by 5', a
   const ladderStored = await page.evaluate(() => JSON.parse(localStorage.getItem('raedworkouts.dev.state.v1')).exercise_prefs.chest_press_machine);
   expect(ladderStored.steps).toEqual({ 'Matrix Ultra': 'matrix' });
   await page.evaluate(() => document.querySelector('#modal-overlay').classList.remove('show'));
-  await expect(weight).toHaveAttribute('placeholder', '23');
+  await expect(why).toContainText('← 23 كغ');
 });
 
 test('a typed 12.5 survives a step change, the tick, and a reload', async ({ page }) => {
@@ -155,7 +158,9 @@ test('a typed 12.5 survives a step change, the tick, and a reload', async ({ pag
 test('his log makes the step: 12.5 / 15 / 17.5 → +2.5, and ⚙️ says «من سجلّك»', async ({ page }) => {
   await boot(page, [12.5, 15, 17.5, 17.5].map((kg, index) => earnedSession(`2026-09-${String(10 + index * 3).padStart(2, '0')}T09:00:00.000Z`, kg)));
   const weight = page.locator(firstWeight).first();
-  await expect(weight, '17.5 + his 2.5 kg step').toHaveAttribute('placeholder', '20');
+  const why = page.locator(`${card} [data-why-weight]`).first();
+  await expect(weight, 'behind the box: last time\'s 17.5').toHaveAttribute('placeholder', '17.5');
+  await expect(why, '17.5 + his 2.5 kg step').toContainText('ارفع 2.5 كغ ← 20 كغ');
   await expect(page.locator(`${card} [data-reps-goal] [data-step-delta]`).first()).toHaveText('(+2.5)');
   await openSheet(page);
   await expect(page.locator('#modal [data-equipment-step-now]')).toContainText('2.5');
@@ -165,5 +170,5 @@ test('his log makes the step: 12.5 / 15 / 17.5 → +2.5, and ⚙️ says «من 
   await page.locator('#modal [data-equipment-step-chip="matrix"]').click();
   await expect(page.locator('#modal [data-equipment-step-source]')).toHaveAttribute('data-equipment-step-source', 'hand');
   await page.evaluate(() => document.querySelector('#modal-overlay').classList.remove('show'));
-  await expect(weight).toHaveAttribute('placeholder', '23');
+  await expect(why).toContainText('← 23 كغ');
 });

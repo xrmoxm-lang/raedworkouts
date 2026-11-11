@@ -462,30 +462,11 @@ label > input, label > select { margin-top: 6px; }
 .set-check.skipped { color: var(--text-muted); }
 .set-grid.current .set-check { height: 56px; border-color: var(--accent); }
 .set-grid.warm .set-check { border-color: var(--border); }
-.effort-slot { display: none; }
 @keyframes pop { 0% { transform: scale(.85); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
 
-/* Effort: three words in a segmented control, on the final row's own line */
-.effort-strip { margin: 2px 0 8px; padding-inline-start: 9px; }
-.effort-strip[hidden] { display: none; }
-.effort-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--bg-elev); border: 1px solid var(--border); }
-.effort-picker button {
-  min-height: 44px; border: 0; border-radius: 11px; background: transparent; color: var(--text-muted);
-  font-size: 13.5px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 2px;
-  transition: background var(--dur-fast), color var(--dur-fast);
-}
-.effort-picker button::before { content: ''; width: 18px; height: 3px; border-radius: 2px; background: currentColor; opacity: .35; }
-.effort-picker button.active { background: var(--bg-card); color: var(--text); box-shadow: var(--shadow-sm); }
-.effort-picker button:nth-child(1).active::before { background: var(--good); opacity: 1; }
-.effort-picker button:nth-child(2).active::before { background: var(--warning); opacity: 1; }
-.effort-picker button:nth-child(3).active::before { background: var(--danger); opacity: 1; }
-.effort-picker .effort-emoji { display: none; }
-/* Only the strip that belongs to the row he is on is loud; a first exposure renders one per ramp row. */
-.set-grid.current + .effort-strip.prompting .effort-picker { border-color: var(--accent); box-shadow: var(--glow); }
 
 .reps-goal, .last-time { font-size: 13px; color: var(--text-muted); padding: 7px 0; border-top: 1px solid var(--hair); line-height: 1.5; }
 .reps-goal:first-of-type { margin-top: 10px; }
-.effort-line .effort-line-label { font-weight: 600; color: var(--text); margin-inline-end: 4px; }
 .last-time strong { color: var(--text); font-weight: 600; }
 
 /* Raed (2026-09-08): the next/finish pair must stay put and stay small — it used to
@@ -829,7 +810,7 @@ label > input, label > select { margin-top: 6px; }
 /* `.btn { display: inline-flex }` is an author rule, so it beats the UA's
    `[hidden] { display: none }` and the expand button stayed on screen for
    passages that are not clipped — offering to reveal nothing. Same escape
-   hatch the stylesheet already spells out for .effort-strip and .explain-bubble. */
+   hatch the stylesheet already spells out for .explain-bubble. */
 .coach-actions .btn[hidden] { display: none; }
 .coach-more > summary { min-height: var(--tap); }
 /* `display: flex` on the summary drops the UA disclosure triangle, so «3 مقاطع
@@ -920,11 +901,6 @@ label > input, label > select { margin-top: 6px; }
 .safer-option { margin: 10px 0; }
 /* A confirmation's title is a sentence in the UI language, not a movement name. */
 .confirm-head h3 { direction: inherit; text-align: start; }
-/* Room for the docked next/finish bar, the rest dock and the tab bar, so that
-   scrolling the strip into view actually clears all three. 200px was measured
-   to be 14px short: the bar's top sits 214px above the viewport floor while a
-   rest is running. */
-.effort-strip { scroll-margin-block-end: 150px; }
 .modal .list-option .row-hint { margin-top: 0; white-space: nowrap; }
 /* Measured hit areas inside the sheet: the toggle label was 44px and the clip
    and device chips 36px, both under the 48px floor. The box stays the size it

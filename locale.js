@@ -32,12 +32,8 @@ export const LOCALE = Object.freeze({
   // number). The same goal, stating the load it earns; the «(+2.5)» delta is
   // appended by the card in its own LTR-isolated span.
   reps_goal_to: pair('Complete {n} on every set → {kg} kg', 'أكمل {n} في كل المجموعات ← {kg} كغ'),
-  // The effort the PROGRAMME asks for, as a word. D16 replaced numeric RPE with
-  // coarse language, so these are bands, not numbers: 6 leaves about four reps
-  // in reserve, 7 three, 8 two, 9+ one or none.
   // A deload is not chasing a load increase, so the goal line says what the week
-  // is actually for. Promising an increase beside «خفيف — بقصد» contradicts
-  // itself on one line.
+  // is actually for.
   reps_goal_deload: pair(
     'Stop at {n} — this week is for moving well, not for adding load',
     'قف عند {n} — هذا الأسبوع لإتقان الحركة، مو لزيادة الوزن'),
@@ -78,20 +74,7 @@ export const LOCALE = Object.freeze({
     'Two or more warning signs together. One set less per exercise and a lighter target effort, then straight back to where you were.',
     'ظهرت علامتان أو أكثر مع بعض. مجموعة أقل بكل تمرين وجهد أخف، وبعدها ترجع من نفس المكان.'),
   deload_running: pair('Deload week — lighter on purpose', 'أسبوع تخفيف — خفيف عن قصد'),
-  calibrated_from_ramp: pair(
-    'Working sets set to {kg} kg, from the ramp set that came back easy.',
-    'حطّيت مجموعات العمل على {kg} كغ، من مجموعة الإحماء اللي طلعت سهلة.'),
-  why_probe_floor: pair(
-    'First time here. Start at the lightest setting and climb one step each ramp set — the working weight comes from whichever one feels easy.',
-    'أول مرة على هذا التمرين. ابدأ بأخف وزن وارفع درجة وحدة كل مجموعة إحماء — وزن العمل بيطلع من اللي تحسّها سهلة.'),
-  warmup_felt_light: pair(
-    'Warm-up felt light — working sets nudged up to {kg} kg.',
-    'الإحماء طلع سهل — رفعت مجموعات العمل إلى {kg} كغ.'),
-  warmup_felt_heavy: pair(
-    'Warm-up felt heavy — working sets eased to {kg} kg.',
-    'الإحماء طلع ثقيل — نزّلت مجموعات العمل إلى {kg} كغ'),
   superset_next: pair('Straight into {name} — no rest.', 'على طول إلى {name} — بلا راحة.'),
-  effort_label: pair('Effort', 'الجهد'),
   why_machine_reps: pair(
     'This machine carries its own weight, so reps are what progress. Last time {reps} — aim for {target}.',
     'هذا الجهاز بأوزانه، فالتقدّم بالتكرارات. آخر مرة {reps} — الهدف {target}.'),
@@ -137,17 +120,6 @@ export const LOCALE = Object.freeze({
   bodyweight_out_of_range: pair(
     'That does not look like a bodyweight. Enter a number between {min} and {max} kg.',
     'هذا ما يبدو وزن جسم. أدخل رقماً بين {min} و{max} كجم.'),
-  effort_target_easy: pair('take it easy', 'خفيف — بقصد'),
-  effort_target_moderate: pair('moderate', 'متوسط'),
-  effort_target_hard: pair('hard', 'صعب'),
-  effort_target_near_failure: pair('close to failure', 'قريب من الفشل'),
-  // Short forms, used only when three targets sit on one line. The long ones
-  // above read well alone — «خفيف — بقصد» is the whole story when every set
-  // shares a target — and wrap the row when there are three of them.
-  effort_short_easy: pair('easy', 'خفيف'),
-  effort_short_moderate: pair('moderate', 'متوسط'),
-  effort_short_hard: pair('hard', 'صعب'),
-  effort_short_near_failure: pair('near failure', 'شبه الفشل'),
   superset_with: pair('Superset — no rest before {name}', 'سوبرست — بلا راحة قبل {name}'),
   extra_set: pair('extra set', 'مجموعة زائدة'),
   // Appending is not swapping: it adds a movement at the END without replacing
@@ -216,14 +188,12 @@ export const LOCALE = Object.freeze({
   why_first_exposure: pair('First time — use the seeded load, then log what really happened.', 'أول مرة — استعمل الوزن المبدئي، ثم سجّل ما حدث فعلًا.'),
   why_reentry_seed: pair('⚡ Re-entry seed: {kg} kg. Let completed reps find the level; do not grind.', '⚡ وزن بداية العودة: {kg} كغ. دع التكرارات تجد المستوى، ولا تعاند.'),
   why_last_logged: pair('Use the last logged load and complete the prescribed reps.', 'استعمل آخر وزن مسجّل وأكمل التكرارات المطلوبة.'),
-  why_hold_very_hard: pair('Final set was very hard — hold this load one more session.', 'المجموعة الأخيرة كانت صعبة جدًا — ابقَ على هذا الوزن جلسة أخرى.'),
   // Round 6 §D.3: the note names the load the step lands on, not only its size.
   // Arabic reads right-to-left, so its arrow is ← (house convention: start_arrow,
   // next_exercise_arrow); no «+» or «(» beside a number, which the bidi
   // algorithm would strand on the wrong side of it.
   why_bump_twice: pair('You completed {reps} on every set, twice. Up {kg} kg → {target} kg.', 'أكملت {reps} في كل المجموعات مرتين. ارفع {kg} كغ ← {target} كغ.'),
   why_accessory_reps: pair('Add a rep or a set rather than weight — this is an accessory.', 'أضف تكرارًا أو مجموعة بدل الوزن — هذا تمرين مساعد.'),
-  why_easy_bump: pair('Easy on the final set after every set reached {reps} — the increase lands a session sooner: up {kg} kg → {target} kg.', 'سهل في الأخيرة بعد بلوغ {reps} في كل المجموعات — الزيادة تأتي أبكر بجلسة: ارفع {kg} كغ ← {target} كغ.'),
   why_match_or_beat: pair('Last time: {kg} kg × {reps}. Match it or beat it.', 'المرة الماضية: {kg} كغ × {reps}. اعدلها أو تجاوزها.'),
   // The safety clamps (domain/clamps.js C1-C8) refused or trimmed an earned
   // increase. Saying «ارفع كذا» over a load that did not move is the lie this
@@ -435,9 +405,10 @@ export const LOCALE = Object.freeze({
   clear_all_prs: pair('Clear all PRs? This cannot be undone.', 'أأمسح كل الأرقام الشخصية؟ لا يمكن التراجع.'),
   prs_cleared: pair('PRs cleared.', 'مُسحت الأرقام الشخصية.'),
   how_the_app_works: pair('How the app works', 'كيف يعمل التطبيق'),
-  app_works_explainer: pair('Pick your profile, complete the warm-up phase, log the actual weight/reps, rate only the final set as easy, medium, or very hard, and finish. The app works offline first and syncs when the server is reachable.', 'اختر ملفك، أكمل مرحلة الإحماء، سجّل الوزن والتكرار كما حدثا فعلًا، وقيّم المجموعة الأخيرة وحدها: سهل أو متوسط أو صعب جدًا، ثم أنهِ الجلسة. التطبيق يعمل دون اتصال أولًا، ويزامن حين يتوفّر الخادم.'),
+  app_works_explainer: pair('Pick your profile, complete the warm-up phase, log the actual weight/reps of every set, and finish. Each set starts from what you logged for it last time. The app works offline first and syncs when the server is reachable.', 'اختر ملفك، أكمل مرحلة الإحماء، سجّل الوزن والتكرار لكل مجموعة كما حدثا فعلًا، ثم أنهِ الجلسة. كل مجموعة تبدأ من اللي سجّلته لها آخر مرة. التطبيق يعمل دون اتصال أولًا، ويزامن حين يتوفّر الخادم.'),
   reentry_weeks: pair('Weeks 1–2 = re-entry', 'الأسبوعان 1–2 = تدرّج عودة'),
-  progression_explainer: pair('Completed reps drive every increase. Very hard blocks an earned increase; easy can bring a reps-earned increase forward by one complete exposure. Effort never raises load on its own.', 'التكرارات المكتملة هي التي تحرّك الوزن. «صعب جدًا» يمنع زيادة استحققتها، و«سهل» يقدّمها بجلسة واحدة. والجهد وحده لا يرفع الوزن أبدًا.'),
+  help_history_first: pair('Logged history wins over a lower starter level.', 'سجلّك المسجَّل يسبق أي مستوى ابتدائي أقل.'),
+  progression_explainer: pair('Completed reps drive every increase: when every set reaches the top of the range in two sessions in a row, the load goes up one step of the machine. Two sessions under the bottom of the range bring it down one step.', 'التكرارات المكتملة هي اللي تحرّك الوزن: إذا وصلت كل المجموعات أعلى المدى جلستين ورا بعض، يرتفع الوزن درجة وحدة من الجهاز. وجلستان تحت أقل المدى تنزّله درجة.'),
   technique_reentry: pair('Technique beats weight. No grinding in the re-entry ramp.', 'الأداء أهم من الوزن. ولا إجهاد في تدرّج العودة.'),
   help_library_videos: pair('Exercises include Mohannad clips and a Jeff Nippard form link. You can add custom videos, hide videos from session view, edit JN links, and add custom exercises.', 'لكل تمرين مقاطع مهنّد ورابط أداء من Jeff Nippard. ويمكنك إضافة فيديوهات خاصة، وإخفاء الفيديو من شاشة الجلسة، وتعديل روابط JN، وإضافة تمارين خاصة.'),
   help_data: pair('Profiles stay separate, sync is automatic, and the server keeps revisions plus scheduled backups. Settings has restore from backup, cloud download, and local JSON export/import. Offline logging stays on this device until sync returns.', 'تبقى الملفات منفصلة، والمزامنة تلقائية، والخادم يحفظ المراجعات ونسخًا احتياطية مجدولة. وفي الإعدادات استعادة من نسخة احتياطية وتنزيل سحابي وتصدير واستيراد محلي. وما يُسجَّل دون اتصال يبقى على هذا الجهاز حتى تعود المزامنة.'),
@@ -484,7 +455,6 @@ export const LOCALE = Object.freeze({
   gym_launcher_default: pair('Default opens IN2 Fitness via the scope.bit:// scheme, falls back to the App Store.', 'افتراضيًا يفتح IN2 Fitness عبر scope.bit://، وإن تعذّر فمتجر التطبيقات.'),
   gym_launcher_shortcut: pair("If that doesn't work, create an iOS Shortcut named {name} and paste shortcuts://run-shortcut?name={name}, then tap Test below.", 'إن لم ينجح، أنشئ اختصار iOS باسم {name} والصق shortcuts://run-shortcut?name={name}، ثم اضغط «اختبار» بالأسفل.'),
   profile_is_level: pair('Your profile is {level}', 'ملفك: {level}'),
-  help_history_effort: pair('Logged history wins over a lower starter level. The final-set effort ranking is simple: easy, medium, or very hard, never a numeric rep estimate.', 'سجلّك المسجَّل يسبق أي مستوى ابتدائي أقل. وتقييم المجموعة الأخيرة بسيط: سهل أو متوسط أو صعب جدًا، ولا تقدير رقمي للتكرارات أبدًا.'),
   help_protein_sleep: pair('Protein target: 131-180 g/day. Sleep 7+ hours.', 'هدف البروتين: 131–180 غ/يوم. والنوم 7 ساعات فأكثر.'),
   // These descriptions are intentionally visible but programme-tied until D6.
   programme_tied_ppl_help: programmeTiedPair('Push/Pull/Legs cycles by history. Pick any 3 days with 24h+ rest.', 'Push/Pull/Legs cycles by history. Pick any 3 days with 24h+ rest.'),
@@ -581,6 +551,10 @@ export const LOCALE = Object.freeze({
   last_on_device: pair('Last time on {device}', 'آخر مرة على {device}'),
   exercise_log: pair('What you have lifted here', 'اللي رفعته هنا'),
   exercise_log_empty: pair('Nothing logged for this movement yet.', 'ما فيه سجل لهذه الحركة بعد.'),
+  // 2026-11-11: every session of this movement, opened from the ⚙️ sheet.
+  previous_log: pair('Previous log', 'السجل السابق'),
+  previous_log_back: pair('Back to the exercise', 'رجوع للتمرين'),
+  log_col_all_sets: pair('Sets', 'المجموعات'),
   n_sets: pair('{n} sets', '{n} مجموعات'),
   sync_blocked_by_browser: pair('Chrome blocked this — it needs permission for local network access. Safari works, or allow it in Chrome.', 'كروم حجب الاتصال — يحتاج إذن الوصول للشبكة المحلية. سفاري يشتغل، أو اسمح له في كروم.'),
   equipment_section: pair('Equipment', 'الجهاز'),
@@ -672,11 +646,6 @@ export const LOCALE = Object.freeze({
   set_weight: pair('Weight', 'الوزن'),
   set_reps: pair('Reps', 'التكرار'),
 
-  easy: pair('Easy', 'سهل'),
-  medium: pair('Medium', 'متوسط'),
-  very_hard: pair('Very hard', 'صعب جدًا'),
-  final_set_effort: pair('Final-set effort', 'مجهود المجموعة الأخيرة'),
-  final_set_prompt: pair('Final set: tap easy, medium, or very hard first.', 'للمجموعة الأخيرة: اختر سهل أو متوسط أو صعب جداً أولاً.'),
   // The fat-finger check (core/engine.js loadSanityCeilingKg). It states the
   // number back to him and asks for the same tap again — it never says the
   // load is wrong, because on a machine stack it sometimes is not.

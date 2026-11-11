@@ -22,9 +22,9 @@ Scope: independently testable ES-module foundation for catalogue, event log, vol
 
 # Gates: v16 Phase 2 session structure
 
-- [x] G4: D16/D17 final-set effort only brakes reps-earned increases
+- [x] G4: D16/D17 retired 2026-11-11 — effort never changes progression; reps alone do
   CHECK: node --test --test-name-pattern="D16/D17" tests/phase2.test.mjs
-  EXPECT: very_hard is never higher than the same no-effort input
+  EXPECT: any stored effort (easy/medium/very_hard/legacy) gives the identical result to no effort
   EVIDENCE: exit=0; 1 pass, 0 fail
 
 - [x] G5: D18/D19 and the ordered warm-up phase are data-checked

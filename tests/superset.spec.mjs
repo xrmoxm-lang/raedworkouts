@@ -140,40 +140,16 @@ test('the alternation stops once the partner owes nothing', async ({ page }) => 
 
 // ---- per-set effort ---------------------------------------------------------
 //
-// 86 of the 104 rows in his programme prescribe DIFFERENT efforts across their
-// sets — chest_press_machine is [7, 7, 8] — and the card rendered one word taken
-// from `Math.max`. «صعب» sat under a row whose first two sets are prescribed
-// «متوسط», so the app was asking for more than the programme does on 83% of what
-// he lifts. He feeds those sets back as fatigue, and the deload trigger reads
-// fatigue.
-test('the card states the effort of each set, not the hardest one', async ({ page }) => {
+// Until 2026-11-11 the card printed one effort word per set («متوسط · صعب»).
+// Raed retired every easy/medium/hard word that day: «remove it… easy, hard,
+// medium». The per-set targets stay in the plan (the test below still holds the
+// programme to both shapes); the card no longer prints them.
+test('the card prints no effort target', async ({ page }) => {
   await intoSession(page);
-
-  const shown = await page.evaluate(() => {
-    const node = document.querySelector('[data-prescribed-effort]');
-    return node ? node.textContent.replace(/\s+/g, ' ').trim() : null;
-  });
-  expect(shown, 'the prescribed effort must be on the card').toBeTruthy();
-
-  const rpe = await page.evaluate(() => {
-    const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
-    const active = JSON.parse(localStorage[key]).active_session;
-    const first = Object.values(active.exercises)[0].planned;
-    return [first.rpe_set1, first.rpe_set2, first.rpe_set3].filter((v) => Number.isFinite(v));
-  });
-  const distinct = new Set(rpe).size;
-  // The word count follows the prescription: one word when every set shares a
-  // target, one per set when they differ.
-  const words = shown.split('·').map((w) => w.trim()).filter(Boolean);
-  if (distinct > 1) {
-    expect(words.length, `RPE ${JSON.stringify(rpe)} must not collapse to one word`).toBe(rpe.length);
-    expect(new Set(words).size, 'and the words must actually differ').toBeGreaterThan(1);
-  } else {
-    expect(words.length, 'identical targets stay one word — repeating it is noise').toBe(1);
-  }
+  await expect(page.locator('[data-prescribed-effort], .effort-line')).toHaveCount(0);
 });
 
-test('a row whose sets share a target still reads as one word', async ({ page }) => {
+test('the plan still carries both effort shapes (uniform and varying rows)', async ({ page }) => {
   await intoSession(page);
   const counts = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));

@@ -20,11 +20,6 @@ const dateParts = (date, options) => new Intl.DateTimeFormat(dateLocale(), optio
   .formatToParts(date)
   .map((part) => (/\d/.test(part.value) ? h('span', { class: 'num' }, part.value) : part.value));
 const monthKey = (date) => `${date.getFullYear()}-${date.getMonth()}`;
-// Spelled out, not `t(set.effort)`: the locale gate reads every lookup call to
-// prove its key has an entry, and a computed key defeats it. The domain accepts
-// only these three, so anything else is legacy and shows no word rather than an
-// untranslated English one on an Arabic-only screen.
-const EFFORT_LABEL = { easy: () => t('easy'), medium: () => t('medium'), very_hard: () => t('very_hard') };
 
 // A session logged before session_name existed, or one whose programme entry has
 // since been renamed, must never render the word «undefined» at him.
@@ -187,8 +182,8 @@ function buildDetail(detail, sess, byId) {
         && parseInt(s.reps, 10) === sessionPR.reps;
       if (i) line.appendChild(document.createTextNode(' · '));
       line.appendChild(h('span', { class: 'num' }, `${s.weight}×${s.reps}`));
-      const effort = EFFORT_LABEL[s.effort]?.();
-      if (effort) line.appendChild(h('span', { class: 'muted' }, ' ' + effort));
+      // An old set may still carry `effort` (the rating removed 2026-11-11);
+      // it is stored, never shown.
       if (isPR) line.appendChild(h('span', { class: 'muscle-tag pr-mark' }, t('pr_mark')));
     });
     detail.appendChild(line);
