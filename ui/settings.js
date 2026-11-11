@@ -625,7 +625,7 @@ function buildHelpCard() {
     ));
   });
   card.appendChild(h('h2', {}, t('reentry_weeks')));
-  card.appendChild(h('p', {}, tf('profile_is_level', { level: experienceLabel(state.profile?.experience || 'detrained') }), ' ', t('help_history_effort')));
+  card.appendChild(h('p', {}, tf('profile_is_level', { level: experienceLabel(state.profile?.experience || 'detrained') }), ' ', t('help_history_first')));
   card.appendChild(h('h2', {}, t('progressive_overload')));
   card.appendChild(h('p', {}, t('progression_explainer')));
   card.appendChild(h('h2', {}, t('rules')));

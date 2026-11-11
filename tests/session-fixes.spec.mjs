@@ -560,46 +560,28 @@ test('weekly volume reads the same on every device', async ({ page }) => {
   expect(volume.trim()).toMatch(/^\d{1,3}(,\d{3})*$/);
 });
 
-test('the effort picker appears by itself when the second-to-last set is ticked', async ({ page }) => {
+// Replaces «the effort picker appears by itself…»: the picker and the
+// final-set gate that demanded it were removed on 2026-11-11 (Raed: «remove it
+// from the progression completely: easy, hard, medium»).
+test('the last working set ticks on the first tap — no rating is asked for', async ({ page }) => {
   await intoSession(page);
-
-  // Raed removed the trigger button: "الزر الزائد هذا... ما يحتاج يكون ظاهر،
-  // لأنه هو أصلًا أوتوماتيك". A face whose only job is to open something that
-  // opens on its own is chrome, so there is no trigger to assert on any more.
-  await expect(page.locator('[data-effort-trigger]')).toHaveCount(0);
-  await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(0);
-
-  // Ramp sets first — the app requires them before a working set can be ticked.
   const ramps = page.locator('[data-set-kind="warmup"]');
   for (let i = 0; i < await ramps.count(); i += 1) {
     await ramps.nth(i).locator('.set-check').click();
     await page.waitForTimeout(200);
   }
-
-  // Tick every working set except the last. The picker must be open by then,
-  // because the last set is the one that needs it.
   const working = page.locator('[data-set-kind="working"]');
   const total = await working.count();
-  for (let i = 0; i < total - 1; i += 1) {
+  for (let i = 0; i < total; i += 1) {
     const row = working.nth(i);
     await row.locator('input').nth(0).fill('40');
     await row.locator('input').nth(1).fill('10');
     await page.waitForTimeout(150);
     await row.locator('.set-check').click();
     await page.waitForTimeout(300);
+    await expect(page.locator('.effort-strip, .effort-picker')).toHaveCount(0);
   }
-
-  await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(1);
-  // v17 dropped the three faces: the word IS the choice now, and the stylesheet
-  // draws the coloured rule per position. Same invariant — three labelled
-  // choices exist, in the same order, easiest first.
-  const words = await page.locator('.effort-strip .effort-word').allTextContents();
-  expect(words).toEqual(['سهل', 'متوسط', 'صعب جدًا']);
-
-  await page.locator('.effort-strip .effort-picker button').nth(1).click();
-  await page.waitForTimeout(600);
-  // The choice persists and the strip stays visible showing it.
-  await expect(page.locator('.effort-strip:not([hidden])')).toHaveCount(1);
+  await expect(working.nth(total - 1).locator('.set-check')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a finished session shows the time it took, not the exercise card again', async ({ page }) => {

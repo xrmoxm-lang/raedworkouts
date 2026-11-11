@@ -2,7 +2,6 @@ import { programmedRepRange } from './catalogue.js';
 import { clampWorkingWeight, stepFor } from './clamps.js';
 
 const COUNTED_KINDS = new Set(['working', 'calibration']);
-const EFFORT_LEVELS = new Set(['easy', 'medium', 'very_hard']);
 
 function fail(message) {
   throw new Error(`Progression invariant failed: ${message}`);
@@ -24,23 +23,6 @@ function isCountedSet(set) {
 
 function completedWorkingSets(sets) {
   return (sets || []).filter(isCountedSet);
-}
-
-/**
- * Effort is intentionally an exercise-level, end-of-exercise check-in. The UI
- * asks for it after the final working set only, so accepting a rating on an
- * earlier set would turn a coarse ranking back into per-set friction/noise.
- */
-function finalWorkingSetEffort(working) {
-  let effort = null;
-  for (let index = 0; index < working.length; index += 1) {
-    const value = working[index].effort;
-    if (value == null || value === '') continue;
-    if (!EFFORT_LEVELS.has(value)) fail('effort must be easy, medium, or very_hard');
-    if (index !== working.length - 1) fail('effort may be captured on the final working set only');
-    effort = value;
-  }
-  return effort;
 }
 
 /**
@@ -112,10 +94,12 @@ function clampContext({ catalogue, exercise, state, history, bodyweightKg, equip
 }
 
 /**
- * Deterministic double progression. Completed repetitions are the controller;
- * one ordinal final-set effort rating can only delay an earned increase or let
- * a reps-earned increase land one complete exposure sooner. It can never make
- * a load increase happen without the rep criterion.
+ * Deterministic double progression. Completed repetitions are the ONLY
+ * controller. Raed 2026-11-11: «remove it from the progression completely:
+ * easy, hard, medium». The final-set rating used to delay an earned increase
+ * (very_hard) or bring one forward (easy); it no longer exists, and an `effort`
+ * field still present on an old logged set is ignored rather than validated —
+ * stored history is never migrated or rejected for carrying it.
  */
 export function progressExercise({
   catalogue,
@@ -139,7 +123,6 @@ export function progressExercise({
   const working = completedWorkingSets(completedSets);
   const hitTop = hitTopOfRange(working, setsTarget, high);
   const fellBelowLow = fellBelowRepFloor(working, setsTarget, low);
-  const finalEffort = finalWorkingSetEffort(working);
   const topStreak = hitTop ? Number(state.consecutive_top || 0) + 1 : 0;
   const lowStreak = fellBelowLow ? Number(state.consecutive_below_low || 0) + 1 : 0;
   const percentage = Number(increment ?? defaultIncrement(exercise));
@@ -156,30 +139,7 @@ export function progressExercise({
   };
   const context = clampContext({ catalogue, exercise, state: base, history, bodyweightKg, equipmentStepKg, weeklyVolume });
 
-  // A final-set "easy" means the exercise felt easy throughout. It can bring
-  // forward only an increase that the completed top-range reps have already
-  // earned (one complete top exposure instead of two); it is never a load
-  // signal by itself. "very_hard" is a brake on either earned path.
-  const increaseEarnedByReps = topStreak >= 2;
-  const increaseEarnedEarlyByEasy = hitTop && finalEffort === 'easy' && topStreak >= 1;
-  const shouldAttemptIncrease = increaseEarnedByReps || increaseEarnedEarlyByEasy;
-
-  if (shouldAttemptIncrease) {
-    if (finalEffort === 'very_hard') {
-      return Object.freeze({
-        action: 'hold',
-        reason: 'very_hard on the final working set blocked the reps-earned load increase',
-        next_state: Object.freeze({
-          ...base,
-          consecutive_top: 0,
-          consecutive_below_low: 0,
-        }),
-        clamp: null,
-        hit_top: hitTop,
-        fell_below_low: fellBelowLow,
-        effort: finalEffort,
-      });
-    }
+  if (topStreak >= 2) {
     // Ten percent-ish OR one equipment step, whichever is larger — the same
     // floor `ceilingAbove` gives the clamps. Before Round 6 every step was the
     // flat 2.5 default, so 5% of a 50 kg leg press (52.5) happened to land on
@@ -197,15 +157,12 @@ export function progressExercise({
     return Object.freeze({
       action: safety.accepted ? 'increase' : 'hold',
       reason: safety.accepted
-        ? (increaseEarnedEarlyByEasy && !increaseEarnedByReps
-          ? 'final-set easy brought a reps-earned increase forward by one complete exposure'
-          : 'two consecutive complete exposures reached rep_high on every set')
+        ? 'two consecutive complete exposures reached rep_high on every set'
         : safety.rejection_reason,
       next_state: Object.freeze(next),
       clamp: safety,
       hit_top: hitTop,
       fell_below_low: fellBelowLow,
-      effort: finalEffort,
     });
   }
 
@@ -225,7 +182,6 @@ export function progressExercise({
       clamp: safety,
       hit_top: hitTop,
       fell_below_low: fellBelowLow,
-      effort: finalEffort,
     });
   }
 
@@ -236,6 +192,5 @@ export function progressExercise({
     clamp: null,
     hit_top: hitTop,
     fell_below_low: fellBelowLow,
-    effort: finalEffort,
   });
 }

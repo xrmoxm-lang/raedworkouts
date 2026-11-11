@@ -1,6 +1,6 @@
 /* The exercise card and its sheets: settings, swap, add, substitution scope. */
 
-import { $, h, isolate, toast } from '../core/dom.js';
+import { $, h, toast } from '../core/dom.js';
 import {
   EQUIPMENT_KINDS,
   advanceSuperset,
@@ -8,6 +8,7 @@ import {
   detectPR,
   equipmentStepSource,
   exerciseHistoryRows,
+  exerciseHistorySessions,
   exercisePrefs,
   getActiveProgramme,
   getLastPerformance,
@@ -15,24 +16,22 @@ import {
   loadSanityCeilingKg,
   nextEarnedLoad,
   originalExerciseName,
-  prescribedEffortSequence,
   prescribedRestSeconds,
   recordSubstitution,
   rememberDevice,
   revertPR,
-  runRampRules,
   suggestNextWeight,
   supersetPartner,
   supersetPartnerEntry,
   warmupText,
   workingRepTarget,
+  workingSetPrefill,
 } from '../core/engine.js';
 import {
   editableWeightValue,
   fmtDate,
   fmtDateShort,
   fmtLoadKg,
-  hasWorkingWeight,
   muscleLabel,
   suggestedWeightPlaceholder,
   t,
@@ -62,27 +61,11 @@ import {
 } from '../core/videos.js';
 import { hasValidWorkingValues, isRunnerExerciseResolved } from '../domain/runner-session.js';
 import { figure } from '../ui/figure.js';
-import { buildVideoTile, effortPicker, explainMark } from '../ui/kit.js';
+import { buildVideoTile, explainMark } from '../ui/kit.js';
 
 // mm:ss for a prescribed rest. The head and the sheet both print it, so they
 // cannot drift apart into 2:30 and 2:3.
 const restClock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-
-// The effort question must be reachable the moment it appears: below the fold
-// it sits under the fixed tab bar, and the session cannot advance without the
-// answer. Bring it clear once, only when it is actually covered. (The rest dock
-// that used to be a second occluder here is gone — round 6's floating clock is
-// 56px and lives where he parks it.)
-function revealEffortStrip(strip) {
-  requestAnimationFrame(() => {
-    if (!strip.isConnected || strip.hasAttribute('hidden')) return;
-    const box = strip.getBoundingClientRect();
-    const tab = document.querySelector('.tab-bar');
-    const floor = tab && !tab.classList.contains('hidden') ? tab.getBoundingClientRect().top : window.innerHeight;
-    if (box.top >= 0 && box.bottom <= floor) return;
-    strip.scrollIntoView({ block: 'end', behavior: 'auto' });
-  });
-}
 
 // Repaint ONE set row after an edit demoted it, without a render(). Removing the
 // ✓ and the `.done` tint is half of it: the accent has to move too, because the
@@ -276,9 +259,8 @@ export function renderExerciseCard(ex_id, exState) {
   const repTop = String(planned.reps).split('-').map((part) => parseInt(part, 10)).filter(Number.isFinite).pop();
   // Built here, appended after the sets: it is the target he checks each row
   // against, so it belongs beside the rows, not stacked on top of them.
-  const effortSequence = prescribedEffortSequence(planned);
   // During a deload the goal is NOT to earn a load increase, so promising one
-  // next to «خفيف — بقصد» would contradict itself on the same line. The row
+  // in a deliberately light week would contradict itself. The row
   // carries the flag through from the deload overlay.
   // Round 6 §D.3: the goal names the load it earns and the step it moves by —
   // «أكمل 10 في كل المجموعات ← 30 كغ (+2.5)» — resolved from the machine's own
@@ -296,25 +278,9 @@ export function renderExerciseCard(ex_id, exState) {
           h('bdi', { class: 'num', dir: 'ltr', 'data-step-delta': 'true' }, `(+${fmtLoadKg(earned.delta)})`),
         ]
       : tf('reps_goal', { n: repTop });
-  // The effort target gets its OWN line rather than trailing the goal
-  // sentence.
-  const EFFORT_SHORT = {
-    effort_target_easy: () => t('effort_short_easy'),
-    effort_target_moderate: () => t('effort_short_moderate'),
-    effort_target_hard: () => t('effort_short_hard'),
-    effort_target_near_failure: () => t('effort_short_near_failure'),
-  };
-  const effortWords = effortSequence.length === 1
-    // One target for every set: the expressive wording is the whole story.
-    ? [t(effortSequence[0])]
-    : effortSequence.map((key) => (EFFORT_SHORT[key] ? EFFORT_SHORT[key]() : t(key)));
-  const effortRow = effortWords.length
-    ? h('div', { class: 'reps-goal tiny effort-line', 'data-prescribed-effort': 'true' },
-        h('span', { class: 'effort-line-label' }, t('effort_label')),
-        // Set order is left-to-right in the list above, so the sequence is
-        // isolated as one run and reads in that same order.
-        isolate(effortWords.join(' · ')))
-    : null;
+  // The prescribed-effort line («الجهد: خفيف · متوسط · صعب») was removed with the
+  // effort rating on 2026-11-11 — Raed: «remove it… easy, hard, medium». The
+  // programme's per-set RPE stays in data.js; it is simply not printed.
   const repsGoalRow = repTop
     ? h('div', { class: 'reps-goal tiny', 'data-reps-goal': 'true' }, goalText)
     : null;
@@ -365,7 +331,10 @@ export function renderExerciseCard(ex_id, exState) {
     const isWarm = set.is_warmup;
     const setNum = isWarm ? `W${idx+1}` : `${idx - exState.sets.filter(s => s.is_warmup).length + 1}`;
     const workingSets = exState.sets.filter((item) => !item.is_warmup);
-    const isFinalWorkingSet = !isWarm && set === workingSets[workingSets.length - 1];
+    // This row's set number among the working rows, from 0 — the key into the
+    // previous session's sets for what is shown behind the boxes.
+    const workingIdx = isWarm ? -1 : workingSets.indexOf(set);
+    const behind = isWarm ? null : workingSetPrefill(actualId, workingIdx, planned);
     // One edit to a ticked row, done in place. A full render() would take the
     // caret out of the box he is typing in, which is why this repaints the two
     // marks («.done» and the ✓) and moves the accent itself.
@@ -397,16 +366,6 @@ export function renderExerciseCard(ex_id, exState) {
           // 0 kg — could be created and never ticked complete.
           if (!isWarm && !hasValidWorkingValues(set)) {
             toast(t('required'));
-            return;
-          }
-          if (isFinalWorkingSet && !set.effort) {
-            // Refusing has to REVEAL the thing it is asking for: the picker used
-            // to open only when the second-to-last set was ticked, so «اختر الجهد»
-            // appeared with no picker anywhere on screen.
-            set.effort_prompted = true;
-            saveLocal();
-            render();
-            toast(t('final_set_prompt'));
             return;
           }
           if (!isWarm && exState.sets.some((prior, priorIndex) => priorIndex < idx && prior.is_warmup && !prior.completed)) {
@@ -443,10 +402,6 @@ export function renderExerciseCard(ex_id, exState) {
         set.completed = !set.completed;
         // Unticking must undo the tick WHOLE. It used to leave the PR behind.
         if (!set.completed && !isWarm) revertPR(actualId, set);
-        // A ramp set that came back easy is the load probe of research/06
-        // §6.3. Run it before the re-render so the working rows below already
-        // carry the derived weight when he looks down at them.
-        if (set.completed && isWarm) runRampRules(exState, actualId);
         saveLocal();
         render();
         if (set.completed && !isWarm) {
@@ -490,7 +445,12 @@ export function renderExerciseCard(ex_id, exState) {
         // lang/dir force Latin digits and a number pad. Without them an Arabic
         // keyboard opens and Raed has to switch language for every set.
         lang: 'en', dir: 'ltr',
-        placeholder: exState.machine_weight ? t('machine_weight_short') : suggestedWeightPlaceholder(sug.weight),
+        // Behind the box: the previous entry for this set number (the same
+        // source the session start prefilled it from), so clearing the box shows
+        // what he did last time rather than a computed suggestion.
+        placeholder: exState.machine_weight
+          ? t('machine_weight_short')
+          : suggestedWeightPlaceholder(behind ? behind.weight : sug.weight),
         readOnly: Boolean(exState.machine_weight),
         value: editableWeightValue(set.weight),
         'data-runner-weight-input': 'true',
@@ -506,7 +466,7 @@ export function renderExerciseCard(ex_id, exState) {
       h('input', {
         type: 'number', step: '1', min: '1', inputmode: 'numeric',
         lang: 'en', dir: 'ltr',
-        placeholder: String(planned.reps),
+        placeholder: behind && behind.source !== 'starter' ? String(behind.reps) : String(planned.reps),
         value: set.reps ?? '',
         'aria-label': tf('a11y_reps_for_set', { n: idx + 1 }),
         onFocus: (e) => { try { e.target.select(); } catch(_) {} },
@@ -515,55 +475,12 @@ export function renderExerciseCard(ex_id, exState) {
       }),
       check,
     );
-    // On a first exposure the ramp sets ARE the measurement — §6.3 step 2 says
-    // «Run it as warm-up set 1, 10 reps, full ROM. Log the RPE.» Only the final
-    // working set had a picker, so there was nowhere to log it.
-    const probing = isWarm && !exState.calibrated_from
-      && !(exState.sets || []).some((item) => !item.is_warmup && (hasWorkingWeight(item.weight) || item.completed));
-    // research/07 §2.7 puts a light/normal/heavy tap AFTER the last ramp set,
-    // on every exercise and not only a first exposure. The app's three
-    // efforts are already those three words.
-    const rampList = (exState.sets || []).filter((item) => item.is_warmup);
-    const isLastRamp = isWarm && rampList.length > 0 && set === rampList[rampList.length - 1];
-    const askFeel = isLastRamp && set.completed && !exState.warmup_feel_applied
-      && !exState.calibrated_from && !(exState.sets || []).some((item) => !item.is_warmup && item.completed);
-    if (probing || askFeel) {
-      const strip = h('div', { class: 'effort-strip prompting', 'data-ramp-effort': 'true' });
-      row.appendChild(h('span', { class: 'effort-slot' }));
-      strip.appendChild(effortPicker(set, () => {
-        if (set.completed) runRampRules(exState, actualId);
-        saveLocal(); render();
-      }));
-      body.appendChild(row);
-      body.appendChild(strip);
-      revealEffortStrip(strip);
-      return;
-    }
-    if (isFinalWorkingSet) {
-      // Raed: "ليش ما تحطها بشكل أنظف جنب الجلسة الأخيرة؟ ليش حاطها تحت، كأن
-      // مسبب زحمة؟" — it was a full-width block under the sets.
-      const priorSet = workingSets[workingSets.length - 2];
-      const anyPriorDone = workingSets.some((s, i) => i < workingSets.length - 1 && s.completed);
-      const promptNow = !set.effort && (!priorSet || Boolean(priorSet.completed) || anyPriorDone);
-      const openNow = Boolean(set.effort) || promptNow || Boolean(set.effort_prompted);
-      const strip = h('div', { class: 'effort-strip' + (promptNow ? ' prompting' : ''),
-                               hidden: openNow ? undefined : true });
-      row.appendChild(h('span', { class: 'effort-slot' }));
-      strip.appendChild(effortPicker(set, () => { saveLocal(); render(); }));
-      body.appendChild(row);
-      body.appendChild(strip);
-      if (promptNow) revealEffortStrip(strip);
-      return;
-    }
-    // Every other row keeps the fifth cell empty so the columns stay aligned.
-    row.appendChild(h('span', { class: 'effort-slot' }));
     body.appendChild(row);
   });
 
   // Under the rows, in the order he reads them: the target for the rows
   // above, then what he did last time.
   if (repsGoalRow) body.appendChild(repsGoalRow);
-  if (effortRow) body.appendChild(effortRow);
   if (lastTimeRow) body.appendChild(lastTimeRow);
 
   // Action row: alternatives + add set + warmup helper
@@ -895,7 +812,7 @@ function showExerciseSettings(ex_id, exState) {
         onClick: () => {
           const lastWorking = [...exState.sets].reverse().find((set) => !set.is_warmup);
           // Marked beyond-plan so the card never implies the programme asked for it.
-          exState.sets.push({ is_warmup: false, is_extra: true, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), effort: null, completed: false });
+          exState.sets.push({ is_warmup: false, is_extra: true, weight: editableWeightValue(lastWorking?.weight), reps: workingRepTarget(planned), completed: false });
           saveLocal(); close(); render();
         },
       }, t('add_set')),
@@ -952,9 +869,55 @@ function showExerciseSettings(ex_id, exState) {
           ))),
         )
       : h('div', { class: 'xs-empty' }, t('exercise_log_empty')),
+    // The table above is the last three; this opens every session. Raed
+    // 2026-11-11: «he can go see the previous history of every session of
+    // this exercise». Same sheet, same table — not a second history screen.
+    rows.length
+      ? h('button', {
+          type: 'button', class: 'btn tiny ghost', 'data-previous-log': 'true',
+          onClick: () => showExerciseHistory(ex_id, exState),
+        }, t('previous_log'))
+      : null,
   ));
 
   modal.appendChild(h('button', { class: 'btn full xs-done', onClick: close }, t('done')));
+  $('#modal-overlay').classList.add('show');
+}
+
+// «السجل السابق» — every session of this movement, newest first, every set as
+// weight × reps. It replaces the settings sheet in the same modal and its first
+// button goes back to it, so the gear stays the one way in.
+function showExerciseHistory(ex_id, exState) {
+  const actualId = exState.swapped_to || ex_id;
+  const ex = getAllExercises().find((e) => e.id === actualId);
+  const sessions = exerciseHistorySessions(actualId);
+  const modal = $('#modal');
+  modal.innerHTML = '';
+  modal.appendChild(h('div', { class: 'xs-head' },
+    h('h3', {}, h('bdi', { class: 'ltr-run' }, ex?.name || actualId)),
+    h('div', { class: 'xs-sub' }, t('previous_log')),
+  ));
+  modal.appendChild(h('section', { class: 'xs-section' },
+    sessions.length
+      ? h('table', { class: 'xs-log', 'data-previous-log-list': 'true' },
+          h('thead', {}, h('tr', {},
+            h('th', {}, t('log_col_date')),
+            h('th', {}, t('log_col_all_sets')),
+          )),
+          h('tbody', {}, sessions.map((row) => h('tr', { 'data-previous-log-row': 'true' },
+            h('td', { class: 'xs-log-date' }, fmtDateShort(row.date)),
+            h('td', { class: 'xs-log-load' },
+              h('bdi', { class: 'ltr-run' }, row.sets.map((set) => `${fmtLoadKg(set.weight)} × ${set.reps}`).join(' · '))),
+          ))),
+        )
+      : h('div', { class: 'xs-empty' }, t('exercise_log_empty')),
+  ));
+  modal.appendChild(h('button', {
+    class: 'btn ghost full', 'data-previous-log-back': 'true',
+    onClick: () => showExerciseSettings(ex_id, exState),
+  }, t('previous_log_back')));
+  modal.appendChild(h('button', { class: 'btn full xs-done',
+    onClick: () => $('#modal-overlay').classList.remove('show') }, t('done')));
   $('#modal-overlay').classList.add('show');
 }
 

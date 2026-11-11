@@ -322,11 +322,15 @@ test('every movement eventually earns more weight, accessories included', async 
   await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
   await page.waitForTimeout(1000);
 
-  const suggested = await page.evaluate(() => {
+  // Since 2026-11-11 the boxes hold the PREVIOUS entry (Raed: «what is behind
+  // in the background should be the previous entry»), so the suggestion is read
+  // from the engine the card renders its note from — the same module instance.
+  const suggested = await page.evaluate(async () => {
+    const engine = await import('/core/engine.js');
     const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
     const parsed = JSON.parse(localStorage[key]);
     return Object.fromEntries(Object.entries(parsed.active_session.exercises).map(([id, entry]) => [
-      id, (entry.sets.find((s) => !s.is_warmup) || {}).weight,
+      id, engine.suggestNextWeight(entry.swapped_to || id, entry.planned).weight,
     ]));
   });
 
@@ -601,7 +605,8 @@ test('entering the deload week explains itself, in Arabic', async ({ page }) => 
 
 // The deload must be trainable, not just reachable: two of its rows drop to a
 // single working set, and a single-set exercise is the case that used to hide
-// the effort picker the check button demanded.
+// the effort picker the check button demanded (the picker itself is gone since
+// 2026-11-11; the single-set build is still worth holding).
 test('a deload session builds with reduced sets and no errors', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
@@ -638,24 +643,21 @@ test('a deload session builds with reduced sets and no errors', async ({ page })
 
 // ---------------------------------------------------------------------------
 // The programme states an effort for every set — Block B raises it, the week-12
-// deload lowers it — and `planned.rpe` was read NOWHERE in app.js. So none of it
-// reached him. Worst case: the deload became "one fewer set" while the source
-// (research/06 §7.4) prescribes the SAME weight with the effort taken off. A
-// deload trained at normal intensity is not a deload.
-test('the card states the effort the programme asks for, and says it differently in a deload', async ({ page }) => {
+// deload lowers it. Until 2026-11-11 the card printed it as a word per set
+// («الجهد: متوسط · صعب · صعب»). Raed retired every easy/medium/hard word from the
+// app that day («remove it… easy, hard, medium»), so the card states no effort;
+// the deload still has to read differently, through the goal line.
+test('the card states no effort word, and a deload still reads differently', async ({ page }) => {
   await boot(page);
   await intoSession(page);
 
-  // Two lines since 2026-09-05: the rep goal, and the effort under it. They were
-  // one line, and three effort words after the goal sentence wrapped into a
-  // run-on. Read each from its own element.
   const read = () => page.evaluate(() => ({
     goal: document.querySelector('[data-reps-goal]')?.textContent?.trim() || '',
-    effort: document.querySelector('[data-prescribed-effort]')?.textContent?.trim() || '',
+    effort: document.querySelectorAll('[data-prescribed-effort], .effort-line').length,
   }));
 
   const normal = await read();
-  expect(normal.effort, 'a normal week must state a target effort').toMatch(/صعب|متوسط|قريب من الفشل|شبه الفشل/);
+  expect(normal.effort, 'no effort line on the card').toBe(0);
   // Round 6 §D.3: with a load to step from, the goal names the load it earns
   // («← 30 كغ (+2.5)») instead of the bare «ليرتفع الوزن».
   expect(normal.goal, 'and it still explains what earns a load increase').toMatch(/ليرتفع الوزن|← [\d.]+ كغ/);
@@ -680,7 +682,8 @@ test('the card states the effort the programme asks for, and says it differently
   await page.waitForTimeout(1000);
 
   const deload = await read();
-  expect(deload.effort, 'the deload must ask for less effort, in words').toContain('خفيف');
+  expect(deload.effort).toBe(0);
+  expect(deload.goal, 'the deload says what the week is for').toContain('قف عند');
   expect(deload.goal, 'and must NOT promise a load increase in the same breath').not.toContain('ليرتفع الوزن');
 });
 
@@ -724,10 +727,15 @@ test('the load increment comes from the equipment, learned from his own logs', a
   await page.evaluate(() => document.querySelector('#page-home button.btn.primary.full')?.click());
   await page.waitForTimeout(1000);
 
-  const suggested = await page.evaluate(() => {
+  // The boxes hold the previous entry since 2026-11-11; read the suggestion.
+  const suggested = await page.evaluate(async () => {
+    const engine = await import('/core/engine.js');
     const key = Object.keys(localStorage).find((k) => /\.state\./.test(k) && /raed/i.test(k));
     const parsed = JSON.parse(localStorage[key]);
-    const first = (id) => (parsed.active_session.exercises[id]?.sets || []).find((s) => !s.is_warmup)?.weight;
+    const first = (id) => {
+      const entry = parsed.active_session.exercises[id];
+      return entry ? engine.suggestNextWeight(entry.swapped_to || id, entry.planned).weight : undefined;
+    };
     return { press: Number(first('chest_press_machine')), curl: Number(first('biceps_curl')) };
   });
 
@@ -777,9 +785,9 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
       const entry = parsed.active_session.exercises.chest_press_machine;
       return {
         sets: (entry?.sets || []).filter((s) => !s.is_warmup).length,
-        // The effort moved to its own line on 2026-09-05, so that it can state
-        // one word PER SET instead of the hardest of the three.
-        effort: document.querySelector('[data-prescribed-effort]')?.textContent?.trim() || '',
+        // The card stopped printing effort on 2026-11-11; the cap is still in
+        // the plan the session was built from, which is where the ramp lives.
+        rpe: [entry?.planned?.rpe_set1, entry?.planned?.rpe_set2, entry?.planned?.rpe_set3].map(Number).filter(Number.isFinite),
       };
     });
   };
@@ -788,17 +796,17 @@ test('weeks 1 and 2 ramp him back in, and week 3 releases', async ({ page }) => 
   // effort band the app has words for.
   const w1 = await atWeek(0);
   expect(w1.sets, 'week 1 caps first exposure at two working sets').toBe(2);
-  expect(w1.effort).toContain('خفيف');
+  expect(Math.max(...w1.rpe), 'week 1 compounds sit at RPE 6').toBe(6);
 
   // Week 2: full sets, one band up.
   const w2 = await atWeek(4);
   expect(w2.sets, 'week 2 restores the full prescription').toBe(3);
-  expect(w2.effort).toContain('متوسط');
+  expect(Math.max(...w2.rpe), 'week 2 is one band up').toBe(7);
 
   // Week 3: the ramp is over.
   const w3 = await atWeek(8);
   expect(w3.sets).toBe(3);
-  expect(w3.effort, 'week 3 is Block A as printed').toContain('صعب');
+  expect(Math.max(...w3.rpe), 'week 3 is Block A as printed').toBeGreaterThanOrEqual(8);
 });
 
 // ---------------------------------------------------------------------------

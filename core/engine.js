@@ -388,87 +388,13 @@ export function advanceSuperset(exerciseId) {
   return partner;
 }
 
-// Calibration first, then the warm-up feel: a calibrated exercise took its load
-// FROM the ramp, so adjusting it by the feel of that same ramp would count the
-// signal twice. Only ever applied to a load the app suggested.
-export function runRampRules(exState, exerciseId) {
-  const derived = applyCalibrationProbe(exState, exerciseId);
-  if (derived) { toast(tf('calibrated_from_ramp', { kg: fmtKgValue(derived) })); return; }
-  const feel = applyWarmupFeel(exState, exerciseId);
-  if (feel) {
-    toast(feel.effort === 'very_hard'
-      ? tf('warmup_felt_heavy', { kg: fmtKgValue(feel.weight) })
-      : tf('warmup_felt_light', { kg: fmtKgValue(feel.weight) }));
-  }
-}
-
-const WARMUP_FEEL_DELTA = 0.075;
-function applyWarmupFeel(exState, exerciseId) {
-  if (!exState || exState.warmup_feel_applied) return null;
-  // A calibrated exercise already took its number FROM the ramp; adjusting it by
-  // the feel of that same ramp would count the signal twice.
-  if (exState.calibrated_from) return null;
-  const sets = exState.sets || [];
-  const ramps = sets.filter((set) => set.is_warmup);
-  const last = ramps[ramps.length - 1];
-  if (!last || !last.completed || !last.effort || last.effort === 'medium') return null;
-  const working = sets.filter((set) => !set.is_warmup && !set.completed);
-  if (!working.length) return null;
-  const step = equipmentStep(exerciseId);
-  const lighter = last.effort === 'very_hard';
-  // Every OPEN working set, both directions. Until Round 7 a heavy ramp eased
-  // only the first set («ease into your first working set», research/06) and
-  // the rest stayed at the load the ramp had just said was too much. Raed
-  // 2026-09-28: «warm-up easy/difficult downgrades the weight on only a single
-  // set, not the rest» — he wants all of them. Sets he already finished are
-  // his and are not in `working`.
-  const targets = working;
-  let changed = 0;
-  for (const set of targets) {
-    const current = Number(set.weight);
-    if (!(current > 0)) continue;
-    const scaled = current * (lighter ? 1 - WARMUP_FEEL_DELTA : 1 + WARMUP_FEEL_DELTA);
-    let next = roundToGymIncrement(scaled, step);
-    // Rounding to the equipment step can swallow the whole adjustment on a
-    // light load — 10 kg ±7.5% is 9.25/10.75, both of which round back to 10
-    // on a 2.5 kg step.
-    if (next === current) next = lighter ? nextStepDown(current, step) : nextStepUp(current, step);
-    if (next > 0 && next !== current) { set.weight = next; changed += 1; }
-  }
-  if (!changed) return null;
-  exState.warmup_feel_applied = last.effort;
-  return { effort: last.effort, weight: targets[0].weight };
-}
-
-function terminalRampPct(rampSets) {
-  const n = Number(rampSets) || 0;
-  if (n <= 0) return 0;
-  if (n === 1) return 0.60;
-  if (n === 2) return 0.70;
-  return 0.85;
-}
-
-// Fills the working sets of a first exposure from a ramp set that came back
-// easy. Returns the derived weight, or null when the probe does not apply.
-function applyCalibrationProbe(exState, exerciseId) {
-  if (!exState || exState.calibrated_from) return null;
-  const sets = exState.sets || [];
-  const ramps = sets.filter((set) => set.is_warmup);
-  if (!ramps.length) return null;
-  const working = sets.filter((set) => !set.is_warmup);
-  // Not a first exposure if any working set already carries a load.
-  if (working.some((set) => hasWorkingWeight(set.weight) || set.completed)) return null;
-  const hit = ramps.find((set) => set.completed && set.effort === 'easy' && hasWorkingWeight(set.weight));
-  if (!hit) return null;
-  const pct = terminalRampPct(ramps.length);
-  if (!pct) return null;
-  const derived = roundToGymIncrement(Number(hit.weight) / pct, equipmentStep(exerciseId));
-  if (!(derived > 0)) return null;
-  for (const set of working) set.weight = derived;
-  exState.calibrated_from = { weight: Number(hit.weight), pct, ramps: ramps.length };
-  return derived;
-}
-
+// The two ramp rules that read a ramp set's FEEL — the first-exposure load probe
+// (research/06 §6.3: «the ramp set that came back easy») and the warm-up feel
+// adjust (research/07 §2.7, ±7.5% on «light»/«heavy») — were removed on
+// 2026-11-11 with the effort rating itself. Raed: «remove it from the
+// progression completely: easy, hard, medium». A ramp set is a warm-up again
+// and nothing else: the working sets keep the previous entry (workingSetPrefill)
+// or the starter rule, and with no history at all the box reads «معايرة».
 export function rampLoadsFor(weight, count, step) {
   const s = isLadderStep(step) ? step : (Number(step) > 0 ? Number(step) : 2.5);
   if (count <= 1) {
@@ -657,9 +583,9 @@ export function suggestNextWeight(exercise_id, planned) {
       ? { weight: Number(historicWeight), note: t('why_last_logged') }
       : { weight: null, note: t('why_calibrate') };
   }
-  // Two different sets, two questions: the WEIGHT comes from the heaviest working
-  // set (the last one walks him backwards when he drops the load on a final set),
-  // the EFFORT from the final set, the only set effort is ever recorded on.
+  // The WEIGHT comes from the heaviest working set (the last one walks him
+  // backwards when he drops the load on a final set). No effort is read: reps
+  // are the only controller (2026-11-11).
   const finalSet = workingSets[workingSets.length - 1];
   const lastTopSet = workingSets.reduce(
     (best, set) => ((Number(set.weight) || 0) > (Number(best.weight) || 0) ? set : best),
@@ -675,12 +601,10 @@ export function suggestNextWeight(exercise_id, planned) {
   // had the gate, so the two controllers cannot disagree about it again.
   const latestSetsTarget = exposureSetsTarget(latest, planned);
   const allHitTarget = hitTopOfRange(workingSets, latestSetsTarget, topReps);
-  const finalEffort = finalSet.effort || null;
   const prevPerformance = last2[1];
   const prevSets = (prevPerformance?.sets || []).filter(isCountableWorkingSet);
   const prevSetsTarget = exposureSetsTarget(prevPerformance, planned);
-  // Check if last 2 sessions both hit target
-  const isAccessory = ex.pattern && ex.pattern.startsWith('isolation');
+  // Check if last 2 sessions both hit target.
   // Accessories still add reps BEFORE weight — that half of the rule is sound
   // and is enforced by the two-consecutive-sessions gate below, not by the
   // size of the step.
@@ -689,9 +613,6 @@ export function suggestNextWeight(exercise_id, planned) {
   if (allHitTarget && last2.length === 2) {
     const prevAllHit = hitTopOfRange(prevSets, prevSetsTarget, topReps);
     if (prevAllHit) {
-      if (finalEffort === 'very_hard') {
-        return { weight: lastTopSet.weight, note: t('why_hold_very_hard') };
-      }
       if (bump) {
         // On the equipment's grid (nextStepUp), and the note names the load it
         // lands on and the real delta — «ارفع 2.5 كغ» over a 4.5 kg stack was
@@ -721,15 +642,6 @@ export function suggestNextWeight(exercise_id, planned) {
       const weight = nextStepDown(lastTopSet.weight, bump);
       return { weight, note: tf('why_regress', { reps: bottomReps, kg: fmtLoadKg(weight) }) };
     }
-  }
-  // Deliberately NOT for accessories: one easy session is the moment to add a
-  // rep, not load. They only graduate on the two-session branch above.
-  if (allHitTarget && finalEffort === 'easy' && bump && !isAccessory) {
-    const up = nextStepUp(lastTopSet.weight, bump);
-    return clampedIncreaseResult(
-      exercise_id, lastTopSet.weight, up,
-      tf('why_easy_bump', { reps: topReps, kg: fmtLoadKg(up - Number(lastTopSet.weight)), target: fmtLoadKg(up) }),
-    );
   }
   // A machine that carries its own stack logs 0, and 0 is a real load — but
   // it is a load that cannot go up.
@@ -814,29 +726,6 @@ export function estimateSessionMinutes(session) {
   // To the nearest five, because a minute-accurate estimate would be a lie of a
   // different kind.
   return Math.max(10, Math.round((WARMUP_MINUTES + seconds / 60) / 5) * 5);
-}
-
-// The prescribed effort, in words rather than a number.
-const effortKeyForRpe = (rpe) => {
-  if (rpe <= 6) return 'effort_target_easy';
-  if (rpe <= 7) return 'effort_target_moderate';
-  if (rpe <= 8) return 'effort_target_hard';
-  return 'effort_target_near_failure';
-};
-function prescribedRpeValues(planned) {
-  const values = [planned?.rpe_set1, planned?.rpe_set2, planned?.rpe_set3]
-    .map(Number).filter(Number.isFinite);
-  if (values.length) return values;
-  // Fall back to the joined `rpe` string the programme row also carries.
-  return (String(planned?.rpe || '').match(/\d+(?:\.\d+)?/g) || [])
-    .map(Number).filter(Number.isFinite);
-}
-// The effort target of EACH set, not the hardest of them.
-export function prescribedEffortSequence(planned) {
-  const all = prescribedRpeValues(planned);
-  if (!all.length) return [];
-  const keys = all.map(effortKeyForRpe);
-  return new Set(keys).size === 1 ? [keys[0]] : keys;
 }
 
 // The load increment, from the equipment — not from a body-part guess.
@@ -1081,6 +970,57 @@ export function exerciseHistoryRows(exerciseId, limit = 6) {
     });
   }
   return rows;
+}
+
+// Every session of one movement, newest first, each with EVERY working set he
+// logged (weight × reps). Raed 2026-11-11: «he can go see the previous history
+// of every session of this exercise». Uncapped, unlike exerciseHistoryRows
+// (which the settings sheet uses for its three-row summary). Same lookup, so a
+// swap is listed under the movement he actually performed. No effort: the
+// field may still be stored on old sets and is ignored.
+export function exerciseHistorySessions(exerciseId) {
+  const out = [];
+  for (let i = (state.history || []).length - 1; i >= 0; i--) {
+    const session = state.history[i];
+    const entry = findPerformedEntry(session, exerciseId);
+    const sets = (entry?.sets || []).filter(isCountableWorkingSet)
+      .map((set) => ({ weight: Number(set.weight), reps: Number(set.reps) }));
+    if (!sets.length) continue;
+    out.push({ date: session.date, device: entry.device || '', sets });
+  }
+  return out;
+}
+
+// What goes in working set N's boxes when a session starts (and behind them, as
+// the placeholder). Raed 2026-11-11: «what is behind in the background should be
+// the previous entry». One source, in this order:
+//   1. what he logged for the SAME set number in the previous session of this
+//      movement (getLastPerformance — device-aware, swap-aware);
+//   2. that session's last logged set, when set N was skipped or did not exist;
+//   3. the starter rule — the suggestion, and the bottom of the rep range.
+// `index` counts working rows from 0, warm-ups excluded.
+export function workingSetPrefill(exerciseId, index, planned) {
+  const last = getLastPerformance(exerciseId);
+  if (last) {
+    const rows = (last.sets || []).filter((set) => !set.is_warmup);
+    const same = rows[index];
+    if (same && isCountableWorkingSet(same)) {
+      return { weight: Number(same.weight), reps: Number(same.reps), source: 'previous_set' };
+    }
+    const logged = rows.filter(isCountableWorkingSet);
+    const tail = logged[logged.length - 1];
+    if (tail) return { weight: Number(tail.weight), reps: Number(tail.reps), source: 'previous_last' };
+  }
+  const sug = suggestNextWeight(exerciseId, planned);
+  // Blank and zero are different things: null means «no suggestion» (معايرة),
+  // 0 is a machine that carries its own stack.
+  const raw = sug.weight;
+  const starter = raw === null || raw === undefined || raw === '' ? '' : Number(raw);
+  return {
+    weight: Number.isFinite(starter) && starter >= 0 ? starter : '',
+    reps: workingRepTarget(planned),
+    source: 'starter',
+  };
 }
 
 // One place that decides what a bodyweight entry means.

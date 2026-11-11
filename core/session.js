@@ -10,7 +10,7 @@ import {
   reEntryPlan,
   scopedReplacementFor,
   suggestNextWeight,
-  workingRepTarget,
+  workingSetPrefill,
 } from '../core/engine.js';
 import { editableWeightValue, hasWorkingWeight, t, tf, todayISO } from '../core/i18n.js';
 import { postNativeActivity } from '../core/native.js';
@@ -96,11 +96,10 @@ function startSession(session) {
   orderedRows.forEach(rawPlan => {
     const replacementId = scopedReplacementFor(session, rawPlan.exercise_id);
     const swapped = replacementId === rawPlan.exercise_id ? rawPlan : { ...rawPlan, exercise_id: replacementId };
-    // D19's re-entry ramp, applied before anything reads sets or effort.
+    // D19's re-entry ramp, applied before anything reads the sets.
     const plan = reEntryPlan(swapped, getAllExercises().find((e) => e.id === replacementId));
     const effectivePlan = plan;
     const sug = suggestNextWeight(replacementId, effectivePlan);
-    const suggestedWorkingWeight = editableWeightValue(sug.weight);
     const sets = [];
     // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle` §8.4
     // gives every row an explicit `ramp_sets` count: 2 on the openers, 1 on
@@ -120,13 +119,16 @@ function startSession(session) {
         ? rampLoadsFor(sug.weight, rampSets, equipmentStep(replacementId))
         : (rampSets >= 2 ? [{ weight: '', reps: 10 }, { weight: '', reps: 6 }] : [{ weight: '', reps: 8 }]);
       ramps.forEach((warm) =>
-        sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, effort: null, completed: false })
+        sets.push({ is_warmup: true, weight: warm.weight, reps: warm.reps, completed: false })
       );
     }
     for (let i = 0; i < plan.sets; i++) {
-      // A suggestion is a placeholder, never an already-entered prescription.
-      // In particular, a new catalogue movement has no made-up 0 kg default.
-      sets.push({ is_warmup: false, weight: suggestedWorkingWeight, reps: workingRepTarget(effectivePlan), effort: null, completed: false });
+      // Set N starts as what he logged for set N last time (Raed 2026-11-11:
+      // «what is behind in the background should be the previous entry»), then
+      // that session's last set, then the starter rule. A new catalogue movement
+      // still has no made-up 0 kg default — the starter rule leaves it blank.
+      const prefill = workingSetPrefill(replacementId, i, effectivePlan);
+      sets.push({ is_warmup: false, weight: editableWeightValue(prefill.weight), reps: prefill.reps, completed: false });
     }
     // Keyed by the ORIGINAL programme id, with swapped_to naming the
     // replacement — the history lookups depend on that shape.
@@ -387,9 +389,16 @@ export function swapExercise(exercise_id, alt_id) {
   ex.swapped_to = alt_id;
   // Recalc suggested weight for the new exercise
   const altPlanned = { ...ex.planned, exercise_id: alt_id };
-  const sug = suggestNextWeight(alt_id, altPlanned);
+  // The replacement's own previous entry, set by set — the same source the
+  // session start uses. Sets he already finished are his and are not touched.
+  let workingIndex = -1;
   ex.sets.forEach((set) => {
-    if (!set.completed && !set.is_warmup) set.weight = editableWeightValue(sug.weight);
+    if (set.is_warmup) return;
+    workingIndex += 1;
+    if (set.completed) return;
+    const prefill = workingSetPrefill(alt_id, workingIndex, altPlanned);
+    set.weight = editableWeightValue(prefill.weight);
+    set.reps = prefill.reps;
   });
   saveLocal();
   render();
@@ -491,14 +500,16 @@ export function appendExerciseToSession(exerciseId) {
   // Three sets of ten is the app's own default, not a prescription from the
   // programme, so the entry is flagged added_by_user and its sets are extra.
   const planned = { exercise_id: exerciseId, sets: 3, reps: '10-12', added_by_user: true };
-  const suggested = suggestNextWeight(exerciseId, planned);
   active.exercises[exerciseId] = {
     planned,
     added_by_user: true,
-    sets: Array.from({ length: 3 }, () => ({
-      is_warmup: false, is_extra: true,
-      weight: suggested.weight, reps: workingRepTarget(planned), effort: null, completed: false,
-    })),
+    sets: Array.from({ length: 3 }, (_, index) => {
+      const prefill = workingSetPrefill(exerciseId, index, planned);
+      return {
+        is_warmup: false, is_extra: true,
+        weight: editableWeightValue(prefill.weight), reps: prefill.reps, completed: false,
+      };
+    }),
     swapped_to: null,
   };
   saveLocal();
@@ -518,10 +529,10 @@ export function addExerciseToSession(exercise_id) {
     exercise_id, sets: 3, reps: '10', rpe: '8',
     is_first_of_muscle: false,
   };
-  const sug = suggestNextWeight(exercise_id, planned);
   const sets = [];
   for (let i = 0; i < planned.sets; i++) {
-    sets.push({ is_warmup: false, weight: editableWeightValue(sug.weight), reps: workingRepTarget(planned), effort: null, completed: false });
+    const prefill = workingSetPrefill(exercise_id, i, planned);
+    sets.push({ is_warmup: false, weight: editableWeightValue(prefill.weight), reps: prefill.reps, completed: false });
   }
   state.active_session.exercises[exercise_id] = { planned, sets };
   saveLocal();

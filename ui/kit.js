@@ -4,29 +4,6 @@ import { h } from '../core/dom.js';
 import { t } from '../core/i18n.js';
 import { isSafeHttpUrl, youtubeThumbUrl, ytIdFromUrl } from '../core/videos.js';
 
-// D16/D17: coarse ordinal effort is a final-set check-in, not numeric RIR.
-// v17: three words, no faces. The face was decoration on the one control that
-// has to be read at a glance mid-set; the stylesheet draws the coloured rule
-// per position, so the level is still legible without a picture of a face.
-const EFFORT_LEVELS = ['easy', 'medium', 'very_hard'];
-export function effortPicker(set, onChange) {
-  return h('div', { class: 'effort-picker', role: 'group', 'aria-label': t('final_set_effort') },
-    EFFORT_LEVELS.map(level => h('button', {
-      type: 'button',
-      class: set.effort === level ? 'active' : '',
-      'aria-pressed': set.effort === level ? 'true' : 'false',
-      'aria-label': t(level),
-      onClick: () => {
-        set.effort = level;
-        if (onChange) onChange(level);
-      },
-      // t(), not a hardcoded string: the Arabic was already in locale.js and the
-      // picker was rendering English over it on an Arabic-only screen.
-    }, h('span', { class: 'effort-word' }, t(level))),
-    )
-  );
-}
-
 export function buildVideoTile(v, opts = {}) {
   const id = v.id || ytIdFromUrl(v.url);
   const isShort = String(v.url || '').includes('/shorts/');

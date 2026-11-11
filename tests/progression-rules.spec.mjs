@@ -46,11 +46,12 @@ test('two sessions short of the bottom of the range walk the load back one step'
   await bootWith(page, state);
   await expect(page.locator('#page-home .ex.expanded h4 bdi')).toHaveText('Chest Press Machine');
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  // No learned step (one weight in history) and no equipment set → data.js's
-  // Matrix stack ladder (Round 6 §D): 40 reads as the «41» label (9 × 4.5359),
-  // so one step down is the label below it, 36.
-  await expect(first, 'the load must come down one step, not hold at 40').toHaveAttribute('placeholder', '36');
-  await expect(page.locator('[data-why-weight]')).toContainText(/نزّل|درجة|خفّض/);
+  // 2026-11-11: the box shows the PREVIOUS entry (40), and the decision lives in
+  // the note. No learned step (one weight in history) and no equipment set →
+  // data.js's Matrix stack ladder (Round 6 §D): 40 reads as the «41» label
+  // (9 × 4.5359), so one step down is the label below it, 36.
+  await expect(first, 'behind the box: what he did last time').toHaveAttribute('placeholder', '40');
+  await expect(page.locator('[data-why-weight]'), 'the load must come down one step, not hold at 40').toContainText('(36 كغ)');
 });
 
 test('an isolation the week-5 rotation introduces starts capped: two sets, RPE 8', async ({ page }) => {
@@ -110,7 +111,7 @@ test('two abandoned exposures do not promote the load, however good the one set 
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
   // Measured before the fix: 22.5, prefilled into all three rows, with
   // «أكملت 10 في كل المجموعات مرتين. ارفع 2.5 كغ» underneath.
-  await expect(first, 'one of three sets, twice, is not two complete exposures').toHaveAttribute('placeholder', '20');
+  await expect(first, 'set 1 last time').toHaveAttribute('placeholder', '20');
   // It falls through to «طابق أو تجاوز», the one note the card suppresses — so
   // no load reasoning is printed at all, which is honest: nothing was decided.
   await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toHaveCount(0);
@@ -131,8 +132,9 @@ test('three completed sets at the top of the range, twice, still promote it', as
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
   // Round 6 §D: the chest press is a Matrix stack; 20 is off its ladder, so
   // the step lands on the next label, 23 (never 22.5, which no plate says).
-  await expect(first).toHaveAttribute('placeholder', '23');
-  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('ارفع');
+  // The box keeps last time's 20 (2026-11-11); the note carries the step.
+  await expect(first).toHaveAttribute('placeholder', '20');
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('ارفع 3 كغ ← 23 كغ');
 });
 
 // Round 5, finding #3. domain/clamps.js was imported by nothing the browser
@@ -153,14 +155,14 @@ test('a load past any sane multiple of bodyweight is held, not stepped up again'
   }
   await bootWith(page, state);
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  await expect(first, '302.5 kg is 3.7× his bodyweight on a machine press').toHaveAttribute('placeholder', '300');
+  await expect(first, 'last time\'s 300, not a step above it').toHaveAttribute('placeholder', '300');
   await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('سقف الأمان');
 });
 
-// Round 5, finding #3's second half: `why_hold_very_hard` and `why_easy_bump`
-// are the D16/D17 effort contract on the path Raed actually trains against, and
-// neither had a test anywhere — the contract was only asserted against
-// `domain/progression.js`, which no screen could reach.
+// The D16/D17 effort contract (`why_hold_very_hard`, `why_easy_bump`) was
+// retired on 2026-11-11 — Raed: «remove it from the progression completely:
+// easy, hard, medium». These two replace the tests that certified it: a stored
+// rating on an old log changes nothing on the path he trains against.
 function rewriteLastTwoUpperA(state, latest, previous) {
   const uppers = state.history.filter((s) => s.session_id === 'upper_a').slice(-2);
   for (const [session, sets] of [[uppers[0], previous], [uppers[1], latest]]) {
@@ -171,23 +173,19 @@ function rewriteLastTwoUpperA(state, latest, previous) {
 }
 const working = (reps, effort = null) => ({ is_warmup: false, weight: 20, reps, completed: true, effort });
 
-test('«صعبة جدًا» on the final set holds a load the reps had already earned', async ({ page }) => {
-  // Both exposures complete at the top of the range, so the two-session bump is
-  // earned — and D17 makes effort a brake that can only ever delay it.
+test('an old «صعب جدًا» on the final set no longer holds a load the reps earned', async ({ page }) => {
   const state = rewriteLastTwoUpperA(
     structuredClone(SEED),
     [working(10), working(10), working(10, 'very_hard')],
     [working(10), working(10), working(10, 'medium')],
   );
   await bootWith(page, state);
-  const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  await expect(first, 'very_hard holds the load; it never lowers or raises it').toHaveAttribute('placeholder', '20');
-  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('صعبة جدًا');
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('ارفع 3 كغ ← 23 كغ');
+  await expect(page.locator('#page-home .ex.expanded')).not.toContainText('صعبة جدًا');
+  await expect(page.locator('#page-home .ex.expanded .effort-strip, #page-home .ex.expanded [data-prescribed-effort]')).toHaveCount(0);
 });
 
-test('«سهل» after one complete top exposure lands the increase a session sooner', async ({ page }) => {
-  // The previous exposure fell one rep short, so the two-session branch does not
-  // fire. D16: easy may bring a reps-earned increase forward, never create one.
+test('an old «سهل» after one top exposure no longer brings the increase forward', async ({ page }) => {
   const state = rewriteLastTwoUpperA(
     structuredClone(SEED),
     [working(10), working(10), working(10, 'easy')],
@@ -195,6 +193,7 @@ test('«سهل» after one complete top exposure lands the increase a session so
   );
   await bootWith(page, state);
   const first = page.locator('#page-home [data-set-kind="working"] [data-runner-weight-input]').first();
-  await expect(first, 'the next Matrix label above 20').toHaveAttribute('placeholder', '23');
-  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toContainText('أبكر بجلسة');
+  await expect(first).toHaveValue('20');
+  // One complete top exposure holds: «طابق أو تجاوز», the note the card suppresses.
+  await expect(page.locator('#page-home .ex.expanded [data-why-weight]')).toHaveCount(0);
 });

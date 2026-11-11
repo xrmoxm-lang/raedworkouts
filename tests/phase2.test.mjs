@@ -30,42 +30,38 @@ const progress = (state, completedSets) => progressExercise({
   catalogue, exercise: legPress, state, completedSets, history, bodyweightKg: 82,
 });
 
-test('D16/D17 effort is final-set-only, a brake, and never a load driver', () => {
+// D16/D17 made a final-set effort rating a brake (very hard) and an
+// accelerator (easy). Raed retired it on 2026-11-11: «remove it from the
+// progression completely: easy, hard, medium». Completed reps are the only
+// controller; a stored rating is ignored, never validated.
+test('D16/D17 retired: effort never changes progression, reps alone do', () => {
   const initial = initialiseProgressionState({ loadKg: 50, exercise: legPress, setsTarget: 3 });
 
-  const mediumFirstTop = progress(initial, topSets('medium'));
-  assert.equal(mediumFirstTop.action, 'hold', 'medium cannot create an increase on one top exposure');
+  const firstTop = progress(initial, topSets(null));
+  assert.equal(firstTop.action, 'hold', 'one top exposure holds');
+  assert.deepEqual(progress(initial, topSets('easy')), firstTop, '«easy» no longer brings the increase forward');
+  assert.deepEqual(progress(initial, topSets('medium')), firstTop);
 
-  const easyFirstTop = progress(initial, topSets('easy'));
-  assert.equal(easyFirstTop.action, 'increase', 'easy may land a reps-earned top exposure one session sooner');
-  // Round 6 §D: the sled's step is 5 kg (data.js), so 52.5 is not a load it has.
-  assert.equal(easyFirstTop.next_state.load_kg, 55);
-
-  const belowTopEasy = progress(initial, [
+  const belowTop = progress(initial, [
     { kind: 'working', valid: true, reps: 9, form_ok: true },
     { kind: 'working', valid: true, reps: 10, form_ok: true },
     { kind: 'working', valid: true, reps: 10, form_ok: true, effort: 'easy' },
   ]);
-  assert.equal(belowTopEasy.action, 'hold', 'easy without every completed top-range rep cannot increase load');
+  assert.equal(belowTop.action, 'hold', 'missing the top of the range holds');
 
-  const normalEarned = progress(mediumFirstTop.next_state, topSets('medium'));
-  const veryHardEarned = progress(mediumFirstTop.next_state, topSets('very_hard'));
-  assert.equal(normalEarned.action, 'increase');
-  assert.equal(veryHardEarned.action, 'hold');
-  assert.equal(veryHardEarned.next_state.load_kg, 50);
-  assert.ok(
-    veryHardEarned.next_state.load_kg <= normalEarned.next_state.load_kg,
-    'very_hard can never produce a higher load than the otherwise identical input without it',
-  );
+  const earned = progress(firstTop.next_state, topSets(null));
+  assert.equal(earned.action, 'increase');
+  // Round 6 §D: the sled's step is 5 kg (data.js), so 52.5 is not a load it has.
+  assert.equal(earned.next_state.load_kg, 55);
+  assert.deepEqual(progress(firstTop.next_state, topSets('very_hard')), earned,
+    '«very hard» no longer blocks an earned increase');
 
-  assert.throws(
-    () => progress(initial, [
-      { kind: 'working', valid: true, reps: 10, form_ok: true, effort: 'easy' },
-      { kind: 'working', valid: true, reps: 10, form_ok: true },
-      { kind: 'working', valid: true, reps: 10, form_ok: true },
-    ]),
-    /final working set only/,
-  );
+  // An old log carrying a rating on an earlier set used to throw; it is data.
+  assert.doesNotThrow(() => progress(initial, [
+    { kind: 'working', valid: true, reps: 10, form_ok: true, effort: 'easy' },
+    { kind: 'working', valid: true, reps: 10, form_ok: true },
+    { kind: 'working', valid: true, reps: 10, form_ok: true },
+  ]));
 });
 
 test('D18 and D19 retain 8–10 compounds and a detrained history-first seed', () => {
@@ -111,7 +107,9 @@ test('warm-up phase has a 5–10 minute treadmill, sourced drill reps, 15-minute
 
 test('session UI keeps the removal list out and wires one-thumb logging and the warm-up gate', () => {
   assert.match(appSource, /renderWarmupPhase/);
-  assert.match(appSource, /isFinalWorkingSet && !set\.effort/);
+  // The final-set effort gate is gone with the rating (2026-11-11): ticking the
+  // last set never waits on a picker.
+  assert.doesNotMatch(appSource, /effortPicker|final_set_prompt|set\.effort\b/);
   // The GATE, not a copy of its wording. This matched a raw English literal that
   // lived inside toggleRunnerSet — a duplicate of the rule that was removed with
   // the other eleven dead functions on 2026-09-05. The rule itself never moved:
