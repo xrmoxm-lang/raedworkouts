@@ -205,6 +205,26 @@ function mergeActive(ours, theirs) {
   return oursActive;
 }
 
+/* ---- Programme restart ------------------------------------------------------
+ * `programme_restart: { at, cycle }` (Round 8). Same rule as the server's
+ * merge_restart: the restart with the LATER `at` wins, from either side. Without
+ * it a stale copy that merely wrote last would silently undo his restart — or
+ * an absent key on an old client would erase it.
+ */
+function restartAt(value) {
+  if (!value || typeof value !== 'object') return null;
+  const at = Date.parse(value.at || '');
+  return Number.isFinite(at) ? at : null;
+}
+export function mergeProgrammeRestart(ours, theirs) {
+  const a = restartAt(ours);
+  const b = restartAt(theirs);
+  if (a == null && b == null) return null;
+  if (b == null) return ours;
+  if (a == null) return theirs;
+  return b > a ? theirs : ours;
+}
+
 /**
  * @param ours   this context's in-memory state (the tab he just used)
  * @param theirs the state currently on disk, written by another context
@@ -224,6 +244,8 @@ export function mergeLocalStates(ours, theirs) {
   out.bodyweight_log = mergeBodyweight(mine.bodyweight_log, other.bodyweight_log);
   out.prs = mergePrs(mine.prs, other.prs);
   out.active_session = mergeActive(mine, other);
+  const restart = mergeProgrammeRestart(mine.programme_restart, other.programme_restart);
+  if (restart || 'programme_restart' in out) out.programme_restart = restart;
   // A stale tab can still hold a deleted session as its LIVE one (it never saw
   // the finish); a tombstoned uid/key means it is a finished-then-deleted copy.
   if (out.active_session && isSessionTombstoned(out.active_session, tombstones)) out.active_session = null;
@@ -238,5 +260,6 @@ export function mergeChangedOurs(ours, merged) {
   const before = mine.active_session || null;
   const after = merged.active_session || null;
   if (Boolean(before) !== Boolean(after)) return true;
+  if ((merged.programme_restart?.at || null) !== (mine.programme_restart?.at || null)) return true;
   return completedSetsOf(after) !== completedSetsOf(before);
 }

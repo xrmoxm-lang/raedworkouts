@@ -152,6 +152,7 @@ export const defaultState = () => ({
   exercise_order: {},          // { session_id: [exercise_id, ...] } — his order, when he sets one
   wellbeing_checks: [],        // [{ week_id: 'cycle:week', signs: [...], at }] — research/06 §7.3
   triggered_deload: null,      // { week_id, signs, at } — the week a trigger booked
+  programme_restart: null,     // { at, cycle } — clock back to week 1 of `cycle`; history kept (Round 8)
   custom_exercises: [],        // [{ id, name, name_ar, primary, secondary, jeff_nippard, mohannad, ... }]
   programme_overrides: null,   // optional: replace default PROGRAMME entirely
   prs: {},                     // { exercise_id: { kg, reps, date, score } } — best ever per exercise

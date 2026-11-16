@@ -101,16 +101,15 @@ function startSession(session) {
     const effectivePlan = plan;
     const sug = suggestNextWeight(replacementId, effectivePlan);
     const sets = [];
-    // Warmup sets (not counted) — auto-prefill if `is_first_of_muscle` §8.4
-    // gives every row an explicit `ramp_sets` count: 2 on the openers, 1 on
-    // most, 0 on a few.
+    // Warmup sets (not counted). Every row carries an explicit `ramp_sets`
+    // count: 2 on the session's first exercise only, at most 1 everywhere else,
+    // 0 on a few (Raed 2026-11-16, overriding research/20 §8.4's counts).
     const rampSets = Number.isFinite(plan.ramp_sets)
       ? plan.ramp_sets
       : (plan.warmup ? (/^2\s+sets/i.test(plan.warmup) ? 2 : 1) : 0);
     if (rampSets > 0) {
       // Sourced ramp: 50% then 70% of the working load (ML L11160/L11162). A
-      // single ramp set uses the 50% entry, not the 70% one — the point is to
-      // groove the movement, not to pre-fatigue it.
+      // single ramp set is 60% (research/07 §2.2, `rampLoadsFor`'s 1-set rule).
       const canSuggest = hasWorkingWeight(sug.weight);
       // The COUNT is passed in, so a one-ramp exercise gets its own 60% load
       // rather than the first half of a two-set pair.
