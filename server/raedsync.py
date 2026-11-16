@@ -701,6 +701,33 @@ def _clears_head_active(incoming_state: dict, head_active: dict) -> bool:
     return bool(cleared.get("key")) and cleared.get("key") == session_key(head_active)
 
 
+def _restart_at(value):
+    if not isinstance(value, dict) or not value.get("at"):
+        return None
+    try:
+        at = datetime.fromisoformat(str(value.get("at")).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+
+
+def merge_restart(head_restart, incoming_restart):
+    """`programme_restart: {at, cycle}` — the LATER `at` wins, from either side.
+
+    Mirrors domain/state-merge.js mergeProgrammeRestart. Without it the newer
+    push wins the whole scalar, so a stale device undoes a restart.
+    """
+    head_at = _restart_at(head_restart)
+    incoming_at = _restart_at(incoming_restart)
+    if head_at is None and incoming_at is None:
+        return None
+    if incoming_at is None:
+        return copy.deepcopy(head_restart)
+    if head_at is None:
+        return copy.deepcopy(incoming_restart)
+    return copy.deepcopy(incoming_restart if incoming_at > head_at else head_restart)
+
+
 def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, incoming_updated_at: str) -> dict:
     newer_is_incoming = parse_iso(incoming_updated_at) >= parse_iso(head_updated_at)
     out = copy.deepcopy(incoming_state if newer_is_incoming else head_state)
@@ -772,6 +799,9 @@ def merge_states(head_state: dict, incoming_state: dict, head_updated_at: str, i
     for key in ("current_week", "current_block", "msg_index", "forced_next_session"):
         if key in scalar_source:
             out[key] = scalar_source.get(key)
+    restart = merge_restart(head_state.get("programme_restart"), incoming_state.get("programme_restart"))
+    if restart is not None or "programme_restart" in out:
+        out["programme_restart"] = restart
     return sanitize_state(out)
 
 

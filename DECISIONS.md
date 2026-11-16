@@ -2202,3 +2202,43 @@ file was almost always written after the bug it prevents was proven on a phone.
 
 > Raed: «small, I cannot notice it». 72px, accent-filled, 22px digits in the
 > accent foreground, the ring drawn on the accent — visible on ورق in a gym.
+
+
+---
+
+## Round 8 (2026-11-16) — rulings that supersede earlier notes above
+
+Numbered after the build log's D29 (`../DECISIONS.md`).
+
+### D30 — restartProgramme / completedSessionCount (core/engine.js)
+
+> Raed: «إحنا في الويك السادس لكن الحقيقة ما سويت تمارين… ودي نعيد الخمسة
+> weeks، وكيف السجل… حرج جدا جدا». `state.programme_restart = { at, cycle }`
+> puts the programme clock on week 1 of the next cycle and deletes nothing.
+> Only rotation sessions that STARTED after `at` count toward the clock
+> (`countsOnProgrammeClock`). This calendar week's count and the Home strip,
+> prefill, «السجل السابق», PRs, volume and the equipment step keep reading every
+> session — Fable's review reversed the worker's first cut, which hid the day he
+> had just trained from the strip. The cycle offsets from the
+> restart, so the week ids become `2:x` and the old `1:x` check-ins and the
+> stale `triggered_deload "1:5"` stay as history and never fire. The rotation
+> is not reset. Merge, client and server: the later `at` wins, from either
+> side — a stale device that pushes last must not undo the restart.
+
+### D31 — ramp sets (data.js)
+
+> Raed: «أبغى تدرج واحد في كل التمارين، إلا التمرين الأول هو الوحيد اللي
+> تدرجين… ما نحتاج التدرج ونضيع وقتنا». Overrides research/20 §8.4's counts:
+> only order 1 of a session has 2 ramp sets; every other row at most 1 (the
+> single ramp is 60%, research/07 §2.2); the rows at 0 stay 0. Tests assert the
+> shape, not a count.
+
+### D32 — a triggered deload keeps the current block (data.js, getActiveProgramme)
+
+> Raed: «سوينا داون جريد… جالسين نغير الـexercises… we shouldn't change the
+> exercises… Stick to the similar exercises». The trigger used to select the
+> week-12 block, which is Block B's rows, so the deload he took in week 5 swapped
+> exercises and cut sets in the same session. Each non-deload block now carries
+> `deload_sessions` built from its own rows through `deloadOverlay`, and a
+> triggered deload uses the current block's. [LADDER] L9842: «same exercises».
+> The week-12 backstop and the clock are unchanged.

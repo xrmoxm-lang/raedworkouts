@@ -287,8 +287,9 @@ This is implemented in `app.js` as `suggestNextWeight()`.
 ### 5.4 Warm-up rule (auto-applied)
 
 For each exercise:
-- **First exercise of each muscle group**: **2 ramp sets** auto-prepended — **50% × 10, then 70% × 6**.
-- **All other exercises**: **1 ramp set at 60%** for 6–10 reps, or none. The
+- **First exercise of each session** (order 1): **2 ramp sets** auto-prepended — **50% × 10, then 70% × 6**.
+- **All other exercises**: **1 ramp set at 60%** for 6–10 reps, or none (D31,
+  Raed 2026-11-16: «تدرج واحد في كل التمارين، إلا التمرين الأول»). The
   programme's `ramp_sets` count decides; `warmup` is the legacy v15 string.
 
 > **Corrected 2026-09-04.** This section said 75% for the second set. It is

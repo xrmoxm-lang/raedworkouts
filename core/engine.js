@@ -78,12 +78,34 @@ export function revertPR(exercise_id, set) {
   return true;
 }
 // ---- Programme resolver --------------------------------------
+// A restart (Round 8, `state.programme_restart = { at, cycle }`) moves the
+// CLOCK back to week 1 of a new cycle; it never touches history. Only the
+// programme clock reads it — this calendar week's count and strip, prefill,
+// «السجل السابق», PRs, volume and the equipment step keep reading every session.
+function restartAtMs() {
+  const at = Date.parse(state.programme_restart?.at || '');
+  return Number.isFinite(at) ? at : null;
+}
+function restartCycle() {
+  if (restartAtMs() == null) return 1;
+  const cycle = Number(state.programme_restart?.cycle);
+  return Number.isInteger(cycle) && cycle >= 1 ? cycle : 1;
+}
+// True when a logged session counts on the programme clock: always without a
+// restart, and only if it STARTED after the restart otherwise.
+export function countsOnProgrammeClock(entry) {
+  const at = restartAtMs();
+  if (at == null) return true;
+  const started = Date.parse(entry?.started_at || entry?.ended_at || entry?.date || '');
+  return Number.isFinite(started) && started > at;
+}
 // The week is DERIVED from logged sessions, never stored, and only sessions
 // from THIS rotation move the clock — an import must not skip him to week 9.
 function completedSessionCount() {
   const rotation = new Set((RW.PROGRAMME?.rotation_order) || []);
-  if (!rotation.size) return (state.history || []).length;
-  return (state.history || []).filter((entry) => {
+  const onClock = (state.history || []).filter(countsOnProgrammeClock);
+  if (!rotation.size) return onClock.length;
+  return onClock.filter((entry) => {
     const id = entry?.session_id;
     return !id || rotation.has(id);
   }).length;
@@ -102,9 +124,10 @@ function weekIndexAfter(sessions) {
 function weeksElapsed() {
   return weekIndexAfter(completedSessionCount());
 }
-// 1-based: his first twelve weeks are cycle 1.
+// 1-based: his first twelve weeks are cycle 1. After a restart the count
+// starts again from the cycle the restart named.
 function cycleAtWeekIndex(index) {
-  return 1 + Math.floor(index / programmeCycleLength());
+  return restartCycle() + Math.floor(index / programmeCycleLength());
 }
 function weekAtWeekIndex(index) {
   return 1 + (index % programmeCycleLength());
@@ -207,20 +230,44 @@ export function deloadActive() {
 
 export function getActiveProgramme() {
   const programme = state.programme_overrides || RW.PROGRAMME;
-  // A triggered deload selects the DELOAD block WITHOUT moving the programme
-  // clock. Faking the week number would advance him through the mesocycle for
-  // free and hand him block C a week early.
-  const deloadBlock = (programme.blocks || []).find((block) => block.deload);
-  if (deloadActive() && deloadBlock) {
-    return resolveProgrammeBlock(programme, {
-      currentWeek: deloadBlock.week_start,
-      currentBlock: deloadBlock.block,
-    });
-  }
-  return resolveProgrammeBlock(programme, {
+  const current = resolveProgrammeBlock(programme, {
     currentWeek: derivedWeek(),
     currentBlock: derivedBlock(),
   });
+  if (!deloadActive()) return current;
+  // A triggered deload keeps the CURRENT block's exercises ([LADDER] L9842,
+  // «same exercises»; Raed 2026-11-16 «we shouldn't change the exercises») and
+  // only cuts sets and effort — via that block's own `deload_sessions`. The
+  // clock does not move: faking the week would hand him the next block early.
+  const block = (programme.blocks || []).find((item) => item.id === current.active_block);
+  if (block?.deload) return current;
+  if (Array.isArray(block?.deload_sessions) && block.deload_sessions.length) {
+    return Object.freeze({ ...current, sessions: block.deload_sessions });
+  }
+  // A programme override without per-block deload sessions: the old behaviour.
+  const deloadBlock = (programme.blocks || []).find((item) => item.deload);
+  if (!deloadBlock) return current;
+  return resolveProgrammeBlock(programme, {
+    currentWeek: deloadBlock.week_start,
+    currentBlock: deloadBlock.block,
+  });
+}
+
+// Round 8 — Raed 2026-11-16: «ودي نعيد الخمسة weeks، وكيف السجل». Back to week 1
+// of the NEXT cycle; history, weights and PRs are untouched. Refused while a
+// session runs (the UI disables the button then).
+export function restartProgramme() {
+  if (state.active_session) return false;
+  state.programme_restart = { at: new Date().toISOString(), cycle: derivedCycle() + 1 };
+  // The restart toasts its own «بدأت الدورة n»; the boot-time cycle announcement
+  // (app.js announceCycleIfNew) must not say it a second time.
+  state.cycle_announced = Math.max(Number(state.cycle_announced) || 1, state.programme_restart.cycle);
+  if (state.forced_next_session
+    && !getActiveProgramme().sessions.some((session) => session.id === state.forced_next_session)) {
+    state.forced_next_session = null;
+  }
+  saveLocal();
+  return state.programme_restart;
 }
 function getActiveProgrammeId() {
   return getActiveProgramme().id;
@@ -682,6 +729,8 @@ export function currentTrainingWeek() {
   start.setHours(0, 0, 0, 0);
   const startISO = localISODate(start);
   const days = new Set();
+  // The CALENDAR week, so it reads every session: a programme restart moves the
+  // clock, it does not un-train a day he trained (Fable review, round 8).
   for (const entry of state.history || []) {
     const date = String(entry?.date || '').slice(0, 10);
     if (date && date >= startISO) days.add(date);

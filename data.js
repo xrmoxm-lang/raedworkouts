@@ -943,10 +943,14 @@ const UPPER_LOWER_PLAYLISTS = {
   ],
 };
 
+// Ramp sets (third column): Raed 2026-11-16 overrides research/20 §8.4's counts —
+// «أبغى تدرج واحد في كل التمارين، إلا التمرين الأول … ما نحتاج التدرج ونضيع وقتنا».
+// Order 1 keeps 2; every other row has at most 1; the rows at 0 stay 0. Block
+// B / C / deload inherit.
 const UPPER_LOWER_BLOCK_A_ROWS = {
   upper_a: [
     rawProgrammeRow(1, 'Machine Chest Press', 2, 3, 8, 10, [7, 7, 8], 2.5, null, 'Flat DB Press', 'Hammer Strength Press'),
-    rawProgrammeRow(2, 'Neutral-Grip Lat Pulldown', 2, 3, 10, 12, [7, 8, 8], 2.5, null, '2-Grip Lat Pulldown', 'Machine Pulldown'),
+    rawProgrammeRow(2, 'Neutral-Grip Lat Pulldown', 1, 3, 10, 12, [7, 8, 8], 2.5, null, '2-Grip Lat Pulldown', 'Machine Pulldown'),
     rawProgrammeRow(3, 'Seated DB Shoulder Press', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Machine Shoulder Press', 'Standing DB Press'),
     rawProgrammeRow(4, 'Chest-Supported T-Bar Row', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Chest-Supported DB Row', 'Machine Row'),
     rawProgrammeRow(5, 'DB Supinated Curl', 1, 2, 10, 12, [8, 8], 0.0, 'A1', 'Cable EZ Curl', 'EZ Bar Curl'),
@@ -955,7 +959,7 @@ const UPPER_LOWER_BLOCK_A_ROWS = {
   ],
   lower_a: [
     rawProgrammeRow(1, 'Leg Press', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'Machine Squat', 'Hack Squat'),
-    rawProgrammeRow(2, 'DB Romanian Deadlift', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'Barbell RDL', '45 Degree Hyperextension'),
+    rawProgrammeRow(2, 'DB Romanian Deadlift', 1, 3, 10, 12, [7, 7, 8], 2.5, null, 'Barbell RDL', '45 Degree Hyperextension'),
     rawProgrammeRow(3, 'Lying Leg Curl', 1, 3, 10, 12, [8, 8, 8], 1.5, null, 'Seated Leg Curl', 'Glute-Ham Raise'),
     rawProgrammeRow(4, 'Leg Extension', 1, 3, 10, 12, [8, 8, 9], 1.5, null, 'Single-Leg Leg Extension', 'Goblet Squat'),
     rawProgrammeRow(5, 'Standing Calf Raise', 1, 3, 10, 12, [8, 8, 9], 0.0, 'A1', 'DB Standing Calf Raise', 'Leg Press Toe Press'),
@@ -963,7 +967,7 @@ const UPPER_LOWER_BLOCK_A_ROWS = {
   ],
   upper_b: [
     rawProgrammeRow(1, 'DB Incline Press', 2, 3, 8, 10, [7, 7, 8], 2.5, null, 'Machine Incline Press', 'Incline Smith Press'),
-    rawProgrammeRow(2, 'Reverse-Grip Lat Pulldown', 2, 3, 10, 12, [7, 8, 8], 2.5, null, 'Reverse-Grip Assisted Pull-up', 'Single-Arm Pulldown'),
+    rawProgrammeRow(2, 'Reverse-Grip Lat Pulldown', 1, 3, 10, 12, [7, 8, 8], 2.5, null, 'Reverse-Grip Assisted Pull-up', 'Single-Arm Pulldown'),
     rawProgrammeRow(3, 'Assisted Dip', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Decline DB Press', 'Machine Chest Press'),
     rawProgrammeRow(4, 'Seated Cable Row', 1, 3, 10, 12, [7, 8, 8], 2.0, null, 'Single-Arm DB Row', 'Chest-Supported T-Bar Row'),
     rawProgrammeRow(5, 'DB Lateral Raise', 1, 3, 10, 12, [8, 8, 9], 0.0, 'A1', 'Cable Lateral Raise', 'Machine Lateral Raise'),
@@ -972,7 +976,7 @@ const UPPER_LOWER_BLOCK_A_ROWS = {
   ],
   lower_b: [
     rawProgrammeRow(1, 'Goblet Squat', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'Hack Squat', 'Leg Press'),
-    rawProgrammeRow(2, 'Barbell Hip Thrust', 2, 3, 10, 12, [7, 7, 8], 2.5, null, 'DB Single-Leg Hip Thrust', 'Leg-Extension-Machine Hip Thrust'),
+    rawProgrammeRow(2, 'Barbell Hip Thrust', 1, 3, 10, 12, [7, 7, 8], 2.5, null, 'DB Single-Leg Hip Thrust', 'Leg-Extension-Machine Hip Thrust'),
     rawProgrammeRow(3, 'Seated Leg Curl', 1, 3, 10, 12, [8, 8, 8], 1.5, null, 'Lying Leg Curl', 'DB Leg Curl'),
     rawProgrammeRow(4, 'DB Walking Lunge', 1, 3, 10, 10, [7, 8, 8], 2.0, null, 'Reverse Lunge', 'DB Step-Up'),
     rawProgrammeRow(5, 'Seated Calf Raise', 1, 3, 10, 12, [8, 8, 9], 0.0, 'A1', 'Leg Press Toe Press', 'Standing Calf Raise'),
@@ -1080,9 +1084,19 @@ const UPPER_LOWER_BLOCK_B_ROWS = Object.fromEntries(
 // SAME exercises, and nothing in the sources calls for a fourth exercise
 // rotation before the deload. What changes in week 12 is volume and effort.
 const UPPER_LOWER_BLOCK_C_SESSIONS = programmeSessionsFrom(UPPER_LOWER_BLOCK_B_ROWS);
-const UPPER_LOWER_DELOAD_SESSIONS = programmeSessionsFrom(Object.fromEntries(
-  UPPER_LOWER_SESSION_ORDER.map((sessionId) => [sessionId, UPPER_LOWER_BLOCK_B_ROWS[sessionId].map(deloadOverlay)]),
+const deloadSessionsFrom = (rowsBySession) => programmeSessionsFrom(Object.fromEntries(
+  UPPER_LOWER_SESSION_ORDER.map((sessionId) => [sessionId, rowsBySession[sessionId].map(deloadOverlay)]),
 ));
+const UPPER_LOWER_DELOAD_SESSIONS = deloadSessionsFrom(UPPER_LOWER_BLOCK_B_ROWS);
+// A TRIGGERED deload (research/06 §7.3) keeps the block he is in: each block
+// carries its own rows through the same overlay, and getActiveProgramme() picks
+// the current block's. It used to send every trigger to the week-12 block —
+// Block B's rows — so a trigger in weeks 1–4 swapped his isolation exercises
+// and cut the sets in the same session. Raed 2026-11-16: «جالسين نغير
+// الـexercises… we shouldn't change the exercises… Stick to the similar exercises».
+const UPPER_LOWER_BLOCK_A_DELOAD_SESSIONS = deloadSessionsFrom(UPPER_LOWER_BLOCK_A_ROWS);
+const UPPER_LOWER_BLOCK_B_DELOAD_SESSIONS = deloadSessionsFrom(UPPER_LOWER_BLOCK_B_ROWS);
+const UPPER_LOWER_BLOCK_C_DELOAD_SESSIONS = deloadSessionsFrom(UPPER_LOWER_BLOCK_B_ROWS);
 
 const PROGRAMME = {
   id: 'upper_lower',
@@ -1107,9 +1121,9 @@ const PROGRAMME = {
   ],
   sessions: UPPER_LOWER_BLOCK_A_SESSIONS,
   blocks: [
-    { id: 'A', block: 1, week_start: 1, week_end: 4, block_name: 'Upper/Lower — Block A (Weeks 1–4)', sessions: UPPER_LOWER_BLOCK_A_SESSIONS },
-    { id: 'B', block: 2, week_start: 5, week_end: 8, block_name: 'Upper/Lower — Block B (Weeks 5–8)', sessions: UPPER_LOWER_BLOCK_B_SESSIONS },
-    { id: 'C', block: 3, week_start: 9, week_end: 11, block_name: 'Upper/Lower — Block C (Weeks 9–11)', sessions: UPPER_LOWER_BLOCK_C_SESSIONS },
+    { id: 'A', block: 1, week_start: 1, week_end: 4, block_name: 'Upper/Lower — Block A (Weeks 1–4)', sessions: UPPER_LOWER_BLOCK_A_SESSIONS, deload_sessions: UPPER_LOWER_BLOCK_A_DELOAD_SESSIONS },
+    { id: 'B', block: 2, week_start: 5, week_end: 8, block_name: 'Upper/Lower — Block B (Weeks 5–8)', sessions: UPPER_LOWER_BLOCK_B_SESSIONS, deload_sessions: UPPER_LOWER_BLOCK_B_DELOAD_SESSIONS },
+    { id: 'C', block: 3, week_start: 9, week_end: 11, block_name: 'Upper/Lower — Block C (Weeks 9–11)', sessions: UPPER_LOWER_BLOCK_C_SESSIONS, deload_sessions: UPPER_LOWER_BLOCK_C_DELOAD_SESSIONS },
     { id: 'DELOAD', block: 4, week_start: 12, week_end: 12, block_name: 'Deload Week (Week 12)', deload: true, sessions: UPPER_LOWER_DELOAD_SESSIONS },
   ],
 };

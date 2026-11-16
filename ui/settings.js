@@ -14,6 +14,7 @@ import {
   derivedWeek,
   getActiveProgramme,
   recordBodyweight,
+  restartProgramme,
   suggestNextWeight,
 } from '../core/engine.js';
 import {
@@ -65,6 +66,7 @@ import {
 import { SKINS, activeSkin, applyTheme } from '../core/theme.js';
 import { PLATFORM_INFO, getAllExercises } from '../core/videos.js';
 import { openRestoreModal } from '../ui/history.js';
+import { renderHome } from '../ui/home.js';
 
 /* ---- the kit this screen is built from ---------------------------------- */
 
@@ -258,11 +260,38 @@ export function renderSettings() {
   // intentionally no old 2/3-day variant switch to reinterpret a logged PPL
   // session as a different future programme.
   const activeProgramme = getActiveProgramme();
+  // Round 8 — Raed 2026-11-16: «ودي نعيد الخمسة weeks». The clock goes back to
+  // week 1 of the next cycle; nothing is deleted, so this is a quiet button and
+  // the confirm is not the danger style. Disabled while a session runs.
+  const sessionRunning = Boolean(state.active_session);
+  const restartButton = h('button', {
+    type: 'button', class: 'btn tiny', 'data-programme-restart': 'true',
+    disabled: sessionRunning ? true : null,
+    'aria-disabled': sessionRunning ? 'true' : 'false',
+    onClick: async () => {
+      if (state.active_session) return;
+      const yes = await confirmAction({
+        title: t('restart_programme_confirm_title'),
+        body: t('restart_programme_confirm_body'),
+        confirmLabel: t('restart_programme_confirm'),
+        danger: false,
+      });
+      if (!yes) return;
+      const restarted = restartProgramme();
+      if (!restarted) return;
+      toast(tf('restart_programme_done', { cycle: restarted.cycle }));
+      renderSettings();
+      renderHome();
+    },
+  }, t('restart_programme_button'));
   const programmeGroup = h('div', {},
     row(t('training_split'), t('history_per_exercise'),
       // localizeText, not the raw field: block_name arrives from data.js in
       // English and is a data label, not free copy.
       h('div', { class: 'tiny muted' }, localizeText(activeProgramme.block_name))),
+    row(t('restart_programme'),
+      sessionRunning ? t('restart_programme_running') : t('restart_programme_desc'),
+      restartButton),
   );
   root.appendChild(disclosure(t('programme'), programmeGroup, {
     icon: icon('programme'),
