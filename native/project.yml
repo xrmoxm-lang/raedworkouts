@@ -19,7 +19,7 @@ settings:
     # build, and the system may keep serving the extension it had cached rather
     # than the one just installed. The Info.plists read this value; it is no
     # longer hard-coded in either.
-    CURRENT_PROJECT_VERSION: 3
+    CURRENT_PROJECT_VERSION: 4
 targets:
   RaedworkoutsGo:
     type: application
